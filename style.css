@@ -1,0 +1,142 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+
+body {
+  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.screen {
+  display: none;
+  width: 100%;
+  padding: 20px;
+}
+
+.screen.active {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.login-card, .role-card, .denied-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+  text-align: center;
+}
+
+.logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+h1 {
+  color: #0f766e;
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+h2 {
+  color: #0f766e;
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #64748b;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.g_id_signin {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.message {
+  margin-top: 16px;
+  font-size: 14px;
+  min-height: 20px;
+}
+
+.message.error {
+  color: #dc2626;
+}
+
+.message.success {
+  color: #059669;
+}
+
+.roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.role-btn {
+  padding: 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.role-btn:hover {
+  border-color: #0d9488;
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.role-btn .role-icon {
+  font-size: 20px;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 16px;
+}
+
+.btn-primary {
+  background: #0d9488;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #0f766e;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.denied-icon {
+  font-size: 60px;
+  margin-bottom: 16px;
+}

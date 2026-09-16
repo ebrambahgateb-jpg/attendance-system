@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام تسجيل الحضور</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- شاشة تسجيل الدخول -->
+  <div id="loginScreen" class="screen active">
+    <div class="login-card">
+      <div class="logo">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <path d="M14 14h3v3h-3zM19 19h2v2h-2zM14 19h2v2h-2z"/>
+        </svg>
+      </div>
+      <h1>QR Punch</h1>
+      <p class="subtitle">سجّل دخولك لتتبع حضورك</p>
+
+      <div id="g_id_onload"
+           data-client_id=""
+           data-callback="handleCredentialResponse"
+           data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin"
+           data-type="standard"
+           data-size="large"
+           data-theme="outline"
+           data-text="signin_with"
+           data-shape="rectangular"
+           data-logo_alignment="left">
+      </div>
+
+      <div id="loginMessage" class="message"></div>
+    </div>
+  </div>
+
+  <!-- شاشة اختيار الدور -->
+  <div id="roleScreen" class="screen">
+    <div class="role-card">
+      <h2>اختر الدور</h2>
+      <p class="subtitle">حسابك له أكثر من دور، اختر الدور الذي تريد الدخول به</p>
+      <div id="rolesList" class="roles-list"></div>
+      <button id="logoutBtn" class="btn-secondary">تسجيل خروج</button>
+    </div>
+  </div>
+
+  <!-- شاشة رفض الدخول -->
+  <div id="deniedScreen" class="screen">
+    <div class="denied-card">
+      <div class="denied-icon">🚫</div>
+      <h2>Access Denied</h2>
+      <p id="deniedMessage">الحساب غير موجود في النظام</p>
+      <button onclick="location.reload()" class="btn-primary">رجوع</button>
+    </div>
+  </div>
+
+  <!-- شاشة تعطيل الحساب -->
+  <div id="disabledScreen" class="screen">
+    <div class="denied-card">
+      <div class="denied-icon">⛔</div>
+      <h2>Account Disabled</h2>
+      <p>حسابك معطل. تواصل مع المسؤول.</p>
+      <button onclick="location.reload()" class="btn-primary">رجوع</button>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

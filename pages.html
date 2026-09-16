@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>لوحة التحكم</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    body { display: block; padding: 40px; }
+    .dashboard-header {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+    .user-info { display: flex; justify-content: space-between; align-items: center; }
+    .badge {
+      background: #ccfbf1;
+      color: #0f766e;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .logout-btn {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .welcome {
+      margin-top: 24px;
+      font-size: 18px;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-header">
+    <div class="user-info">
+      <div>
+        <strong id="userName"></strong>
+        <span id="userRole" class="badge"></span>
+      </div>
+      <button class="logout-btn" onclick="logout()">تسجيل خروج</button>
+    </div>
+    <p class="welcome">مرحبًا بك في لوحة التحكم</p>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/auth.js"></script>
+  <script>
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    if (!user || !user.selectedRole) {
+      window.location.href = '../index.html';
+    } else {
+      document.getElementById('userName').textContent = user.name || user.email;
+      document.getElementById('userRole').textContent = user.selectedRole;
+    }
+  </script>
+</body>
+</html>
