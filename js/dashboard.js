@@ -11,12 +11,17 @@ const MENU_ITEMS = [
   { id: 'settings',   label: 'الإعدادات',   icon: '⚙️', roles: ['Owner'] }
 ];
 
-let currentUser = null;
+let dashboardUser = null;
 let currentPage = 'dashboard';
 
-document.addEventListener('DOMContentLoaded', () => {
-  currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  if (!currentUser || !currentUser.selectedRole) {
+window.addEventListener('DOMContentLoaded', function() {
+  try {
+    dashboardUser = JSON.parse(localStorage.getItem('currentUser'));
+  } catch (e) {
+    dashboardUser = null;
+  }
+
+  if (!dashboardUser || !dashboardUser.selectedRole) {
     window.location.href = '../index.html';
     return;
   }
@@ -29,175 +34,129 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function renderUserInfo() {
-  const el1 = document.getElementById('userName');
-  const el2 = document.getElementById('userRole');
-  const avatar = document.getElementById('userAvatar');
+  var nameEl = document.getElementById('userName');
+  var roleEl = document.getElementById('userRole');
+  var avatar = document.getElementById('userAvatar');
 
-  if (el1) el1.textContent = currentUser.name || currentUser.email;
-  if (el2) el2.textContent = currentUser.selectedRole;
-  if (avatar && currentUser.name) {
-    avatar.textContent = currentUser.name.charAt(0).toUpperCase();
+  if (nameEl) nameEl.textContent = dashboardUser.name || dashboardUser.email;
+  if (roleEl) roleEl.textContent = dashboardUser.selectedRole;
+  if (avatar && dashboardUser.name) {
+    avatar.textContent = dashboardUser.name.charAt(0).toUpperCase();
   }
 }
 
 function renderSidebar() {
-  const nav = document.getElementById('sidebarNav');
+  var nav = document.getElementById('sidebarNav');
+  if (!nav) return;
   nav.innerHTML = '';
 
-  const role = currentUser.selectedRole;
+  var role = dashboardUser.selectedRole;
 
-  MENU_ITEMS.forEach(item => {
-    if (!item.roles.includes(role)) return;
+  MENU_ITEMS.forEach(function(item) {
+    if (item.roles.indexOf(role) === -1) return;
 
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.page = item.id;
-    btn.innerHTML = `
-      <span class="nav-icon">${item.icon}</span>
-      <span>${item.label}</span>
-    `;
-    btn.onclick = () => navigateTo(item.id);
+    btn.innerHTML = '<span class="nav-icon">' + item.icon + '</span><span>' + item.label + '</span>';
+
+    btn.onclick = function() {
+      if (item.id === 'scanner') {
+        window.location.href = 'scanner.html';
+      } else {
+        navigateTo(item.id);
+      }
+    };
+
     nav.appendChild(btn);
   });
-
-  // زرار Scanner بيتحول لصفحة تانية
-  const scannerBtn = nav.querySelector('[data-page="scanner"]');
-  if (scannerBtn) {
-    scannerBtn.onclick = () => {
-      window.location.href = 'scanner.html';
-    };
-  }
 }
 
 function navigateTo(pageId) {
   currentPage = pageId;
 
-  // active class
-  document.querySelectorAll('.nav-item').forEach(b => {
+  document.querySelectorAll('.nav-item').forEach(function(b) {
     b.classList.toggle('active', b.dataset.page === pageId);
   });
 
-  // عنوان الصفحة
-  const item = MENU_ITEMS.find(m => m.id === pageId);
-  const titleEl = document.getElementById('pageTitle');
+  var item = MENU_ITEMS.find(function(m) { return m.id === pageId; });
+  var titleEl = document.getElementById('pageTitle');
   if (titleEl && item) titleEl.textContent = item.label;
 
-  // المحتوى
-  const area = document.getElementById('contentArea');
+  var area = document.getElementById('contentArea');
+  if (!area) return;
 
   if (pageId === 'dashboard') {
     renderDashboardHome(area);
   } else {
-    area.innerHTML = `
-      <div class="placeholder-page">
-        <h2>${item ? item.label : pageId}</h2>
-        <p>هذه الصفحة قيد التطوير. سيتم بناؤها في الخطوات القادمة.</p>
-      </div>
-    `;
+    area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
   }
 
-  // إغلاق الـsidebar في الموبايل
-  document.getElementById('sidebar').classList.remove('open');
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
 }
 
 function renderDashboardHome(area) {
-  area.innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <div>جاري تحميل الإحصائيات...</div>
-    </div>
-  `;
+  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري تحميل الإحصائيات...</div></div>';
 
-  fetch(`${CONFIG.API_URL}?action=dashboardStats&email=${encodeURIComponent(currentUser.email)}`)
-    .then(res => res.json())
-    .then(data => {
+  fetch(CONFIG.API_URL + '?action=dashboardStats&email=' + encodeURIComponent(dashboardUser.email))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
       if (!data.ok) {
-        area.innerHTML = `<div class="placeholder-page"><h2>خطأ</h2><p>${data.message}</p></div>`;
+        area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>' + data.message + '</p></div>';
         return;
       }
       renderStats(area, data.stats);
     })
-    .catch(err => {
-      area.innerHTML = `<div class="placeholder-page"><h2>خطأ في الاتصال</h2><p>${err.message}</p></div>`;
+    .catch(function(err) {
+      area.innerHTML = '<div class="placeholder-page"><h2>خطأ في الاتصال</h2><p>' + err.message + '</p></div>';
     });
 }
 
 function renderStats(area, stats) {
-  area.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon">👥</div>
-        <div class="stat-info">
-          <div class="stat-label">إجمالي الأشخاص</div>
-          <div class="stat-value">${stats.totalPeople}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">✅</div>
-        <div class="stat-info">
-          <div class="stat-label">الأشخاص النشطين</div>
-          <div class="stat-value">${stats.activePeople}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">📅</div>
-        <div class="stat-info">
-          <div class="stat-label">إجمالي الاجتماعات</div>
-          <div class="stat-value">${stats.totalMeetings}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">📌</div>
-        <div class="stat-info">
-          <div class="stat-label">حضور اليوم</div>
-          <div class="stat-value">${stats.todayAttendance}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">📈</div>
-        <div class="stat-info">
-          <div class="stat-label">نسبة الحضور</div>
-          <div class="stat-value">${stats.attendanceRate}%</div>
-        </div>
-      </div>
-    </div>
-  `;
+  area.innerHTML =
+    '<div class="stats-grid">' +
+      '<div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-label">إجمالي الأشخاص</div><div class="stat-value">' + stats.totalPeople + '</div></div></div>' +
+      '<div class="stat-card"><div class="stat-icon">✅</div><div class="stat-info"><div class="stat-label">الأشخاص النشطين</div><div class="stat-value">' + stats.activePeople + '</div></div></div>' +
+      '<div class="stat-card"><div class="stat-icon">📅</div><div class="stat-info"><div class="stat-label">إجمالي الاجتماعات</div><div class="stat-value">' + stats.totalMeetings + '</div></div></div>' +
+      '<div class="stat-card"><div class="stat-icon">📌</div><div class="stat-info"><div class="stat-label">حضور اليوم</div><div class="stat-value">' + stats.todayAttendance + '</div></div></div>' +
+      '<div class="stat-card"><div class="stat-icon">📈</div><div class="stat-info"><div class="stat-label">نسبة الحضور</div><div class="stat-value">' + stats.attendanceRate + '%</div></div></div>' +
+    '</div>';
 }
 
 function loadSystemStatus() {
-  fetch(`${CONFIG.API_URL}?action=getSettings&email=${encodeURIComponent(currentUser.email)}`)
-    .then(res => res.json())
-    .then(data => {
+  fetch(CONFIG.API_URL + '?action=getSettings&email=' + encodeURIComponent(dashboardUser.email))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
       if (!data.ok) return;
-      const s = data.settings;
-      const statusEl = document.getElementById('systemStatus');
-      const status = s.SystemStatus || 'Active';
+      var s = data.settings;
+      var statusEl = document.getElementById('systemStatus');
+      var status = s.SystemStatus || 'Active';
 
-      if (status === 'Suspended') {
-        statusEl.classList.add('suspended');
-        statusEl.title = 'النظام متوقف';
-      } else {
-        statusEl.title = 'النظام يعمل';
+      if (statusEl) {
+        if (status === 'Suspended') {
+          statusEl.classList.add('suspended');
+          statusEl.title = 'النظام متوقف';
+        } else {
+          statusEl.title = 'النظام يعمل';
+        }
       }
 
-      // تطبيق الثيم من الإعدادات لو موجود
-      const theme = extractThemeFromSettings(s);
-      if (theme) {
-        saveTheme(theme);
-      }
+      var theme = extractThemeFromSettings(s);
+      if (theme) saveTheme(theme);
 
-      // اسم النظام
       if (s.SystemName) {
-        document.getElementById('appName').textContent = s.SystemName;
+        var appNameEl = document.getElementById('appName');
+        if (appNameEl) appNameEl.textContent = s.SystemName;
         document.title = s.SystemName;
       }
     })
-    .catch(() => {});
+    .catch(function() {});
 }
 
 function extractThemeFromSettings(s) {
-  const keys = ['ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg','ThemeLogoUrl','ThemeBgImageUrl'];
-  const hasAny = keys.some(k => s[k]);
+  var keys = ['ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg','ThemeLogoUrl','ThemeBgImageUrl'];
+  var hasAny = keys.some(function(k) { return s[k]; });
   if (!hasAny) return null;
 
   return {
@@ -211,5 +170,6 @@ function extractThemeFromSettings(s) {
 }
 
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.toggle('open');
 }
