@@ -1,3 +1,17 @@
+:root {
+  --primary: #475569;
+  --primary-hover: #334155;
+  --accent: #0d9488;
+  --bg: #f8fafc;
+  --card-bg: #ffffff;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --sidebar-bg: #1e293b;
+  --sidebar-text: #cbd5e1;
+  --sidebar-active: #475569;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
