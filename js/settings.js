@@ -284,3 +284,56 @@ function reloadSettings() {
   var area = document.getElementById('contentArea');
   loadSettingsPage(area);
 }
+function resetThemeToDefault() {
+  if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟ سيتم مسح اللوجو والخلفية والألوان المخصصة.')) {
+    return;
+  }
+
+  var btn = event.target;
+  var originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'جاري الاستعادة...';
+
+  fetch(CONFIG.API_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'resetThemeToDefault',
+      email: dashboardUser.email
+    })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+
+    if (!data.ok) {
+      alert('خطأ: ' + data.message);
+      return;
+    }
+
+    settingsData = data.settings;
+    originalSettings = Object.assign({}, data.settings);
+
+    // حدّث الثيم فورًا
+    var theme = extractThemeFromSettings(settingsData);
+    if (theme) {
+      saveTheme(theme);
+    } else {
+      // لو مفيش أي إعداد → ارجع للافتراضي
+      if (typeof DEFAULT_THEME !== 'undefined') {
+        saveTheme(DEFAULT_THEME);
+      }
+    }
+
+    // أعد تحميل الصفحة عشان القيم تتحدّث
+    var area = document.getElementById('contentArea');
+    loadSettingsPage(area);
+
+    alert('تم استعادة المظهر الافتراضي');
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    alert('خطأ في الاتصال: ' + err.message);
+  });
+}
