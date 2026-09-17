@@ -87,10 +87,12 @@ function navigateTo(pageId) {
   if (!area) return;
 
   if (pageId === 'dashboard') {
-    renderDashboardHome(area);
-  } else {
-    area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
-  }
+  renderDashboardHome(area);
+} else if (pageId === 'settings') {
+  loadSettingsPage(area);
+} else {
+  area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
+}
 
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
