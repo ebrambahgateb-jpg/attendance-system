@@ -20,7 +20,8 @@
 }
 
 body {
-  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -40,7 +41,8 @@ body {
 }
 
 .login-card, .role-card, .denied-card {
-  background: #fff;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 40px 32px;
   max-width: 420px;
@@ -56,19 +58,19 @@ body {
 }
 
 h1 {
-  color: #0f766e;
+  color: var(--text);
   font-size: 28px;
   margin-bottom: 8px;
 }
 
 h2 {
-  color: #0f766e;
+  color: var(--text);
   font-size: 22px;
   margin-bottom: 8px;
 }
 
 .subtitle {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 14px;
   margin-bottom: 24px;
 }
@@ -102,13 +104,13 @@ h2 {
 
 .role-btn {
   padding: 16px;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--card-bg);
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text);
   transition: all 0.2s;
   display: flex;
   align-items: center;
@@ -117,9 +119,9 @@ h2 {
 }
 
 .role-btn:hover {
-  border-color: #0d9488;
-  background: #f0fdfa;
-  color: #0f766e;
+  border-color: var(--primary);
+  background: var(--bg);
+  color: var(--primary);
 }
 
 .role-btn .role-icon {
@@ -137,17 +139,18 @@ h2 {
 }
 
 .btn-primary {
-  background: #0d9488;
+  background: var(--primary);
   color: #fff;
 }
 
 .btn-primary:hover {
-  background: #0f766e;
+  background: var(--primary-hover);
 }
 
 .btn-secondary {
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .denied-icon {
