@@ -13,6 +13,7 @@ const MENU_ITEMS = [
 
 let dashboardUser = null;
 let currentPage = 'dashboard';
+let dashInitCache = null; // نحفظ آخر نتيجة عشان نستخدمها عند التنقل السريع
 
 window.addEventListener('DOMContentLoaded', function() {
   try {
@@ -29,8 +30,7 @@ window.addEventListener('DOMContentLoaded', function() {
   loadThemeFromSettings();
   renderUserInfo();
   renderSidebar();
-  navigateTo('dashboard');
-  loadSystemStatus();
+  loadDashboardInit(true);
 });
 
 function renderUserInfo() {
@@ -87,32 +87,83 @@ function navigateTo(pageId) {
   if (!area) return;
 
   if (pageId === 'dashboard') {
-  renderDashboardHome(area);
-} else if (pageId === 'settings') {
-  loadSettingsPage(area);
-} else {
-  area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
-}
+    loadDashboardInit(false);
+  } else if (pageId === 'settings') {
+    loadSettingsPage(area);
+  } else {
+    area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
+  }
 
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
 }
 
-function renderDashboardHome(area) {
-  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري تحميل الإحصائيات...</div></div>';
+/**
+ * تحميل لوحة التحكم
+ * useCache = true → استخدم آخر نتيجة لو موجودة
+ */
+function loadDashboardInit(useCache) {
+  var area = document.getElementById('contentArea');
 
-  fetch(CONFIG.API_URL + '?action=dashboardStats&email=' + encodeURIComponent(dashboardUser.email))
+  // لو عندنا cache وطالبين نستخدمه → اعرض فورًا
+  if (useCache && dashInitCache) {
+    applyDashboardData(dashInitCache);
+    return;
+  }
+
+  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
+
+  fetch(CONFIG.API_URL + '?action=dashboardInit&email=' + encodeURIComponent(dashboardUser.email))
     .then(function(res) { return res.json(); })
     .then(function(data) {
       if (!data.ok) {
         area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>' + data.message + '</p></div>';
         return;
       }
-      renderStats(area, data.stats);
+      dashInitCache = data;
+      applyDashboardData(data);
     })
     .catch(function(err) {
       area.innerHTML = '<div class="placeholder-page"><h2>خطأ في الاتصال</h2><p>' + err.message + '</p></div>';
     });
+}
+
+function applyDashboardData(data) {
+  var area = document.getElementById('contentArea');
+
+  // الإحصائيات
+  renderStats(area, data.stats);
+
+  // حالة النظام
+  var statusEl = document.getElementById('systemStatus');
+  if (statusEl) {
+    var status = data.settings.SystemStatus || 'Active';
+    if (status === 'Suspended') {
+      statusEl.classList.add('suspended');
+      statusEl.title = 'النظام متوقف';
+    } else {
+      statusEl.classList.remove('suspended');
+      statusEl.title = 'النظام يعمل';
+    }
+  }
+
+  // الثيم
+  var theme = extractThemeFromSettings(data.settings);
+  if (theme) saveTheme(theme);
+
+  // اسم النظام
+  if (data.settings.SystemName) {
+    var appNameEl = document.getElementById('appName');
+    if (appNameEl) appNameEl.textContent = data.settings.SystemName;
+    document.title = data.settings.SystemName;
+  }
+
+  // active على dashboard
+  document.querySelectorAll('.nav-item').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.page === 'dashboard');
+  });
+  var titleEl = document.getElementById('pageTitle');
+  if (titleEl) titleEl.textContent = 'لوحة التحكم';
 }
 
 function renderStats(area, stats) {
@@ -124,36 +175,6 @@ function renderStats(area, stats) {
       '<div class="stat-card"><div class="stat-icon">📌</div><div class="stat-info"><div class="stat-label">حضور اليوم</div><div class="stat-value">' + stats.todayAttendance + '</div></div></div>' +
       '<div class="stat-card"><div class="stat-icon">📈</div><div class="stat-info"><div class="stat-label">نسبة الحضور</div><div class="stat-value">' + stats.attendanceRate + '%</div></div></div>' +
     '</div>';
-}
-
-function loadSystemStatus() {
-  fetch(CONFIG.API_URL + '?action=getSettings&email=' + encodeURIComponent(dashboardUser.email))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (!data.ok) return;
-      var s = data.settings;
-      var statusEl = document.getElementById('systemStatus');
-      var status = s.SystemStatus || 'Active';
-
-      if (statusEl) {
-        if (status === 'Suspended') {
-          statusEl.classList.add('suspended');
-          statusEl.title = 'النظام متوقف';
-        } else {
-          statusEl.title = 'النظام يعمل';
-        }
-      }
-
-      var theme = extractThemeFromSettings(s);
-      if (theme) saveTheme(theme);
-
-      if (s.SystemName) {
-        var appNameEl = document.getElementById('appName');
-        if (appNameEl) appNameEl.textContent = s.SystemName;
-        document.title = s.SystemName;
-      }
-    })
-    .catch(function() {});
 }
 
 function extractThemeFromSettings(s) {
