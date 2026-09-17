@@ -98,28 +98,132 @@ function navigateTo(pageId) {
   if (sidebar) sidebar.classList.remove('open');
 }
 
-function loadDashboardInit(useCache) {
+/**
+ * ⚡ تحميل بيانات Dashboard
+ * - يتعامل مع 302 Redirect
+ * - يعمل Retry تلقائي لو فشل
+ * - يتعامل مع 404 gracefully
+ */
+function loadDashboardInit(useCache, retryCount) {
+  retryCount = retryCount || 0;
   var area = document.getElementById('contentArea');
 
+  // 1) من الذاكرة
   if (useCache && dashInitCache) {
     applyDashboardData(dashInitCache);
     return;
   }
 
+  // 2) من sessionStorage
+  if (useCache) {
+    try {
+      var saved = sessionStorage.getItem('dashInitCache');
+      if (saved) {
+        var parsed = JSON.parse(saved);
+        if (parsed && parsed.data && parsed._ts && (Date.now() - parsed._ts) < 60000) {
+          dashInitCache = parsed.data;
+          applyDashboardData(dashInitCache);
+          return;
+        } else {
+          sessionStorage.removeItem('dashInitCache');
+        }
+      }
+    } catch (e) {
+      try { sessionStorage.removeItem('dashInitCache'); } catch (e2) {}
+    }
+  }
+
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  fetch(CONFIG.API_URL + '?action=dashboardInit&email=' + encodeURIComponent(dashboardUser.email))
-    .then(function(res) { return res.json(); })
+  var url = CONFIG.API_URL + '?action=dashboardInit&email=' + encodeURIComponent(dashboardUser.email);
+
+  // ⚡ fetch مع redirect: 'follow' صريح
+  fetch(url, {
+    method: 'GET',
+    redirect: 'follow',
+    cache: 'no-store'
+  })
+    .then(function(res) {
+      // لو 404 → معناها الـRedirect فشل
+      if (res.status === 404) {
+        throw new Error('REDIRECT_FAILED');
+      }
+
+      // لو 200 → عادي
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+
+      // نتأكد إن الـContent-Type JSON
+      var ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') === -1 && ct.indexOf('text/plain') === -1) {
+        // ممكن يكون HTML من Redirect فاشل
+        return res.text().then(function(text) {
+          if (text.trim().charAt(0) === '<') {
+            throw new Error('REDIRECT_FAILED');
+          }
+          // جرّب JSON.parse
+          try {
+            return JSON.parse(text);
+          } catch (e) {
+            throw new Error('INVALID_JSON');
+          }
+        });
+      }
+
+      return res.json();
+    })
     .then(function(data) {
-      if (!data.ok) {
-        area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>' + data.message + '</p></div>';
+      if (!data || !data.ok) {
+        area.innerHTML =
+          '<div class="placeholder-page">' +
+            '<h2>خطأ</h2>' +
+            '<p>' + ((data && data.message) || 'حدث خطأ') + '</p>' +
+            '<button class="btn-primary" onclick="loadDashboardInit(false)" style="margin-top:16px;">إعادة المحاولة</button>' +
+          '</div>';
         return;
       }
+
+      if (!data.stats || !data.settings) {
+        throw new Error('INVALID_DATA');
+      }
+
       dashInitCache = data;
+      try {
+        sessionStorage.setItem('dashInitCache', JSON.stringify({
+          data: data,
+          _ts: Date.now()
+        }));
+      } catch (e) {}
+
       applyDashboardData(data);
     })
     .catch(function(err) {
-      area.innerHTML = '<div class="placeholder-page"><h2>خطأ في الاتصال</h2><p>' + err.message + '</p></div>';
+      console.error('Dashboard load error:', err.message || err);
+
+      // ⚡ Retry تلقائي مرة واحدة بعد ثانيتين
+      if (retryCount < 1) {
+        console.log('إعادة المحاولة...');
+        setTimeout(function() {
+          loadDashboardInit(false, retryCount + 1);
+        }, 2000);
+        return;
+      }
+
+      // عرض رسالة الخطأ بعد فشل الـRetry
+      var msg = 'تعذّر الاتصال بالسيرفر.';
+      if (err.message === 'REDIRECT_FAILED') {
+        msg = 'السيرفر مشغول، جرّب مرة أخرى.';
+      } else if (err.message === 'INVALID_JSON' || err.message === 'INVALID_DATA') {
+        msg = 'رد غير متوقع من السيرفر.';
+      }
+
+      area.innerHTML =
+        '<div class="placeholder-page">' +
+          '<h2>خطأ في الاتصال</h2>' +
+          '<p>' + msg + '</p>' +
+          '<button class="btn-primary" onclick="loadDashboardInit(false)" style="margin-top:16px;">إعادة المحاولة</button>' +
+        '</div>';
     });
 }
 
@@ -167,11 +271,6 @@ function renderStats(area, stats) {
     '</div>';
 }
 
-/**
- * استخراج الثيم من الإعدادات
- * - لو مفيش قيم → يرجع DEFAULT_THEME مباشرة
- * - لو فيه قيم → يدمجها مع DEFAULT_THEME
- */
 function extractThemeFromSettings(s) {
   var base = (typeof DEFAULT_THEME !== 'undefined') ? DEFAULT_THEME : {
     primary: '#475569',
@@ -210,12 +309,13 @@ function toggleSidebar() {
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.toggle('open');
 }
-// ⚡ Keep-alive ping كل 4 دقايق
+
+// ⚡ Keep-alive ping كل 5 دقايق (مش كل 4)
 function keepAlive() {
-  fetch(CONFIG.API_URL + '?action=ping')
+  fetch(CONFIG.API_URL + '?action=ping', { cache: 'no-store' })
     .catch(function() {});
 }
 
-// بعد أول تحميل
-setTimeout(keepAlive, 1000);
-setInterval(keepAlive, 4 * 60 * 1000);
+// تأجيل الـping عشان مايتعارضش مع أول تحميل
+setTimeout(keepAlive, 30000);
+setInterval(keepAlive, 5 * 60 * 1000);
