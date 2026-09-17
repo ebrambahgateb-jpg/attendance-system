@@ -99,10 +99,7 @@ function navigateTo(pageId) {
 }
 
 /**
- * ⚡ تحميل بيانات Dashboard
- * - يتعامل مع 302 Redirect
- * - يعمل Retry تلقائي لو فشل
- * - يتعامل مع 404 gracefully
+ * ⚡ تحميل بيانات Dashboard — POST لتجنب 302 Redirect
  */
 function loadDashboardInit(useCache, retryCount) {
   retryCount = retryCount || 0;
@@ -135,43 +132,35 @@ function loadDashboardInit(useCache, retryCount) {
 
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  var url = CONFIG.API_URL + '?action=dashboardInit&email=' + encodeURIComponent(dashboardUser.email);
-
-  // ⚡ fetch مع redirect: 'follow' صريح
-  fetch(url, {
-    method: 'GET',
-    redirect: 'follow',
-    cache: 'no-store'
+  // ⚡ POST بدل GET
+  fetch(CONFIG.API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'dashboardInit',
+      email: dashboardUser.email
+    }),
+    redirect: 'follow'
   })
     .then(function(res) {
-      // لو 404 → معناها الـRedirect فشل
       if (res.status === 404) {
         throw new Error('REDIRECT_FAILED');
       }
-
-      // لو 200 → عادي
       if (!res.ok) {
         throw new Error('HTTP ' + res.status);
       }
-
-      // نتأكد إن الـContent-Type JSON
-      var ct = res.headers.get('content-type') || '';
-      if (ct.indexOf('application/json') === -1 && ct.indexOf('text/plain') === -1) {
-        // ممكن يكون HTML من Redirect فاشل
-        return res.text().then(function(text) {
-          if (text.trim().charAt(0) === '<') {
-            throw new Error('REDIRECT_FAILED');
-          }
-          // جرّب JSON.parse
-          try {
-            return JSON.parse(text);
-          } catch (e) {
-            throw new Error('INVALID_JSON');
-          }
-        });
+      return res.text();
+    })
+    .then(function(text) {
+      // نتأكد إن الـResponse JSON مش HTML
+      if (!text || text.trim().charAt(0) === '<') {
+        throw new Error('REDIRECT_FAILED');
       }
-
-      return res.json();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('INVALID_JSON');
+      }
     })
     .then(function(data) {
       if (!data || !data.ok) {
@@ -201,16 +190,15 @@ function loadDashboardInit(useCache, retryCount) {
     .catch(function(err) {
       console.error('Dashboard load error:', err.message || err);
 
-      // ⚡ Retry تلقائي مرة واحدة بعد ثانيتين
-      if (retryCount < 1) {
-        console.log('إعادة المحاولة...');
+      // ⚡ Retry تلقائي (مرتين)
+      if (retryCount < 2) {
+        console.log('إعادة المحاولة... (' + (retryCount + 1) + ')');
         setTimeout(function() {
           loadDashboardInit(false, retryCount + 1);
         }, 2000);
         return;
       }
 
-      // عرض رسالة الخطأ بعد فشل الـRetry
       var msg = 'تعذّر الاتصال بالسيرفر.';
       if (err.message === 'REDIRECT_FAILED') {
         msg = 'السيرفر مشغول، جرّب مرة أخرى.';
@@ -310,12 +298,11 @@ function toggleSidebar() {
   if (sidebar) sidebar.classList.toggle('open');
 }
 
-// ⚡ Keep-alive ping كل 5 دقايق (مش كل 4)
+// ⚡ Keep-alive ping كل 5 دقايق
 function keepAlive() {
   fetch(CONFIG.API_URL + '?action=ping', { cache: 'no-store' })
     .catch(function() {});
 }
 
-// تأجيل الـping عشان مايتعارضش مع أول تحميل
 setTimeout(keepAlive, 30000);
 setInterval(keepAlive, 5 * 60 * 1000);
