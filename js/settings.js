@@ -27,22 +27,23 @@ function renderSettingsPage(area) {
       <div class="settings-tabs">
         <button class="settings-tab active" data-tab="general">عام</button>
         <button class="settings-tab" data-tab="appearance">المظهر</button>
+        <button class="settings-tab" data-tab="attendance">الحضور</button>
+        <button class="settings-tab" data-tab="people">الأشخاص</button>
+        <button class="settings-tab" data-tab="photo">الصور</button>
       </div>
 
+      <!-- ═══ عام ═══ -->
       <div class="settings-tab-content" id="tab-general">
         <div class="settings-group">
           <h3>الإعدادات العامة</h3>
-
           <div class="form-row">
             <label>اسم النظام</label>
             <input type="text" id="set_SystemName" />
           </div>
-
           <div class="form-row">
             <label>اسم المؤسسة</label>
             <input type="text" id="set_OrganizationName" />
           </div>
-
           <div class="form-row">
             <label>اللغة</label>
             <select id="set_Language">
@@ -50,7 +51,6 @@ function renderSettingsPage(area) {
               <option value="en">English</option>
             </select>
           </div>
-
           <div class="form-row">
             <label>المنطقة الزمنية</label>
             <input type="text" id="set_TimeZone" placeholder="Africa/Cairo" />
@@ -58,25 +58,22 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
+      <!-- ═══ المظهر ═══ -->
       <div class="settings-tab-content" id="tab-appearance" style="display:none;">
         <div class="settings-group">
           <h3>الألوان</h3>
-
           <div class="form-row">
             <label>اللون الأساسي</label>
             <input type="color" id="set_ThemePrimary" />
           </div>
-
           <div class="form-row">
             <label>لون التمييز</label>
             <input type="color" id="set_ThemeAccent" />
           </div>
-
           <div class="form-row">
             <label>لون الخلفية</label>
             <input type="color" id="set_ThemeBg" />
           </div>
-
           <div class="form-row">
             <label>لون الـSidebar</label>
             <input type="color" id="set_ThemeSidebarBg" />
@@ -102,11 +99,93 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
+      <!-- ═══ الحضور ═══ -->
+      <div class="settings-tab-content" id="tab-attendance" style="display:none;">
+        <div class="settings-group">
+          <h3>توقيت الحضور</h3>
+          <div class="form-row">
+            <label>فتح الحضور قبل الاجتماع (بالدقائق)</label>
+            <input type="number" id="set_OpenBeforeMinutes" min="0" max="120" />
+          </div>
+          <div class="form-row">
+            <label>إغلاق الحضور بعد الاجتماع (بالدقائق)</label>
+            <input type="number" id="set_CloseAfterMinutes" min="0" max="120" />
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>قواعد التسجيل</h3>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_PreventDuplicateAttendance" />
+            <label for="set_PreventDuplicateAttendance">منع تسجيل الحضور مرتين</label>
+          </div>
+          <div class="form-row">
+            <label>مدة عرض النتيجة على الشاشة (بالثواني)</label>
+            <input type="number" id="set_ResultDisplayDuration" min="1" max="30" />
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>الأصوات والصور</h3>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_SuccessSound" />
+            <label for="set_SuccessSound">صوت عند نجاح الحضور</label>
+          </div>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_ErrorSound" />
+            <label for="set_ErrorSound">صوت عند الخطأ</label>
+          </div>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_ShowPersonPhoto" />
+            <label for="set_ShowPersonPhoto">إظهار صورة الشخص بعد المسح</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ الأشخاص ═══ -->
+      <div class="settings-tab-content" id="tab-people" style="display:none;">
+        <div class="settings-group">
+          <h3>الحقول الإلزامية</h3>
+          <p class="hint">اكتب أسماء الحقول مفصولة بفاصلة. مثال: Name,Phone</p>
+          <div class="form-row">
+            <input type="text" id="set_RequiredFields" placeholder="Name,Phone" />
+          </div>
+          <p class="hint">الحقول المتاحة: Name, Phone, Email, PhotoURL</p>
+        </div>
+
+        <div class="settings-group">
+          <h3>الحذف والتعطيل</h3>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_AllowDelete" />
+            <label for="set_AllowDelete">السماح بحذف الأشخاص</label>
+          </div>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_DisableInsteadOfDelete" />
+            <label for="set_DisableInsteadOfDelete">تعطيل بدل الحذف (يُفضّل)</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ الصور ═══ -->
+      <div class="settings-tab-content" id="tab-photo" style="display:none;">
+        <div class="settings-group">
+          <h3>إعدادات الصور</h3>
+          <div class="form-row">
+            <label>أقصى حجم للصورة (بالميجابايت)</label>
+            <input type="number" id="set_MaxPhotoSize" min="1" max="10" />
+          </div>
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="set_CompressPhotos" />
+            <label for="set_CompressPhotos">ضغط الصور لتقليل المساحة</label>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-actions">
-  <button class="btn-danger" onclick="resetThemeToDefault()">↺ استعادة المظهر الافتراضي</button>
-  <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
-  <button class="btn-primary" onclick="saveAllSettings()">حفظ التغييرات</button>
-</div>
+        <button class="btn-danger" onclick="resetThemeToDefault()">↺ استعادة المظهر الافتراضي</button>
+        <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
+        <button class="btn-primary" onclick="saveAllSettings()">حفظ التغييرات</button>
+      </div>
 
     </div>
   `;
@@ -116,24 +195,41 @@ function renderSettingsPage(area) {
 }
 
 function fillSettingsForm() {
-  ['SystemName','OrganizationName','Language','TimeZone',
-   'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg'].forEach(function(key) {
+  // الحقول النصية / الرقمية
+  var textKeys = ['SystemName','OrganizationName','Language','TimeZone',
+                  'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
+                  'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
+                  'RequiredFields','MaxPhotoSize'];
+
+  textKeys.forEach(function(key) {
     var el = document.getElementById('set_' + key);
     if (el && settingsData[key] !== undefined) {
       el.value = settingsData[key];
     }
   });
 
+  // الحقول الـboolean
+  var boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
+                  'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
+                  'CompressPhotos'];
+
+  boolKeys.forEach(function(key) {
+    var el = document.getElementById('set_' + key);
+    if (el) {
+      el.checked = (settingsData[key] === true || String(settingsData[key]).toLowerCase() === 'true');
+    }
+  });
+
   // Preview اللوجو
   var logoPreview = document.getElementById('logoPreview');
-  if (settingsData.ThemeLogoUrl) {
+  if (logoPreview && settingsData.ThemeLogoUrl) {
     logoPreview.src = settingsData.ThemeLogoUrl;
     logoPreview.style.display = 'block';
   }
 
   // Preview الخلفية
   var bgPreview = document.getElementById('bgPreview');
-  if (settingsData.ThemeBgImageUrl) {
+  if (bgPreview && settingsData.ThemeBgImageUrl) {
     bgPreview.src = settingsData.ThemeBgImageUrl;
     bgPreview.style.display = 'block';
   }
@@ -232,18 +328,34 @@ function clearBgImage() {
 }
 
 function saveAllSettings() {
-  var keys = ['SystemName','OrganizationName','Language','TimeZone',
-              'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg'];
+  var textKeys = ['SystemName','OrganizationName','Language','TimeZone',
+                  'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
+                  'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
+                  'RequiredFields','MaxPhotoSize'];
+
+  var boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
+                  'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
+                  'CompressPhotos'];
 
   var payload = {};
 
-  keys.forEach(function(key) {
+  textKeys.forEach(function(key) {
     var el = document.getElementById('set_' + key);
     if (el) payload[key] = el.value;
   });
 
+  boolKeys.forEach(function(key) {
+    var el = document.getElementById('set_' + key);
+    if (el) payload[key] = el.checked;
+  });
+
   payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
   payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
+
+  var btn = event.target;
+  var originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'جاري الحفظ...';
 
   fetch(CONFIG.API_URL, {
     method: 'POST',
@@ -255,12 +367,19 @@ function saveAllSettings() {
   })
   .then(function(res) { return res.json(); })
   .then(function(data) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+
     if (!data.ok) {
       alert('خطأ: ' + data.message);
       return;
     }
     settingsData = data.settings;
     originalSettings = Object.assign({}, data.settings);
+
+    // امسح كاش الداشبورد عشان المرة الجاية يجيب القيم المحدثة
+    dashInitCache = null;
+    try { sessionStorage.removeItem('dashInitCache'); } catch (e) {}
 
     // تطبيق الثيم مباشرة
     var theme = extractThemeFromSettings(settingsData);
@@ -276,6 +395,8 @@ function saveAllSettings() {
     alert('تم الحفظ بنجاح');
   })
   .catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = originalText;
     alert('خطأ: ' + err.message);
   });
 }
@@ -284,6 +405,7 @@ function reloadSettings() {
   var area = document.getElementById('contentArea');
   loadSettingsPage(area);
 }
+
 function resetThemeToDefault() {
   if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟ سيتم مسح اللوجو والخلفية والألوان المخصصة.')) {
     return;
@@ -314,15 +436,16 @@ function resetThemeToDefault() {
     settingsData = data.settings;
     originalSettings = Object.assign({}, data.settings);
 
+    // امسح كاش الداشبورد
+    dashInitCache = null;
+    try { sessionStorage.removeItem('dashInitCache'); } catch (e) {}
+
     // حدّث الثيم فورًا
     var theme = extractThemeFromSettings(settingsData);
     if (theme) {
       saveTheme(theme);
-    } else {
-      // لو مفيش أي إعداد → ارجع للافتراضي
-      if (typeof DEFAULT_THEME !== 'undefined') {
-        saveTheme(DEFAULT_THEME);
-      }
+    } else if (typeof DEFAULT_THEME !== 'undefined') {
+      saveTheme(DEFAULT_THEME);
     }
 
     // أعد تحميل الصفحة عشان القيم تتحدّث
