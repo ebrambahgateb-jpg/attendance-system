@@ -13,7 +13,7 @@ const MENU_ITEMS = [
 
 let dashboardUser = null;
 let currentPage = 'dashboard';
-let dashInitCache = null; // نحفظ آخر نتيجة عشان نستخدمها عند التنقل السريع
+let dashInitCache = null;
 
 window.addEventListener('DOMContentLoaded', function() {
   try {
@@ -98,14 +98,9 @@ function navigateTo(pageId) {
   if (sidebar) sidebar.classList.remove('open');
 }
 
-/**
- * تحميل لوحة التحكم
- * useCache = true → استخدم آخر نتيجة لو موجودة
- */
 function loadDashboardInit(useCache) {
   var area = document.getElementById('contentArea');
 
-  // لو عندنا cache وطالبين نستخدمه → اعرض فورًا
   if (useCache && dashInitCache) {
     applyDashboardData(dashInitCache);
     return;
@@ -131,10 +126,8 @@ function loadDashboardInit(useCache) {
 function applyDashboardData(data) {
   var area = document.getElementById('contentArea');
 
-  // الإحصائيات
   renderStats(area, data.stats);
 
-  // حالة النظام
   var statusEl = document.getElementById('systemStatus');
   if (statusEl) {
     var status = data.settings.SystemStatus || 'Active';
@@ -147,18 +140,15 @@ function applyDashboardData(data) {
     }
   }
 
-  // الثيم
   var theme = extractThemeFromSettings(data.settings);
   if (theme) saveTheme(theme);
 
-  // اسم النظام
   if (data.settings.SystemName) {
     var appNameEl = document.getElementById('appName');
     if (appNameEl) appNameEl.textContent = data.settings.SystemName;
     document.title = data.settings.SystemName;
   }
 
-  // active على dashboard
   document.querySelectorAll('.nav-item').forEach(function(b) {
     b.classList.toggle('active', b.dataset.page === 'dashboard');
   });
@@ -177,23 +167,40 @@ function renderStats(area, stats) {
     '</div>';
 }
 
+/**
+ * استخراج الثيم من الإعدادات
+ * - لو مفيش قيم → يرجع DEFAULT_THEME مباشرة
+ * - لو فيه قيم → يدمجها مع DEFAULT_THEME
+ */
 function extractThemeFromSettings(s) {
-  var keys = ['ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg','ThemeLogoUrl','ThemeBgImageUrl'];
-  var hasAny = keys.some(function(k) { return s[k]; });
-  if (!hasAny) return null;
+  var base = (typeof DEFAULT_THEME !== 'undefined') ? DEFAULT_THEME : {
+    primary: '#475569',
+    primaryHover: '#334155',
+    accent: '#0d9488',
+    bg: '#f8fafc',
+    cardBg: '#ffffff',
+    text: '#0f172a',
+    textMuted: '#64748b',
+    border: '#e2e8f0',
+    sidebarBg: '#1e293b',
+    sidebarText: '#cbd5e1',
+    sidebarActive: '#475569',
+    logoUrl: '',
+    bgImageUrl: ''
+  };
 
   return {
-    primary: s.ThemePrimary || DEFAULT_THEME.primary,
-    primaryHover: DEFAULT_THEME.primaryHover,
-    accent: s.ThemeAccent || DEFAULT_THEME.accent,
-    bg: s.ThemeBg || DEFAULT_THEME.bg,
-    cardBg: DEFAULT_THEME.cardBg,
-    text: DEFAULT_THEME.text,
-    textMuted: DEFAULT_THEME.textMuted,
-    border: DEFAULT_THEME.border,
-    sidebarBg: s.ThemeSidebarBg || DEFAULT_THEME.sidebarBg,
-    sidebarText: DEFAULT_THEME.sidebarText,
-    sidebarActive: DEFAULT_THEME.sidebarActive,
+    primary: s.ThemePrimary || base.primary,
+    primaryHover: base.primaryHover,
+    accent: s.ThemeAccent || base.accent,
+    bg: s.ThemeBg || base.bg,
+    cardBg: base.cardBg,
+    text: base.text,
+    textMuted: base.textMuted,
+    border: base.border,
+    sidebarBg: s.ThemeSidebarBg || base.sidebarBg,
+    sidebarText: base.sidebarText,
+    sidebarActive: base.sidebarActive,
     logoUrl: s.ThemeLogoUrl || '',
     bgImageUrl: s.ThemeBgImageUrl || ''
   };
