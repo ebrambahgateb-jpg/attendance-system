@@ -97,11 +97,11 @@ function goToDashboard(role) {
 }
 
 function logout() {
-  localStorage.removeItem('currentUser');
-  if (typeof google !== 'undefined' && google.accounts) {
-    google.accounts.id.disableAutoSelect();
-  }
-  location.reload();
+  try {
+    localStorage.removeItem('currentUser');
+    try { sessionStorage.clear(); } catch (e) {}
+  } catch (e) {}
+  window.location.href = '../index.html';
 }
 
 function showScreen(screenId) {
