@@ -103,9 +103,10 @@ function renderSettingsPage(area) {
       </div>
 
       <div class="settings-actions">
-        <button class="btn-primary" onclick="saveAllSettings()">حفظ التغييرات</button>
-        <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
-      </div>
+  <button class="btn-danger" onclick="resetThemeToDefault()">↺ استعادة المظهر الافتراضي</button>
+  <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
+  <button class="btn-primary" onclick="saveAllSettings()">حفظ التغييرات</button>
+</div>
 
     </div>
   `;
