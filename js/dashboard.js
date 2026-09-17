@@ -183,10 +183,17 @@ function extractThemeFromSettings(s) {
   if (!hasAny) return null;
 
   return {
-    primary: s.ThemePrimary || undefined,
-    accent: s.ThemeAccent || undefined,
-    bg: s.ThemeBg || undefined,
-    sidebarBg: s.ThemeSidebarBg || undefined,
+    primary: s.ThemePrimary || DEFAULT_THEME.primary,
+    primaryHover: DEFAULT_THEME.primaryHover,
+    accent: s.ThemeAccent || DEFAULT_THEME.accent,
+    bg: s.ThemeBg || DEFAULT_THEME.bg,
+    cardBg: DEFAULT_THEME.cardBg,
+    text: DEFAULT_THEME.text,
+    textMuted: DEFAULT_THEME.textMuted,
+    border: DEFAULT_THEME.border,
+    sidebarBg: s.ThemeSidebarBg || DEFAULT_THEME.sidebarBg,
+    sidebarText: DEFAULT_THEME.sidebarText,
+    sidebarActive: DEFAULT_THEME.sidebarActive,
     logoUrl: s.ThemeLogoUrl || '',
     bgImageUrl: s.ThemeBgImageUrl || ''
   };
