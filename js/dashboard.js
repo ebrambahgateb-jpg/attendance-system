@@ -210,3 +210,12 @@ function toggleSidebar() {
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.toggle('open');
 }
+// ⚡ Keep-alive ping كل 4 دقايق
+function keepAlive() {
+  fetch(CONFIG.API_URL + '?action=ping')
+    .catch(function() {});
+}
+
+// بعد أول تحميل
+setTimeout(keepAlive, 1000);
+setInterval(keepAlive, 4 * 60 * 1000);
