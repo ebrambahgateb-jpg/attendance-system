@@ -1,25 +1,53 @@
+// ═══════════════════════════════════════════════════════
+//   Settings (Firestore)
+// ═══════════════════════════════════════════════════════
+
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+import {
+  db,
+  COLLECTIONS,
+  SETTINGS_DOC,
+  DEFAULT_THEME
+} from './firebase-config.js';
+
+// ═══ State ═══
 let settingsData = {};
 let originalSettings = {};
 
-function loadSettingsPage(area) {
+// ═══ Load Settings Page ═══
+async function loadSettingsPage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  fetch(CONFIG.API_URL + '?action=getSettingsFull&email=' + encodeURIComponent(dashboardUser.email))
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (!data.ok) {
-        area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>' + data.message + '</p></div>';
-        return;
-      }
-      settingsData = data.settings;
-      originalSettings = Object.assign({}, data.settings);
-      renderSettingsPage(area);
-    })
-    .catch(function(err) {
-      area.innerHTML = '<div class="placeholder-page"><h2>خطأ في الاتصال</h2><p>' + err.message + '</p></div>';
-    });
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    const snap = await getDoc(settingsRef);
+
+    if (!snap.exists()) {
+      settingsData = {};
+      originalSettings = {};
+    } else {
+      settingsData = snap.data();
+      originalSettings = { ...settingsData };
+    }
+
+    renderSettingsPage(area);
+  } catch (err) {
+    console.error('❌ Load settings error:', err);
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ</h2>
+      <p>${err.message}</p>
+    </div>`;
+  }
 }
 
+// ═══ Render Page ═══
 function renderSettingsPage(area) {
   area.innerHTML = `
     <div class="settings-container">
@@ -32,7 +60,7 @@ function renderSettingsPage(area) {
         <button class="settings-tab" data-tab="photo">الصور</button>
       </div>
 
-      <!-- ═══ عام ═══ -->
+      <!-- عام -->
       <div class="settings-tab-content" id="tab-general">
         <div class="settings-group">
           <h3>الإعدادات العامة</h3>
@@ -58,7 +86,7 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
-      <!-- ═══ المظهر ═══ -->
+      <!-- المظهر -->
       <div class="settings-tab-content" id="tab-appearance" style="display:none;">
         <div class="settings-group">
           <h3>الألوان</h3>
@@ -85,7 +113,7 @@ function renderSettingsPage(area) {
           <div class="logo-preview">
             <img id="logoPreview" src="" alt="" style="display:none;" />
           </div>
-          <input type="file" id="logoFile" accept="image/*" />
+          <input type="text" id="set_ThemeLogoUrl" placeholder="https://..." />
           <button class="btn-secondary" onclick="clearLogo()">مسح اللوجو</button>
         </div>
 
@@ -94,12 +122,12 @@ function renderSettingsPage(area) {
           <div class="logo-preview">
             <img id="bgPreview" src="" alt="" style="display:none;max-height:150px;" />
           </div>
-          <input type="file" id="bgFile" accept="image/*" />
+          <input type="text" id="set_ThemeBgImageUrl" placeholder="https://..." />
           <button class="btn-secondary" onclick="clearBgImage()">مسح الخلفية</button>
         </div>
       </div>
 
-      <!-- ═══ الحضور ═══ -->
+      <!-- الحضور -->
       <div class="settings-tab-content" id="tab-attendance" style="display:none;">
         <div class="settings-group">
           <h3>توقيت الحضور</h3>
@@ -142,7 +170,7 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
-      <!-- ═══ الأشخاص ═══ -->
+      <!-- الأشخاص -->
       <div class="settings-tab-content" id="tab-people" style="display:none;">
         <div class="settings-group">
           <h3>الحقول الإلزامية</h3>
@@ -166,7 +194,7 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
-      <!-- ═══ الصور ═══ -->
+      <!-- الصور -->
       <div class="settings-tab-content" id="tab-photo" style="display:none;">
         <div class="settings-group">
           <h3>إعدادات الصور</h3>
@@ -184,7 +212,7 @@ function renderSettingsPage(area) {
       <div class="settings-actions">
         <button class="btn-danger" onclick="resetThemeToDefault()">↺ استعادة المظهر الافتراضي</button>
         <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
-        <button class="btn-primary" onclick="saveAllSettings()">حفظ التغييرات</button>
+        <button class="btn-primary" onclick="saveAllSettings(event)">حفظ التغييرات</button>
       </div>
 
     </div>
@@ -194,269 +222,238 @@ function renderSettingsPage(area) {
   setupSettingsEvents();
 }
 
+// ═══ Fill Form ═══
 function fillSettingsForm() {
-  // الحقول النصية / الرقمية
-  var textKeys = ['SystemName','OrganizationName','Language','TimeZone',
-                  'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
-                  'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
-                  'RequiredFields','MaxPhotoSize'];
+  const textKeys = ['SystemName','OrganizationName','Language','TimeZone',
+                    'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
+                    'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
+                    'RequiredFields','MaxPhotoSize','ThemeLogoUrl','ThemeBgImageUrl'];
 
-  textKeys.forEach(function(key) {
-    var el = document.getElementById('set_' + key);
+  textKeys.forEach(key => {
+    const el = document.getElementById('set_' + key);
     if (el && settingsData[key] !== undefined) {
       el.value = settingsData[key];
     }
   });
 
-  // الحقول الـboolean
-  var boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
-                  'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
-                  'CompressPhotos'];
+  const boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
+                    'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
+                    'CompressPhotos'];
 
-  boolKeys.forEach(function(key) {
-    var el = document.getElementById('set_' + key);
+  boolKeys.forEach(key => {
+    const el = document.getElementById('set_' + key);
     if (el) {
-      el.checked = (settingsData[key] === true || String(settingsData[key]).toLowerCase() === 'true');
+      el.checked = (settingsData[key] === true ||
+                    String(settingsData[key]).toLowerCase() === 'true');
     }
   });
 
-  // Preview اللوجو
-  var logoPreview = document.getElementById('logoPreview');
+  // Preview
+  const logoPreview = document.getElementById('logoPreview');
   if (logoPreview && settingsData.ThemeLogoUrl) {
     logoPreview.src = settingsData.ThemeLogoUrl;
     logoPreview.style.display = 'block';
   }
 
-  // Preview الخلفية
-  var bgPreview = document.getElementById('bgPreview');
+  const bgPreview = document.getElementById('bgPreview');
   if (bgPreview && settingsData.ThemeBgImageUrl) {
     bgPreview.src = settingsData.ThemeBgImageUrl;
     bgPreview.style.display = 'block';
   }
 }
 
+// ═══ Setup Events ═══
 function setupSettingsEvents() {
-  // Tab switching
-  document.querySelectorAll('.settings-tab').forEach(function(tab) {
-    tab.onclick = function() {
-      document.querySelectorAll('.settings-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
 
-      document.querySelectorAll('.settings-tab-content').forEach(function(c) { c.style.display = 'none'; });
-      var target = document.getElementById('tab-' + tab.dataset.tab);
+      document.querySelectorAll('.settings-tab-content').forEach(c => c.style.display = 'none');
+      const target = document.getElementById('tab-' + tab.dataset.tab);
       if (target) target.style.display = 'block';
     };
   });
-
-  // Logo upload
-  var logoFile = document.getElementById('logoFile');
-  if (logoFile) {
-    logoFile.onchange = function(e) {
-      var file = e.target.files[0];
-      if (file) uploadImage(file, 'ThemeLogoUrl', 'logoPreview');
-    };
-  }
-
-  // Bg upload
-  var bgFile = document.getElementById('bgFile');
-  if (bgFile) {
-    bgFile.onchange = function(e) {
-      var file = e.target.files[0];
-      if (file) uploadImage(file, 'ThemeBgImageUrl', 'bgPreview');
-    };
-  }
 }
 
-function uploadImage(file, settingKey, previewId) {
-  if (file.size > 2 * 1024 * 1024) {
-    alert('حجم الصورة كبير جدًا. الحد الأقصى 2MB');
-    return;
-  }
-
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var base64 = e.target.result.split(',')[1];
-
-    fetch(CONFIG.API_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'uploadFile',
-        email: dashboardUser.email,
-        file: {
-          name: file.name,
-          mimeType: file.type,
-          base64: base64
-        }
-      })
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (!data.ok) {
-        alert('خطأ: ' + data.message);
-        return;
-      }
-      settingsData[settingKey] = data.url;
-      var preview = document.getElementById(previewId);
-      if (preview) {
-        preview.src = data.url;
-        preview.style.display = 'block';
-      }
-    })
-    .catch(function(err) {
-      alert('خطأ في الرفع: ' + err.message);
-    });
-  };
-  reader.readAsDataURL(file);
-}
-
-function clearLogo() {
+// ═══ Clear Logo/Bg ═══
+window.clearLogo = function() {
   settingsData.ThemeLogoUrl = '';
-  var preview = document.getElementById('logoPreview');
+  const input = document.getElementById('set_ThemeLogoUrl');
+  if (input) input.value = '';
+  const preview = document.getElementById('logoPreview');
   if (preview) {
     preview.src = '';
     preview.style.display = 'none';
   }
-}
+};
 
-function clearBgImage() {
+window.clearBgImage = function() {
   settingsData.ThemeBgImageUrl = '';
-  var preview = document.getElementById('bgPreview');
+  const input = document.getElementById('set_ThemeBgImageUrl');
+  if (input) input.value = '';
+  const preview = document.getElementById('bgPreview');
   if (preview) {
     preview.src = '';
     preview.style.display = 'none';
   }
-}
+};
 
-function saveAllSettings() {
-  var textKeys = ['SystemName','OrganizationName','Language','TimeZone',
-                  'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
-                  'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
-                  'RequiredFields','MaxPhotoSize'];
+// ═══ Save Settings ═══
+window.saveAllSettings = async function(event) {
+  const textKeys = ['SystemName','OrganizationName','Language','TimeZone',
+                    'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
+                    'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
+                    'RequiredFields','MaxPhotoSize','ThemeLogoUrl','ThemeBgImageUrl'];
 
-  var boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
-                  'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
-                  'CompressPhotos'];
+  const boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
+                    'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
+                    'CompressPhotos'];
 
-  var payload = {};
+  const payload = {};
 
-  textKeys.forEach(function(key) {
-    var el = document.getElementById('set_' + key);
+  textKeys.forEach(key => {
+    const el = document.getElementById('set_' + key);
     if (el) payload[key] = el.value;
   });
 
-  boolKeys.forEach(function(key) {
-    var el = document.getElementById('set_' + key);
+  boolKeys.forEach(key => {
+    const el = document.getElementById('set_' + key);
     if (el) payload[key] = el.checked;
   });
 
-  payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
-  payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
+  const btn = event ? event.target : null;
+  const originalText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'جاري الحفظ...';
+  }
 
-  var btn = event.target;
-  var originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'جاري الحفظ...';
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    await setDoc(settingsRef, payload, { merge: true });
 
-  fetch(CONFIG.API_URL, {
-    method: 'POST',
-    body: JSON.stringify({
-      action: 'updateSettings',
-      email: dashboardUser.email,
-      settings: payload
-    })
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(data) {
-    btn.disabled = false;
-    btn.textContent = originalText;
+    settingsData = { ...settingsData, ...payload };
+    originalSettings = { ...settingsData };
 
-    if (!data.ok) {
-      alert('خطأ: ' + data.message);
-      return;
-    }
-    settingsData = data.settings;
-    originalSettings = Object.assign({}, data.settings);
-
-    // امسح كاش الداشبورد عشان المرة الجاية يجيب القيم المحدثة
-    dashInitCache = null;
+    // امسح كاش الداشبورد
+    if (window.dashInitCache !== undefined) window.dashInitCache = null;
     try { sessionStorage.removeItem('dashInitCache'); } catch (e) {}
 
-    // تطبيق الثيم مباشرة
-    var theme = extractThemeFromSettings(settingsData);
-    if (theme) saveTheme(theme);
+    // طبّق الثيم
+    const theme = extractTheme(settingsData);
+    saveTheme(theme);
 
-    // تحديث اسم النظام
-    var appNameEl = document.getElementById('appName');
+    const appNameEl = document.getElementById('appName');
     if (appNameEl && settingsData.SystemName) {
       appNameEl.textContent = settingsData.SystemName;
       document.title = settingsData.SystemName;
     }
 
     alert('تم الحفظ بنجاح');
-  })
-  .catch(function(err) {
-    btn.disabled = false;
-    btn.textContent = originalText;
+  } catch (err) {
+    console.error('❌ Save settings error:', err);
     alert('خطأ: ' + err.message);
-  });
-}
-
-function reloadSettings() {
-  var area = document.getElementById('contentArea');
-  loadSettingsPage(area);
-}
-
-function resetThemeToDefault() {
-  if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟ سيتم مسح اللوجو والخلفية والألوان المخصصة.')) {
-    return;
   }
 
-  var btn = event.target;
-  var originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'جاري الاستعادة...';
-
-  fetch(CONFIG.API_URL, {
-    method: 'POST',
-    body: JSON.stringify({
-      action: 'resetThemeToDefault',
-      email: dashboardUser.email
-    })
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(data) {
+  if (btn) {
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+};
 
-    if (!data.ok) {
-      alert('خطأ: ' + data.message);
-      return;
-    }
+// ═══ Reset Theme ═══
+window.resetThemeToDefault = async function() {
+  if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟')) return;
 
-    settingsData = data.settings;
-    originalSettings = Object.assign({}, data.settings);
+  const defaults = {
+    ThemePrimary: DEFAULT_THEME.primary,
+    ThemeAccent: DEFAULT_THEME.accent,
+    ThemeBg: DEFAULT_THEME.bg,
+    ThemeSidebarBg: DEFAULT_THEME.sidebarBg,
+    ThemeLogoUrl: '',
+    ThemeBgImageUrl: ''
+  };
 
-    // امسح كاش الداشبورد
-    dashInitCache = null;
-    try { sessionStorage.removeItem('dashInitCache'); } catch (e) {}
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    await setDoc(settingsRef, defaults, { merge: true });
 
-    // حدّث الثيم فورًا
-    var theme = extractThemeFromSettings(settingsData);
-    if (theme) {
-      saveTheme(theme);
-    } else if (typeof DEFAULT_THEME !== 'undefined') {
-      saveTheme(DEFAULT_THEME);
-    }
+    settingsData = { ...settingsData, ...defaults };
 
-    // أعد تحميل الصفحة عشان القيم تتحدّث
-    var area = document.getElementById('contentArea');
-    loadSettingsPage(area);
+    saveTheme(DEFAULT_THEME);
+
+    const area = document.getElementById('contentArea');
+    if (area) loadSettingsPage(area);
 
     alert('تم استعادة المظهر الافتراضي');
-  })
-  .catch(function(err) {
-    btn.disabled = false;
-    btn.textContent = originalText;
-    alert('خطأ في الاتصال: ' + err.message);
+  } catch (err) {
+    console.error('❌ Reset theme error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+// ═══ Reload ═══
+window.reloadSettings = function() {
+  const area = document.getElementById('contentArea');
+  if (area) loadSettingsPage(area);
+};
+
+// ═══ Theme Helpers ═══
+function extractTheme(s) {
+  return {
+    primary: s.ThemePrimary || DEFAULT_THEME.primary,
+    primaryHover: DEFAULT_THEME.primaryHover,
+    accent: s.ThemeAccent || DEFAULT_THEME.accent,
+    bg: s.ThemeBg || DEFAULT_THEME.bg,
+    cardBg: DEFAULT_THEME.cardBg,
+    text: DEFAULT_THEME.text,
+    textMuted: DEFAULT_THEME.textMuted,
+    border: DEFAULT_THEME.border,
+    sidebarBg: s.ThemeSidebarBg || DEFAULT_THEME.sidebarBg,
+    sidebarText: DEFAULT_THEME.sidebarText,
+    sidebarActive: DEFAULT_THEME.sidebarActive,
+    logoUrl: s.ThemeLogoUrl || '',
+    bgImageUrl: s.ThemeBgImageUrl || ''
+  };
+}
+
+function saveTheme(theme) {
+  localStorage.setItem('themeSettings', JSON.stringify(theme));
+
+  const root = document.documentElement;
+  const t = { ...DEFAULT_THEME, ...theme };
+
+  root.style.setProperty('--primary', t.primary);
+  root.style.setProperty('--primary-hover', t.primaryHover);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--bg', t.bg);
+  root.style.setProperty('--card-bg', t.cardBg);
+  root.style.setProperty('--text', t.text);
+  root.style.setProperty('--text-muted', t.textMuted);
+  root.style.setProperty('--border', t.border);
+  root.style.setProperty('--sidebar-bg', t.sidebarBg);
+  root.style.setProperty('--sidebar-text', t.sidebarText);
+  root.style.setProperty('--sidebar-active', t.sidebarActive);
+
+  if (t.bgImageUrl) {
+    document.body.style.backgroundImage = `url('${t.bgImageUrl}')`;
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundAttachment = 'fixed';
+  } else {
+    document.body.style.backgroundImage = 'none';
+    document.body.style.background = t.bg;
+  }
+
+  document.querySelectorAll('.app-logo').forEach(img => {
+    if (t.logoUrl) {
+      img.src = t.logoUrl;
+      img.style.display = 'block';
+    } else {
+      img.style.display = 'none';
+    }
   });
 }
+
+// ═══ Expose ═══
+window.loadSettingsPage = loadSettingsPage;
