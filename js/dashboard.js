@@ -1,3 +1,31 @@
+// ═══════════════════════════════════════════════════════
+//   Dashboard (Firestore)
+// ═══════════════════════════════════════════════════════
+
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+import {
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+import {
+  auth,
+  db,
+  COLLECTIONS,
+  SETTINGS_DOC,
+  DEFAULT_THEME
+} from './firebase-config.js';
+
+// ═══ Menu Configuration ═══
 const MENU_ITEMS = [
   { id: 'dashboard',  label: 'لوحة التحكم', icon: '📊', roles: ['Owner','Admin'] },
   { id: 'scanner',    label: 'الماسح',      icon: '📷', roles: ['Owner','Admin','Scanner'] },
@@ -11,11 +39,14 @@ const MENU_ITEMS = [
   { id: 'settings',   label: 'الإعدادات',   icon: '⚙️', roles: ['Owner'] }
 ];
 
+// ═══ Global State ═══
 let dashboardUser = null;
 let currentPage = 'dashboard';
 let dashInitCache = null;
+let settingsCache = null;
 
-window.addEventListener('DOMContentLoaded', function() {
+// ═══ Initialize on Load ═══
+document.addEventListener('DOMContentLoaded', async () => {
   try {
     dashboardUser = JSON.parse(localStorage.getItem('currentUser'));
   } catch (e) {
@@ -27,40 +58,46 @@ window.addEventListener('DOMContentLoaded', function() {
     return;
   }
 
-  loadThemeFromSettings();
+  loadThemeFromStorage();
   renderUserInfo();
   renderSidebar();
-  loadDashboardInit(true);
+  await loadDashboardInit(true);
 });
 
+// ═══ User Info ═══
 function renderUserInfo() {
-  var nameEl = document.getElementById('userName');
-  var roleEl = document.getElementById('userRole');
-  var avatar = document.getElementById('userAvatar');
+  const nameEl = document.getElementById('userName');
+  const roleEl = document.getElementById('userRole');
+  const avatar = document.getElementById('userAvatar');
 
   if (nameEl) nameEl.textContent = dashboardUser.name || dashboardUser.email;
   if (roleEl) roleEl.textContent = dashboardUser.selectedRole;
-  if (avatar && dashboardUser.name) {
-    avatar.textContent = dashboardUser.name.charAt(0).toUpperCase();
+  if (avatar) {
+    if (dashboardUser.photoURL) {
+      avatar.innerHTML = `<img src="${dashboardUser.photoURL}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    } else if (dashboardUser.name) {
+      avatar.textContent = dashboardUser.name.charAt(0).toUpperCase();
+    }
   }
 }
 
+// ═══ Sidebar ═══
 function renderSidebar() {
-  var nav = document.getElementById('sidebarNav');
+  const nav = document.getElementById('sidebarNav');
   if (!nav) return;
   nav.innerHTML = '';
 
-  var role = dashboardUser.selectedRole;
+  const role = dashboardUser.selectedRole;
 
-  MENU_ITEMS.forEach(function(item) {
+  MENU_ITEMS.forEach(item => {
     if (item.roles.indexOf(role) === -1) return;
 
-    var btn = document.createElement('button');
+    const btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.page = item.id;
-    btn.innerHTML = '<span class="nav-icon">' + item.icon + '</span><span>' + item.label + '</span>';
+    btn.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>`;
 
-    btn.onclick = function() {
+    btn.onclick = () => {
       if (item.id === 'scanner') {
         window.location.href = 'scanner.html';
       } else {
@@ -72,209 +109,198 @@ function renderSidebar() {
   });
 }
 
+// ═══ Navigation ═══
 function navigateTo(pageId) {
   currentPage = pageId;
 
-  document.querySelectorAll('.nav-item').forEach(function(b) {
+  document.querySelectorAll('.nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.page === pageId);
   });
 
-  var item = MENU_ITEMS.find(function(m) { return m.id === pageId; });
-  var titleEl = document.getElementById('pageTitle');
+  const item = MENU_ITEMS.find(m => m.id === pageId);
+  const titleEl = document.getElementById('pageTitle');
   if (titleEl && item) titleEl.textContent = item.label;
 
-  var area = document.getElementById('contentArea');
+  const area = document.getElementById('contentArea');
   if (!area) return;
 
   if (pageId === 'dashboard') {
     loadDashboardInit(false);
   } else if (pageId === 'settings') {
-    loadSettingsPage(area);
+    loadSettingsLazy(area);
   } else {
-    area.innerHTML = '<div class="placeholder-page"><h2>' + (item ? item.label : pageId) + '</h2><p>هذه الصفحة قيد التطوير.</p></div>';
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>${item ? item.label : pageId}</h2>
+      <p>هذه الصفحة قيد التطوير.</p>
+    </div>`;
   }
 
-  var sidebar = document.getElementById('sidebar');
+  const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
 }
 
-/**
- * ⚡ تحميل بيانات Dashboard — POST لتجنب 302 Redirect
- */
-function loadDashboardInit(useCache, retryCount) {
-  retryCount = retryCount || 0;
-  var area = document.getElementById('contentArea');
+// ═══ Load Dashboard Init ═══
+async function loadDashboardInit(useCache) {
+  const area = document.getElementById('contentArea');
 
-  // 1) من الذاكرة
   if (useCache && dashInitCache) {
     applyDashboardData(dashInitCache);
     return;
   }
 
-  // 2) من sessionStorage
-  if (useCache) {
-    try {
-      var saved = sessionStorage.getItem('dashInitCache');
-      if (saved) {
-        var parsed = JSON.parse(saved);
-        if (parsed && parsed.data && parsed._ts && (Date.now() - parsed._ts) < 60000) {
-          dashInitCache = parsed.data;
-          applyDashboardData(dashInitCache);
-          return;
-        } else {
-          sessionStorage.removeItem('dashInitCache');
-        }
-      }
-    } catch (e) {
-      try { sessionStorage.removeItem('dashInitCache'); } catch (e2) {}
-    }
-  }
-
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  // ⚡ POST بدل GET
-  fetch(CONFIG.API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'dashboardInit',
-      email: dashboardUser.email
-    }),
-    redirect: 'follow'
-  })
-    .then(function(res) {
-      if (res.status === 404) {
-        throw new Error('REDIRECT_FAILED');
-      }
-      if (!res.ok) {
-        throw new Error('HTTP ' + res.status);
-      }
-      return res.text();
-    })
-    .then(function(text) {
-      // نتأكد إن الـResponse JSON مش HTML
-      if (!text || text.trim().charAt(0) === '<') {
-        throw new Error('REDIRECT_FAILED');
-      }
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        throw new Error('INVALID_JSON');
-      }
-    })
-    .then(function(data) {
-      if (!data || !data.ok) {
-        area.innerHTML =
-          '<div class="placeholder-page">' +
-            '<h2>خطأ</h2>' +
-            '<p>' + ((data && data.message) || 'حدث خطأ') + '</p>' +
-            '<button class="btn-primary" onclick="loadDashboardInit(false)" style="margin-top:16px;">إعادة المحاولة</button>' +
-          '</div>';
-        return;
-      }
+  try {
+    // ⚡ قراءة متوازية من Firestore
+    const [peopleSnap, meetingsSnap, attendanceSnap, settingsDoc] = await Promise.all([
+      getDocs(collection(db, COLLECTIONS.PEOPLE)),
+      getDocs(collection(db, COLLECTIONS.MEETINGS)),
+      getDocs(collection(db, COLLECTIONS.ATTENDANCE)),
+      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC))
+    ]);
 
-      if (!data.stats || !data.settings) {
-        throw new Error('INVALID_DATA');
-      }
+    const people = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const meetings = meetingsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const settings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-      dashInitCache = data;
-      try {
-        sessionStorage.setItem('dashInitCache', JSON.stringify({
-          data: data,
-          _ts: Date.now()
-        }));
-      } catch (e) {}
+    // ═══ حساب الإحصائيات ═══
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-      applyDashboardData(data);
-    })
-    .catch(function(err) {
-      console.error('Dashboard load error:', err.message || err);
+    const activePeople = people.filter(p =>
+      String(p.Status || '').toLowerCase() === 'active'
+    ).length;
 
-      // ⚡ Retry تلقائي (مرتين)
-      if (retryCount < 2) {
-        console.log('إعادة المحاولة... (' + (retryCount + 1) + ')');
-        setTimeout(function() {
-          loadDashboardInit(false, retryCount + 1);
-        }, 2000);
-        return;
-      }
+    const totalMeetings = meetings.filter(m =>
+      String(m.Status || '').toLowerCase() !== 'archived'
+    ).length;
 
-      var msg = 'تعذّر الاتصال بالسيرفر.';
-      if (err.message === 'REDIRECT_FAILED') {
-        msg = 'السيرفر مشغول، جرّب مرة أخرى.';
-      } else if (err.message === 'INVALID_JSON' || err.message === 'INVALID_DATA') {
-        msg = 'رد غير متوقع من السيرفر.';
-      }
+    const todayAttendance = attendance.filter(a => {
+      if (!a.ScanTime) return false;
+      const scanDate = parseDate(a.ScanTime);
+      if (!scanDate) return false;
+      scanDate.setHours(0, 0, 0, 0);
+      return scanDate.getTime() === today.getTime();
+    }).length;
 
-      area.innerHTML =
-        '<div class="placeholder-page">' +
-          '<h2>خطأ في الاتصال</h2>' +
-          '<p>' + msg + '</p>' +
-          '<button class="btn-primary" onclick="loadDashboardInit(false)" style="margin-top:16px;">إعادة المحاولة</button>' +
-        '</div>';
-    });
+    const attendanceRate = activePeople > 0
+      ? Math.round((todayAttendance / activePeople) * 100)
+      : 0;
+
+    const result = {
+      stats: {
+        totalPeople: people.length,
+        activePeople: activePeople,
+        totalMeetings: totalMeetings,
+        todayAttendance: todayAttendance,
+        attendanceRate: attendanceRate,
+        systemStatus: settings.SystemStatus || 'Active'
+      },
+      settings: settings
+    };
+
+    dashInitCache = result;
+    settingsCache = settings;
+
+    applyDashboardData(result);
+
+  } catch (err) {
+    console.error('❌ Dashboard init error:', err);
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ في الاتصال</h2>
+      <p>${err.message || 'فشل قراءة البيانات من Firestore'}</p>
+      <button class="btn-primary" onclick="loadDashboardInit(false)" style="margin-top:16px;">إعادة المحاولة</button>
+    </div>`;
+  }
 }
 
+// ═══ Apply Dashboard Data ═══
 function applyDashboardData(data) {
-  var area = document.getElementById('contentArea');
+  const area = document.getElementById('contentArea');
+  if (!area) return;
 
   renderStats(area, data.stats);
+  updateSystemStatus(data.settings.SystemStatus || 'Active');
 
-  var statusEl = document.getElementById('systemStatus');
-  if (statusEl) {
-    var status = data.settings.SystemStatus || 'Active';
-    if (status === 'Suspended') {
-      statusEl.classList.add('suspended');
-      statusEl.title = 'النظام متوقف';
-    } else {
-      statusEl.classList.remove('suspended');
-      statusEl.title = 'النظام يعمل';
-    }
-  }
-
-  var theme = extractThemeFromSettings(data.settings);
+  // الثيم
+  const theme = extractThemeFromSettings(data.settings);
   if (theme) saveTheme(theme);
 
+  // اسم النظام
   if (data.settings.SystemName) {
-    var appNameEl = document.getElementById('appName');
+    const appNameEl = document.getElementById('appName');
     if (appNameEl) appNameEl.textContent = data.settings.SystemName;
     document.title = data.settings.SystemName;
   }
 
-  document.querySelectorAll('.nav-item').forEach(function(b) {
+  document.querySelectorAll('.nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.page === 'dashboard');
   });
-  var titleEl = document.getElementById('pageTitle');
+  const titleEl = document.getElementById('pageTitle');
   if (titleEl) titleEl.textContent = 'لوحة التحكم';
 }
 
+// ═══ Render Stats ═══
 function renderStats(area, stats) {
-  area.innerHTML =
-    '<div class="stats-grid">' +
-      '<div class="stat-card"><div class="stat-icon">👥</div><div class="stat-info"><div class="stat-label">إجمالي الأشخاص</div><div class="stat-value">' + stats.totalPeople + '</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">✅</div><div class="stat-info"><div class="stat-label">الأشخاص النشطين</div><div class="stat-value">' + stats.activePeople + '</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">📅</div><div class="stat-info"><div class="stat-label">إجمالي الاجتماعات</div><div class="stat-value">' + stats.totalMeetings + '</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">📌</div><div class="stat-info"><div class="stat-label">حضور اليوم</div><div class="stat-value">' + stats.todayAttendance + '</div></div></div>' +
-      '<div class="stat-card"><div class="stat-icon">📈</div><div class="stat-info"><div class="stat-label">نسبة الحضور</div><div class="stat-value">' + stats.attendanceRate + '%</div></div></div>' +
-    '</div>';
+  area.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-info">
+          <div class="stat-label">إجمالي الأشخاص</div>
+          <div class="stat-value">${stats.totalPeople}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+          <div class="stat-label">الأشخاص النشطين</div>
+          <div class="stat-value">${stats.activePeople}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📅</div>
+        <div class="stat-info">
+          <div class="stat-label">إجمالي الاجتماعات</div>
+          <div class="stat-value">${stats.totalMeetings}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📌</div>
+        <div class="stat-info">
+          <div class="stat-label">حضور اليوم</div>
+          <div class="stat-value">${stats.todayAttendance}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📈</div>
+        <div class="stat-info">
+          <div class="stat-label">نسبة الحضور</div>
+          <div class="stat-value">${stats.attendanceRate}%</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
+// ═══ System Status ═══
+function updateSystemStatus(status) {
+  const statusEl = document.getElementById('systemStatus');
+  if (!statusEl) return;
+
+  if (status === 'Suspended') {
+    statusEl.classList.add('suspended');
+    statusEl.title = 'النظام متوقف';
+  } else {
+    statusEl.classList.remove('suspended');
+    statusEl.title = 'النظام يعمل';
+  }
+}
+
+// ═══ Theme ═══
 function extractThemeFromSettings(s) {
-  var base = (typeof DEFAULT_THEME !== 'undefined') ? DEFAULT_THEME : {
-    primary: '#475569',
-    primaryHover: '#334155',
-    accent: '#0d9488',
-    bg: '#f8fafc',
-    cardBg: '#ffffff',
-    text: '#0f172a',
-    textMuted: '#64748b',
-    border: '#e2e8f0',
-    sidebarBg: '#1e293b',
-    sidebarText: '#cbd5e1',
-    sidebarActive: '#475569',
-    logoUrl: '',
-    bgImageUrl: ''
-  };
+  const base = DEFAULT_THEME;
 
   return {
     primary: s.ThemePrimary || base.primary,
@@ -293,16 +319,114 @@ function extractThemeFromSettings(s) {
   };
 }
 
+function loadThemeFromStorage() {
+  try {
+    const saved = localStorage.getItem('themeSettings');
+    if (saved) {
+      applyTheme(JSON.parse(saved));
+      return;
+    }
+  } catch (e) {}
+  applyTheme(DEFAULT_THEME);
+}
+
+function applyTheme(theme) {
+  const t = { ...DEFAULT_THEME, ...(theme || {}) };
+  const root = document.documentElement;
+
+  root.style.setProperty('--primary', t.primary);
+  root.style.setProperty('--primary-hover', t.primaryHover);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--bg', t.bg);
+  root.style.setProperty('--card-bg', t.cardBg);
+  root.style.setProperty('--text', t.text);
+  root.style.setProperty('--text-muted', t.textMuted);
+  root.style.setProperty('--border', t.border);
+  root.style.setProperty('--sidebar-bg', t.sidebarBg);
+  root.style.setProperty('--sidebar-text', t.sidebarText);
+  root.style.setProperty('--sidebar-active', t.sidebarActive);
+
+  if (t.bgImageUrl) {
+    document.body.style.backgroundImage = `url('${t.bgImageUrl}')`;
+    document.body.style.backgroundSize = 'cover';
+    document.body.style.backgroundAttachment = 'fixed';
+  } else {
+    document.body.style.backgroundImage = 'none';
+    document.body.style.background = t.bg;
+  }
+
+  document.querySelectorAll('.app-logo').forEach(img => {
+    if (t.logoUrl) {
+      img.src = t.logoUrl;
+      img.style.display = 'block';
+    } else {
+      img.style.display = 'none';
+    }
+  });
+}
+
+function saveTheme(theme) {
+  localStorage.setItem('themeSettings', JSON.stringify(theme));
+  applyTheme(theme);
+}
+
+// ═══ Lazy Load Settings ═══
+async function loadSettingsLazy(area) {
+  if (typeof window.loadSettingsPage === 'function') {
+    window.loadSettingsPage(area);
+    return;
+  }
+
+  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري تحميل الإعدادات...</div></div>';
+
+  try {
+    await import('./settings.js');
+    // انتظر شوية لحد ما يتحمّل
+    setTimeout(() => {
+      if (typeof window.loadSettingsPage === 'function') {
+        window.loadSettingsPage(area);
+      } else {
+        area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>فشل تحميل الإعدادات</p></div>';
+      }
+    }, 100);
+  } catch (err) {
+    console.error('❌ Settings load error:', err);
+    area.innerHTML = `<div class="placeholder-page"><h2>خطأ</h2><p>${err.message}</p></div>`;
+  }
+}
+
+// ═══ Helpers ═══
+function parseDate(value) {
+  if (!value) return null;
+  if (value.toDate) return value.toDate(); // Firestore Timestamp
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ═══ Sidebar Toggle (Mobile) ═══
 function toggleSidebar() {
-  var sidebar = document.getElementById('sidebar');
+  const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.toggle('open');
 }
 
-// ⚡ Keep-alive ping كل 5 دقايق
-function keepAlive() {
-  fetch(CONFIG.API_URL + '?action=ping', { cache: 'no-store' })
-    .catch(function() {});
-}
+// ═══ Logout ═══
+window.logout = async function() {
+  try {
+    localStorage.removeItem('currentUser');
+    try { sessionStorage.clear(); } catch (e) {}
+    await signOut(auth);
+  } catch (err) {
+    console.error('Logout error:', err);
+  }
+  window.location.href = '../index.html';
+};
 
-setTimeout(keepAlive, 30000);
-setInterval(keepAlive, 5 * 60 * 1000);
+window.toggleSidebar = toggleSidebar;
+window.loadDashboardInit = loadDashboardInit;
+
+// ═══ Expose for Settings ═══
+window.getDashboardUser = () => dashboardUser;
+window.getDb = () => db;
+window.getCollections = () => COLLECTIONS;
+window.getSettingsDoc = () => SETTINGS_DOC;
+window.getDefaultTheme = () => DEFAULT_THEME;
