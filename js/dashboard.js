@@ -53,7 +53,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // أنشئ Overlay للـSidebar
   ensureSidebarOverlay();
 
   loadThemeFromStorage();
@@ -61,7 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderSidebar();
   await loadDashboardInit(true);
 
-  // اقفل الـSidebar لما الشاشة تتغير
   window.addEventListener('resize', () => {
     if (window.innerWidth > 768) {
       closeSidebar();
@@ -133,6 +131,8 @@ function navigateTo(pageId) {
     loadDashboardInit(false);
   } else if (pageId === 'people') {
     loadPeopleLazy(area);
+  } else if (pageId === 'meetings') {
+    loadMeetingsLazy(area);
   } else if (pageId === 'settings') {
     loadSettingsLazy(area);
   } else {
@@ -142,7 +142,6 @@ function navigateTo(pageId) {
     </div>`;
   }
 
-  // اقفل الـSidebar بعد التنقل
   closeSidebar();
 }
 
@@ -371,29 +370,41 @@ function saveTheme(theme) {
   applyTheme(theme);
 }
 
-// ═══ Load Settings ═══
+// ═══ Lazy Loaders ═══
 function loadSettingsLazy(area) {
   if (typeof window.loadSettingsPage === 'function') {
     window.loadSettingsPage(area);
   } else {
-    console.error('❌ loadSettingsPage not found on window');
+    console.error('❌ loadSettingsPage not found');
     area.innerHTML = `<div class="placeholder-page">
       <h2>خطأ</h2>
-      <p>لم يتم تحميل ملف الإعدادات. تأكد من رفع js/settings.js</p>
+      <p>لم يتم تحميل ملف الإعدادات.</p>
       <button class="btn-primary" onclick="location.reload()" style="margin-top:16px;">إعادة التحميل</button>
     </div>`;
   }
 }
 
-// ═══ Load People ═══
 function loadPeopleLazy(area) {
   if (typeof window.loadPeoplePage === 'function') {
     window.loadPeoplePage(area);
   } else {
-    console.error('❌ loadPeoplePage not found on window');
+    console.error('❌ loadPeoplePage not found');
     area.innerHTML = `<div class="placeholder-page">
       <h2>خطأ</h2>
-      <p>لم يتم تحميل ملف الأشخاص. تأكد من رفع js/people.js</p>
+      <p>لم يتم تحميل ملف الأشخاص.</p>
+      <button class="btn-primary" onclick="location.reload()" style="margin-top:16px;">إعادة التحميل</button>
+    </div>`;
+  }
+}
+
+function loadMeetingsLazy(area) {
+  if (typeof window.loadMeetingsPage === 'function') {
+    window.loadMeetingsPage(area);
+  } else {
+    console.error('❌ loadMeetingsPage not found');
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ</h2>
+      <p>لم يتم تحميل ملف الاجتماعات.</p>
       <button class="btn-primary" onclick="location.reload()" style="margin-top:16px;">إعادة التحميل</button>
     </div>`;
   }
@@ -407,10 +418,7 @@ function parseDate(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// ═══════════════════════════════════════════════════════
-//   Sidebar Management (Mobile)
-// ═══════════════════════════════════════════════════════
-
+// ═══ Sidebar Management ═══
 function ensureSidebarOverlay() {
   if (document.querySelector('.sidebar-overlay')) return;
 
