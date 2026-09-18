@@ -26,7 +26,11 @@ import {
 } from './firebase-config.js';
 
 // ═══ Menu Configuration ═══
-const MENU_ITEMS = [: 'الاجتماعات',  icon: '📅', roles: ['Owner','Admin'] },
+const MENU_ITEMS = [
+  { id: 'dashboard',  label: 'لوحة التحكم', icon: '📊', roles: ['Owner','Admin'] },
+  { id: 'scanner',    label: 'الماسح',      icon: '📷', roles: ['Owner','Admin','Scanner'] },
+  { id: 'people',     label: 'الأشخاص',     icon: '👥', roles: ['Owner','Admin'] },
+  { id: 'meetings',   label: 'الاجتماعات',  icon: '📅', roles: ['Owner','Admin'] },
   { id: 'attendance', label: 'الحضور',      icon: '✅', roles: ['Owner','Admin'] },
   { id: 'reports',    label: 'التقارير',    icon: '📈', roles: ['Owner','Admin'] },
   { id: 'accounts',   label: 'الحسابات',    icon: '🔑', roles: ['Owner'] },
