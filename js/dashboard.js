@@ -384,7 +384,36 @@ function parseDate(value) {
 // ═══ Sidebar Toggle (Mobile) ═══
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.classList.toggle('open');
+  if (!sidebar) return;
+
+  const isOpen = sidebar.classList.toggle('open');
+
+  // Overlay
+  let overlay = document.querySelector('.sidebar-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    overlay.onclick = closeSidebar;
+    document.body.appendChild(overlay);
+  }
+
+  if (isOpen) {
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  } else {
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (overlay) overlay.classList.remove('active');
+
+  document.body.style.overflow = '';
 }
 
 // ═══ Logout ═══
