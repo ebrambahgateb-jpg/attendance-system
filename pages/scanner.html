@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الماسح - تسجيل الحضور</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/scanner.css" />
+
+  <!-- html5-qrcode library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="scanner-body">
+
+  <!-- Header -->
+  <header class="scanner-header">
+    <div class="scanner-header-left">
+      <button class="back-btn" onclick="goBack()" title="رجوع">←</button>
+      <h1>📷 الماسح</h1>
+    </div>
+    <div class="scanner-header-right">
+      <span class="system-status" id="systemStatus">●</span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="scanner-main">
+
+    <!-- Screen 1: Setup -->
+    <div id="setupScreen" class="scanner-screen active">
+      <div class="setup-card">
+        <h2>تسجيل الحضور</h2>
+        <p class="setup-subtitle">اختر الاجتماع ثم ابدأ المسح</p>
+
+        <div class="form-row">
+          <label>الاجتماع</label>
+          <select id="meetingSelect">
+            <option value="">-- اختر الاجتماع --</option>
+          </select>
+        </div>
+
+        <div id="meetingInfo" class="meeting-info-box" style="display:none;">
+          <!-- يتولد بـ JS -->
+        </div>
+
+        <button id="startBtn" class="btn-primary btn-large" disabled>
+          📷 تشغيل الكاميرا
+        </button>
+      </div>
+    </div>
+
+    <!-- Screen 2: Scanner -->
+    <div id="scannerScreen" class="scanner-screen">
+      <div class="scanner-top">
+        <div class="scanner-meeting-info" id="scannerMeetingInfo">
+          <!-- اسم الاجتماع -->
+        </div>
+        <button class="btn-close-scanner" onclick="stopScanner()">✕</button>
+      </div>
+
+      <div id="qrReader" class="qr-reader"></div>
+
+      <div class="scanner-bottom">
+        <div class="scanner-hint">
+          ضع رمز QR أمام الكاميرا
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen 3: Result -->
+    <div id="resultScreen" class="scanner-screen">
+      <div id="resultContent" class="result-content">
+        <!-- يتولد بـ JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Firebase SDK + Modules -->
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/scanner.js"></script>
+</body>
+</html>
