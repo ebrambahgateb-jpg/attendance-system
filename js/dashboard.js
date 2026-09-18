@@ -470,3 +470,4 @@ window.logout = async function() {
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
+
