@@ -131,6 +131,8 @@ function navigateTo(pageId) {
 
   if (pageId === 'dashboard') {
     loadDashboardInit(false);
+  } else if (pageId === 'people') {
+    loadPeopleLazy(area);
   } else if (pageId === 'settings') {
     loadSettingsLazy(area);
   } else {
@@ -383,6 +385,20 @@ function loadSettingsLazy(area) {
   }
 }
 
+// ═══ Load People ═══
+function loadPeopleLazy(area) {
+  if (typeof window.loadPeoplePage === 'function') {
+    window.loadPeoplePage(area);
+  } else {
+    console.error('❌ loadPeoplePage not found on window');
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ</h2>
+      <p>لم يتم تحميل ملف الأشخاص. تأكد من رفع js/people.js</p>
+      <button class="btn-primary" onclick="location.reload()" style="margin-top:16px;">إعادة التحميل</button>
+    </div>`;
+  }
+}
+
 // ═══ Helpers ═══
 function parseDate(value) {
   if (!value) return null;
@@ -395,9 +411,6 @@ function parseDate(value) {
 //   Sidebar Management (Mobile)
 // ═══════════════════════════════════════════════════════
 
-/**
- * إنشاء Overlay للـSidebar (مرة واحدة)
- */
 function ensureSidebarOverlay() {
   if (document.querySelector('.sidebar-overlay')) return;
 
@@ -407,9 +420,6 @@ function ensureSidebarOverlay() {
   document.body.appendChild(overlay);
 }
 
-/**
- * فتح/إغلاق الـSidebar
- */
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
@@ -426,9 +436,6 @@ function toggleSidebar() {
   }
 }
 
-/**
- * إغلاق الـSidebar
- */
 function closeSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
@@ -451,7 +458,7 @@ window.logout = async function() {
   window.location.href = '../index.html';
 };
 
-// ═══ Expose to window (for HTML onclick) ═══
+// ═══ Expose to window ═══
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
