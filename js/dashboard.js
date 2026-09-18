@@ -53,10 +53,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  // أنشئ Overlay للـSidebar
+  ensureSidebarOverlay();
+
   loadThemeFromStorage();
   renderUserInfo();
   renderSidebar();
   await loadDashboardInit(true);
+
+  // اقفل الـSidebar لما الشاشة تتغير
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) {
+      closeSidebar();
+    }
+  });
 });
 
 // ═══ User Info ═══
@@ -130,8 +140,8 @@ function navigateTo(pageId) {
     </div>`;
   }
 
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.classList.remove('open');
+  // اقفل الـSidebar بعد التنقل
+  closeSidebar();
 }
 
 // ═══ Load Dashboard Init ═══
@@ -359,7 +369,7 @@ function saveTheme(theme) {
   applyTheme(theme);
 }
 
-// ═══ Load Settings (Simple) ═══
+// ═══ Load Settings ═══
 function loadSettingsLazy(area) {
   if (typeof window.loadSettingsPage === 'function') {
     window.loadSettingsPage(area);
@@ -381,31 +391,44 @@ function parseDate(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// ═══ Sidebar Toggle (Mobile) ═══
+// ═══════════════════════════════════════════════════════
+//   Sidebar Management (Mobile)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * إنشاء Overlay للـSidebar (مرة واحدة)
+ */
+function ensureSidebarOverlay() {
+  if (document.querySelector('.sidebar-overlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'sidebar-overlay';
+  overlay.onclick = closeSidebar;
+  document.body.appendChild(overlay);
+}
+
+/**
+ * فتح/إغلاق الـSidebar
+ */
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
 
   const isOpen = sidebar.classList.toggle('open');
-
-  // Overlay
-  let overlay = document.querySelector('.sidebar-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'sidebar-overlay';
-    overlay.onclick = closeSidebar;
-    document.body.appendChild(overlay);
-  }
+  const overlay = document.querySelector('.sidebar-overlay');
 
   if (isOpen) {
-    overlay.classList.add('active');
+    if (overlay) overlay.classList.add('active');
     document.body.style.overflow = 'hidden';
   } else {
-    overlay.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
     document.body.style.overflow = '';
   }
 }
 
+/**
+ * إغلاق الـSidebar
+ */
 function closeSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
@@ -428,5 +451,7 @@ window.logout = async function() {
   window.location.href = '../index.html';
 };
 
+// ═══ Expose to window (for HTML onclick) ═══
 window.toggleSidebar = toggleSidebar;
+window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
