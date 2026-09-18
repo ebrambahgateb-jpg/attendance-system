@@ -6,11 +6,7 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  limit
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -43,7 +39,6 @@ const MENU_ITEMS = [
 let dashboardUser = null;
 let currentPage = 'dashboard';
 let dashInitCache = null;
-let settingsCache = null;
 
 // ═══ Initialize on Load ═══
 document.addEventListener('DOMContentLoaded', async () => {
@@ -151,7 +146,6 @@ async function loadDashboardInit(useCache) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    // ⚡ قراءة متوازية من Firestore
     const [peopleSnap, meetingsSnap, attendanceSnap, settingsDoc] = await Promise.all([
       getDocs(collection(db, COLLECTIONS.PEOPLE)),
       getDocs(collection(db, COLLECTIONS.MEETINGS)),
@@ -164,7 +158,6 @@ async function loadDashboardInit(useCache) {
     const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const settings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ═══ حساب الإحصائيات ═══
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -201,8 +194,6 @@ async function loadDashboardInit(useCache) {
     };
 
     dashInitCache = result;
-    settingsCache = settings;
-
     applyDashboardData(result);
 
   } catch (err) {
@@ -223,11 +214,9 @@ function applyDashboardData(data) {
   renderStats(area, data.stats);
   updateSystemStatus(data.settings.SystemStatus || 'Active');
 
-  // الثيم
   const theme = extractThemeFromSettings(data.settings);
   if (theme) saveTheme(theme);
 
-  // اسم النظام
   if (data.settings.SystemName) {
     const appNameEl = document.getElementById('appName');
     if (appNameEl) appNameEl.textContent = data.settings.SystemName;
@@ -370,35 +359,24 @@ function saveTheme(theme) {
   applyTheme(theme);
 }
 
-// ═══ Lazy Load Settings ═══
-async function loadSettingsLazy(area) {
+// ═══ Load Settings (Simple) ═══
+function loadSettingsLazy(area) {
   if (typeof window.loadSettingsPage === 'function') {
     window.loadSettingsPage(area);
-    return;
-  }
-
-  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري تحميل الإعدادات...</div></div>';
-
-  try {
-    await import('./settings.js');
-    // انتظر شوية لحد ما يتحمّل
-    setTimeout(() => {
-      if (typeof window.loadSettingsPage === 'function') {
-        window.loadSettingsPage(area);
-      } else {
-        area.innerHTML = '<div class="placeholder-page"><h2>خطأ</h2><p>فشل تحميل الإعدادات</p></div>';
-      }
-    }, 100);
-  } catch (err) {
-    console.error('❌ Settings load error:', err);
-    area.innerHTML = `<div class="placeholder-page"><h2>خطأ</h2><p>${err.message}</p></div>`;
+  } else {
+    console.error('❌ loadSettingsPage not found on window');
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ</h2>
+      <p>لم يتم تحميل ملف الإعدادات. تأكد من رفع js/settings.js</p>
+      <button class="btn-primary" onclick="location.reload()" style="margin-top:16px;">إعادة التحميل</button>
+    </div>`;
   }
 }
 
 // ═══ Helpers ═══
 function parseDate(value) {
   if (!value) return null;
-  if (value.toDate) return value.toDate(); // Firestore Timestamp
+  if (value.toDate) return value.toDate();
   const d = new Date(value);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -423,10 +401,3 @@ window.logout = async function() {
 
 window.toggleSidebar = toggleSidebar;
 window.loadDashboardInit = loadDashboardInit;
-
-// ═══ Expose for Settings ═══
-window.getDashboardUser = () => dashboardUser;
-window.getDb = () => db;
-window.getCollections = () => COLLECTIONS;
-window.getSettingsDoc = () => SETTINGS_DOC;
-window.getDefaultTheme = () => DEFAULT_THEME;
