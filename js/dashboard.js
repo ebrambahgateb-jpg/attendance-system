@@ -620,6 +620,10 @@ function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
 }
+function loadMyAttendanceLazy(area) {
+  if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
+  else showLoadError(area, 'سجل حضورك بنفسك');
+}
 
 function showLoadError(area, name) {
   console.error(`❌ load${name}Page not found`);
