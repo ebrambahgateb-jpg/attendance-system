@@ -23,6 +23,7 @@ let profileUser = null;
 let profilePerson = null;
 let profileSettings = {};
 let isEditMode = false;
+let isViewingOther = false;
 
 // ═══════════════════════════════════════════════════════
 //   Load Profile Page
@@ -38,34 +39,63 @@ async function loadProfilePage(area) {
       return;
     }
 
+    // ⚡ اقرأ personId من URL (لو موجود)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlPersonId = urlParams.get('id');
+
+    const isOwnerOrAdmin = ['Owner', 'Admin'].includes(profileUser.selectedRole);
+    isViewingOther = urlPersonId && urlPersonId !== profileUser.personId;
+
     // اجلب الإعدادات
     const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
     profileSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // اجلب بيانات الشخص (لو مربوط)
-    profilePerson = null;
+    // ⚡ لو بيشوف ملف حد تاني
+    if (isViewingOther) {
+      if (!isOwnerOrAdmin) {
+        area.innerHTML = `<div class="placeholder-page">
+          <h2>غير مصرح</h2>
+          <p>ليس لديك صلاحية لعرض ملفات الآخرين</p>
+          <button class="btn-primary" onclick="goToPeople()" style="margin-top:16px;">رجوع</button>
+        </div>`;
+        return;
+      }
 
-    if (profileUser.personId) {
-      const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, profileUser.personId));
+      const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, urlPersonId));
       if (pDoc.exists()) {
         profilePerson = { id: pDoc.id, ...pDoc.data() };
+      } else {
+        area.innerHTML = `<div class="placeholder-page">
+          <h2>شخص غير موجود</h2>
+          <button class="btn-primary" onclick="goToPeople()" style="margin-top:16px;">رجوع للأشخاص</button>
+        </div>`;
+        return;
       }
-    }
+    } else {
+      // ⚡ وضع "حسابي"
+      profilePerson = null;
 
-    // لو مش مربوط، جرّب نربطه بالبريد
-    if (!profilePerson && profileUser.email) {
-      const q = query(
-        collection(db, COLLECTIONS.PEOPLE),
-        where('Email', '==', profileUser.email)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const docSnap = snap.docs[0];
-        profilePerson = { id: docSnap.id, ...docSnap.data() };
+      if (profileUser.personId) {
+        const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, profileUser.personId));
+        if (pDoc.exists()) {
+          profilePerson = { id: pDoc.id, ...pDoc.data() };
+        }
+      }
 
-        // احفظ الربط في localStorage
-        profileUser.personId = profilePerson.id;
-        localStorage.setItem('currentUser', JSON.stringify(profileUser));
+      // لو مش مربوط، جرّب نربطه بالبريد
+      if (!profilePerson && profileUser.email) {
+        const q = query(
+          collection(db, COLLECTIONS.PEOPLE),
+          where('Email', '==', profileUser.email)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          profilePerson = { id: docSnap.id, ...docSnap.data() };
+
+          profileUser.personId = profilePerson.id;
+          localStorage.setItem('currentUser', JSON.stringify(profileUser));
+        }
       }
     }
 
@@ -103,7 +133,6 @@ function renderProfilePage(area) {
     return;
   }
 
-  // احسب الإحصائيات
   calculateStats().then(stats => {
     container.innerHTML = `
       ${renderHeader()}
@@ -113,7 +142,6 @@ function renderProfilePage(area) {
       ${renderAttendance(stats.recentAttendance)}
     `;
 
-    // اربط الأحداث
     setupProfileEvents();
   });
 }
@@ -129,7 +157,12 @@ function renderHeader() {
     ? `<img src="${profilePerson.PhotoURL}" alt="" class="profile-photo" />`
     : `<div class="profile-photo-placeholder">${initial}</div>`;
 
+  const backBtn = isViewingOther
+    ? `<button class="btn-secondary" onclick="goBackToPeople()" style="margin-bottom:16px;">← رجوع للأشخاص</button>`
+    : '';
+
   return `
+    ${backBtn}
     <div class="profile-header-card">
       <div class="profile-photo-wrapper">
         ${photoHtml}
@@ -152,7 +185,7 @@ function renderStats(stats) {
       <div class="profile-stat-card">
         <div class="profile-stat-icon">✅</div>
         <div class="profile-stat-value">${stats.attended}</div>
-        <div class="profile-stat-label">حضرت</div>
+        <div class="profile-stat-label">حضر</div>
       </div>
       <div class="profile-stat-card">
         <div class="profile-stat-icon">📅</div>
@@ -174,7 +207,7 @@ function renderQR() {
     return `
       <div class="profile-section">
         <h3 class="profile-section-title">
-          <span>📱 QR الخاص بي</span>
+          <span>📱 QR</span>
         </h3>
         <div style="text-align:center;padding:20px;color:#64748b;">
           <p>لم يتم إنشاء QR بعد</p>
@@ -186,7 +219,7 @@ function renderQR() {
   return `
     <div class="profile-section">
       <h3 class="profile-section-title">
-        <span>📱 QR الخاص بي</span>
+        <span>📱 QR</span>
         <button class="btn-secondary" onclick="downloadProfileQR()">💾 تحميل كصورة</button>
       </h3>
       <div class="profile-qr-wrapper">
@@ -203,13 +236,17 @@ function renderQR() {
 
 // ═══ Info ═══
 function renderInfo() {
+  const editBtn = isViewingOther
+    ? ''
+    : `<button class="btn-primary" onclick="toggleEditMode()" id="editProfileBtn">✏️ تعديل بياناتي</button>`;
+
+  const titleText = isViewingOther ? '📋 معلومات الشخص' : '📋 معلوماتي';
+
   return `
     <div class="profile-section">
       <h3 class="profile-section-title">
-        <span>📋 معلوماتي</span>
-        <button class="btn-primary" onclick="toggleEditMode()" id="editProfileBtn">
-          ✏️ تعديل بياناتي
-        </button>
+        <span>${titleText}</span>
+        ${editBtn}
       </h3>
       <div id="profileInfoView">
         ${renderInfoView()}
@@ -302,7 +339,7 @@ function renderEditForm() {
 
       <div class="profile-edit-row ltr">
         <label>Facebook</label>
-        <input type="text" id="pf_Facebook" value="${escapeHtml(profilePerson.Facebook || '')}" placeholder="facebook.com/username أو username" />
+        <input type="text" id="pf_Facebook" value="${escapeHtml(profilePerson.Facebook || '')}" placeholder="facebook.com/username" />
       </div>
 
       <div class="profile-edit-row">
@@ -327,7 +364,7 @@ function renderAttendance(recent) {
           <span>📅 آخر حضور</span>
         </h3>
         <div style="text-align:center;padding:20px;color:#64748b;">
-          <p>لم تسجّل حضورك بعد</p>
+          <p>لم يسجّل حضور بعد</p>
         </div>
       </div>
     `;
@@ -370,7 +407,6 @@ async function calculateStats() {
   let recentAttendance = [];
 
   try {
-    // عدد الاجتماعات النشطة
     const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
     const meetings = meetingsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -378,7 +414,6 @@ async function calculateStats() {
 
     totalMeetings = meetings.length;
 
-    // حضور الشخص
     if (profilePerson) {
       const attSnap = await getDocs(query(
         collection(db, COLLECTIONS.ATTENDANCE),
@@ -388,7 +423,6 @@ async function calculateStats() {
       const allAttendance = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       attended = allAttendance.length;
 
-      // آخر 5 حضور
       recentAttendance = allAttendance
         .sort((a, b) => {
           const da = parseDate(a.ScanTime) || new Date(0);
@@ -413,7 +447,6 @@ async function calculateStats() {
 // ═══════════════════════════════════════════════════════
 
 function setupProfileEvents() {
-  // اعرض الـQR
   if (profilePerson && profilePerson.QRCode) {
     const qrContainer = document.getElementById('profileQRCanvas');
     if (qrContainer && typeof QRCode !== 'undefined') {
@@ -489,25 +522,8 @@ window.saveProfile = async function() {
       UpdatedAt: new Date().toISOString()
     });
 
-    // حدّث النسخة المحلية
-    profilePerson = {
-      ...profilePerson,
-      FirstName: firstName,
-      SecondName: secondName,
-      ThirdName: thirdName,
-      FourthName: fourthName,
-      BirthDate: birthDate,
-      Gender: gender,
-      Mobile: mobile,
-      WhatsApp: whatsapp,
-      Address: address,
-      Facebook: facebook,
-      PhotoURL: photoURL
-    };
-
     alert('✅ تم الحفظ بنجاح');
 
-    // أعد تحميل الصفحة
     const area = document.getElementById('contentArea');
     loadProfilePage(area);
   } catch (err) {
@@ -538,6 +554,21 @@ window.downloadProfileQR = function() {
   link.download = `QR_${fullName}.png`;
   link.href = dataUrl;
   link.click();
+};
+
+// ═══ Navigation ═══
+window.goToPeople = function() {
+  window.location.href = 'dashboard.html';
+  setTimeout(() => {
+    if (typeof window.navigateTo === 'function') window.navigateTo('people');
+  }, 300);
+};
+
+window.goBackToPeople = function() {
+  window.location.href = 'dashboard.html';
+  setTimeout(() => {
+    if (typeof window.navigateTo === 'function') window.navigateTo('people');
+  }, 300);
 };
 
 // ═══════════════════════════════════════════════════════
