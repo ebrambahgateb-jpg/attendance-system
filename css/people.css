@@ -593,3 +593,15 @@
     display: none;
   }
 }
+
+/* ═══════════════════════════════════════════
+   LTR Cells (Mobile, WhatsApp, Email)
+   ═══════════════════════════════════════════ */
+
+.ltr-cell {
+  direction: ltr;
+  text-align: right;
+  unicode-bidi: isolate;
+  font-family: 'Segoe UI', 'Tahoma', monospace;
+  letter-spacing: 0.3px;
+}
