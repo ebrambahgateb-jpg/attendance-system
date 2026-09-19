@@ -676,10 +676,11 @@ function ensureSidebarOverlay() {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.className = 'sidebar-overlay';
+    overlay.id = 'sidebarOverlay';
     document.body.appendChild(overlay);
   }
 
-  // ⚡ اربط الحدث دايمًا (حتى لو الـoverlay موجود)
+  // ⚡ اربط الحدث دايمًا
   overlay.onclick = closeSidebar;
 }
 
