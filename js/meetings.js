@@ -23,6 +23,7 @@ let meetingsData = [];
 let filteredMeetings = [];
 let currentEditId = null;
 let currentFilter = 'all';
+let currentMode = 'manage';        // ⚡ manage | view
 let settingsCache = null;
 let availableLocations = [];
 
@@ -39,16 +40,19 @@ const DAYS_OF_WEEK = [
 
 // ═══ أنماط تحديد الأماكن ═══
 const LOCATION_MODES = {
-  SINGLE: 'single',    // مكان واحد محدد
-  ANY: 'any',          // أي مكان متسجل
-  MULTIPLE: 'multiple' // أماكن محددة (متعددة)
+  SINGLE: 'single',
+  ANY: 'any',
+  MULTIPLE: 'multiple'
 };
 
 // ═══════════════════════════════════════════════════════
 //   Load Meetings Page
 // ═══════════════════════════════════════════════════════
 
-async function loadMeetingsPage(area) {
+async function loadMeetingsPage(area, mode) {
+  // ⚡ الوضع الافتراضي: manage
+  currentMode = (mode === 'view') ? 'view' : 'manage';
+
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
@@ -60,11 +64,18 @@ async function loadMeetingsPage(area) {
     meetingsData = meetingsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     settingsCache = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ اجلب الأماكن المسجلة
     availableLocations = Array.isArray(settingsCache.Locations) ? settingsCache.Locations : [];
 
+    // ⚡ في View Mode: اظهر النشطة فقط (بدون المؤرشفة والملغية)
+    let meetingsToShow = meetingsData;
+    if (currentMode === 'view') {
+      meetingsToShow = meetingsData.filter(m =>
+        String(m.Status || '').toLowerCase() === 'active'
+      );
+    }
+
     // ترتيب حسب الوقت
-    meetingsData.sort((a, b) => {
+    meetingsToShow.sort((a, b) => {
       const statusOrder = { active: 0, cancelled: 1, archived: 2 };
       const aOrder = statusOrder[String(a.Status || '').toLowerCase()] ?? 3;
       const bOrder = statusOrder[String(b.Status || '').toLowerCase()] ?? 3;
@@ -72,7 +83,7 @@ async function loadMeetingsPage(area) {
       return String(a.Time || '').localeCompare(String(b.Time || ''));
     });
 
-    filteredMeetings = [...meetingsData];
+    filteredMeetings = [...meetingsToShow];
 
     renderMeetingsPage(area);
   } catch (err) {
@@ -90,24 +101,50 @@ async function loadMeetingsPage(area) {
 // ═══════════════════════════════════════════════════════
 
 function renderMeetingsPage(area) {
-  area.innerHTML = `
-    <div class="meetings-container">
+  const isView = currentMode === 'view';
 
-      <!-- Header -->
-      <div class="meetings-header">
-        <div class="meetings-filters">
-          <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">الكل</button>
-          <button class="filter-btn ${currentFilter === 'active' ? 'active' : ''}" data-filter="active">نشط</button>
-          <button class="filter-btn ${currentFilter === 'weekly' ? 'active' : ''}" data-filter="weekly">أسبوعي</button>
-          <button class="filter-btn ${currentFilter === 'once' ? 'active' : ''}" data-filter="once">مرة واحدة</button>
-          <button class="filter-btn ${currentFilter === 'archived' ? 'active' : ''}" data-filter="archived">مؤرشف</button>
-        </div>
-        <button class="btn-primary" onclick="openMeetingModal()">
-          ➕ إضافة اجتماع
-        </button>
+  // ⚡ في View Mode: فلتر مبسط
+  const filtersHtml = isView
+    ? `
+      <div class="meetings-filters">
+        <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">الكل</button>
+        <button class="filter-btn ${currentFilter === 'weekly' ? 'active' : ''}" data-filter="weekly">أسبوعي</button>
+        <button class="filter-btn ${currentFilter === 'once' ? 'active' : ''}" data-filter="once">مرة واحدة</button>
       </div>
+    `
+    : `
+      <div class="meetings-filters">
+        <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">الكل</button>
+        <button class="filter-btn ${currentFilter === 'active' ? 'active' : ''}" data-filter="active">نشط</button>
+        <button class="filter-btn ${currentFilter === 'weekly' ? 'active' : ''}" data-filter="weekly">أسبوعي</button>
+        <button class="filter-btn ${currentFilter === 'once' ? 'active' : ''}" data-filter="once">مرة واحدة</button>
+        <button class="filter-btn ${currentFilter === 'archived' ? 'active' : ''}" data-filter="archived">مؤرشف</button>
+      </div>
+    `;
 
-      <!-- Stats -->
+  const addBtnHtml = isView
+    ? ''
+    : `<button class="btn-primary" onclick="openMeetingModal()">➕ إضافة اجتماع</button>`;
+
+  // ⚡ في View Mode: إحصائيات مختلفة
+  const statsHtml = isView
+    ? `
+      <div class="meetings-stats">
+        <div class="meeting-stat">
+          <span class="meeting-stat-value">${meetingsData.filter(m => String(m.Status || '').toLowerCase() === 'active').length}</span>
+          <span class="meeting-stat-label">اجتماع نشط</span>
+        </div>
+        <div class="meeting-stat">
+          <span class="meeting-stat-value">${meetingsData.filter(m => String(m.Type || '').toLowerCase() === 'weekly' && String(m.Status || '').toLowerCase() === 'active').length}</span>
+          <span class="meeting-stat-label">أسبوعي</span>
+        </div>
+        <div class="meeting-stat">
+          <span class="meeting-stat-value">${meetingsData.filter(m => String(m.Type || '').toLowerCase() === 'once' && String(m.Status || '').toLowerCase() === 'active').length}</span>
+          <span class="meeting-stat-label">مرة واحدة</span>
+        </div>
+      </div>
+    `
+    : `
       <div class="meetings-stats">
         <div class="meeting-stat">
           <span class="meeting-stat-value">${meetingsData.length}</span>
@@ -126,18 +163,30 @@ function renderMeetingsPage(area) {
           <span class="meeting-stat-label">مؤرشف</span>
         </div>
       </div>
+    `;
 
-      <!-- Cards Grid -->
-      <div class="meetings-grid" id="meetingsGrid">
-        <!-- يتولد بـ JS -->
+  // ⚡ Empty State
+  const emptyBtnHtml = isView
+    ? ''
+    : `<button class="btn-primary" onclick="openMeetingModal()">➕ إضافة اجتماع</button>`;
+
+  area.innerHTML = `
+    <div class="meetings-container">
+
+      <div class="meetings-header">
+        ${filtersHtml}
+        ${addBtnHtml}
       </div>
 
-      <!-- Empty State -->
+      ${statsHtml}
+
+      <div class="meetings-grid" id="meetingsGrid"></div>
+
       <div id="meetingsEmptyState" class="meetings-empty" style="display:none;">
         <div class="meetings-empty-icon">📅</div>
         <h3>لا يوجد اجتماعات</h3>
-        <p>ابدأ بإضافة اجتماع جديد</p>
-        <button class="btn-primary" onclick="openMeetingModal()">➕ إضافة اجتماع</button>
+        <p>${isView ? 'لم يتم إضافة اجتماعات بعد' : 'ابدأ بإضافة اجتماع جديد'}</p>
+        ${emptyBtnHtml}
       </div>
 
     </div>
@@ -165,6 +214,8 @@ function renderMeetingsGrid() {
 
   if (emptyState) emptyState.style.display = 'none';
 
+  const isView = currentMode === 'view';
+
   grid.innerHTML = filteredMeetings.map(meeting => {
     const status = String(meeting.Status || 'active').toLowerCase();
     const type = String(meeting.Type || 'once').toLowerCase();
@@ -183,7 +234,6 @@ function renderMeetingsGrid() {
       ? '<span class="type-badge weekly">🔄 أسبوعي</span>'
       : '<span class="type-badge once">1️⃣ مرة واحدة</span>';
 
-    // معلومات التاريخ
     let dateInfo = '';
     if (type === 'weekly') {
       const dayLabel = getDayLabel(meeting.DayOfWeek);
@@ -192,13 +242,29 @@ function renderMeetingsGrid() {
       dateInfo = formatDate(meeting.Date);
     }
 
-    // عدد الإلغاءات
     const cancelInfo = canceledOccurrences.length > 0
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
-    // ⚡ معلومات الأماكن
     const locationsInfo = getLocationsInfoText(meeting);
+
+    // ⚡ أزرار الكارت: في View Mode بس زر المواعيد
+    const footerHtml = isView
+      ? `
+        <div class="meeting-card-footer">
+          <button class="btn-icon" onclick="viewOccurrences('${meeting.id}')" title="المواعيد">📋 المواعيد</button>
+        </div>
+      `
+      : `
+        <div class="meeting-card-footer">
+          <button class="btn-icon" onclick="viewOccurrences('${meeting.id}')" title="المواعيد">📋</button>
+          <button class="btn-icon" onclick="editMeeting('${meeting.id}')" title="تعديل">✏️</button>
+          ${status !== 'archived' ? `
+            <button class="btn-icon" onclick="archiveMeeting('${meeting.id}')" title="أرشفة">📦</button>
+          ` : ''}
+          <button class="btn-icon danger" onclick="confirmDeleteMeeting('${meeting.id}')" title="حذف">🗑️</button>
+        </div>
+      `;
 
     return `
       <div class="meeting-card" data-id="${meeting.id}">
@@ -240,14 +306,7 @@ function renderMeetingsGrid() {
           </div>
         </div>
 
-        <div class="meeting-card-footer">
-          <button class="btn-icon" onclick="viewOccurrences('${meeting.id}')" title="المواعيد">📋</button>
-          <button class="btn-icon" onclick="editMeeting('${meeting.id}')" title="تعديل">✏️</button>
-          ${status !== 'archived' ? `
-            <button class="btn-icon" onclick="archiveMeeting('${meeting.id}')" title="أرشفة">📦</button>
-          ` : ''}
-          <button class="btn-icon danger" onclick="confirmDeleteMeeting('${meeting.id}')" title="حذف">🗑️</button>
-        </div>
+        ${footerHtml}
       </div>
     `;
   }).join('');
@@ -297,22 +356,29 @@ function setupMeetingsEvents() {
 }
 
 function applyFilter() {
+  const isView = currentMode === 'view';
+
+  // ⚡ في View Mode: ابدأ بالنشطة فقط
+  const baseData = isView
+    ? meetingsData.filter(m => String(m.Status || '').toLowerCase() === 'active')
+    : meetingsData;
+
   if (currentFilter === 'all') {
-    filteredMeetings = [...meetingsData];
+    filteredMeetings = [...baseData];
   } else if (currentFilter === 'active') {
-    filteredMeetings = meetingsData.filter(m =>
+    filteredMeetings = baseData.filter(m =>
       String(m.Status || '').toLowerCase() === 'active'
     );
   } else if (currentFilter === 'weekly') {
-    filteredMeetings = meetingsData.filter(m =>
+    filteredMeetings = baseData.filter(m =>
       String(m.Type || '').toLowerCase() === 'weekly'
     );
   } else if (currentFilter === 'once') {
-    filteredMeetings = meetingsData.filter(m =>
+    filteredMeetings = baseData.filter(m =>
       String(m.Type || '').toLowerCase() === 'once'
     );
   } else if (currentFilter === 'archived') {
-    filteredMeetings = meetingsData.filter(m =>
+    filteredMeetings = baseData.filter(m =>
       String(m.Status || '').toLowerCase() === 'archived'
     );
   }
@@ -321,10 +387,16 @@ function applyFilter() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Meeting Modal
+//   Meeting Modal (للـManager فقط)
 // ═══════════════════════════════════════════════════════
 
 function openMeetingModal(meetingId) {
+  // ⚡ حماية إضافية: منع الفتح في View Mode
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بإضافة أو تعديل الاجتماعات');
+    return;
+  }
+
   currentEditId = meetingId || null;
   const meeting = meetingId ? meetingsData.find(m => m.id === meetingId) : null;
   const isEdit = !!meeting;
@@ -341,7 +413,6 @@ function openMeetingModal(meetingId) {
   const locationMode = meeting ? String(meeting.LocationMode || 'any').toLowerCase() : 'any';
   const locationIds = meeting && Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
 
-  // ⚡ لو مفيش أماكن مسجلة
   const noLocations = availableLocations.length === 0;
 
   modal.innerHTML = `
@@ -365,7 +436,6 @@ function openMeetingModal(meetingId) {
           </select>
         </div>
 
-        <!-- حقول Once -->
         <div id="onceFields" style="${type === 'once' ? '' : 'display:none;'}">
           <div class="form-row">
             <label>التاريخ *</label>
@@ -373,7 +443,6 @@ function openMeetingModal(meetingId) {
           </div>
         </div>
 
-        <!-- حقول Weekly -->
         <div id="weeklyFields" style="${type === 'weekly' ? '' : 'display:none;'}">
           <div class="form-row">
             <label>يوم الأسبوع *</label>
@@ -395,7 +464,6 @@ function openMeetingModal(meetingId) {
           <label for="meetingActive">نشط</label>
         </div>
 
-        <!-- ═══ الأماكن المسموحة ═══ -->
         <div class="modal-section">
           <h4 class="modal-section-title">📍 الأماكن المسموحة</h4>
 
@@ -424,7 +492,6 @@ function openMeetingModal(meetingId) {
               </label>
             </div>
 
-            <!-- اختيار مكان واحد -->
             <div id="singleLocationBox" class="location-picker-box" style="${locationMode === 'single' ? '' : 'display:none;'}">
               <label>اختر المكان</label>
               <select id="singleLocationSelect">
@@ -434,7 +501,6 @@ function openMeetingModal(meetingId) {
               </select>
             </div>
 
-            <!-- اختيار أماكن متعددة -->
             <div id="multipleLocationsBox" class="location-picker-box" style="${locationMode === 'multiple' ? '' : 'display:none;'}">
               <label>اختر الأماكن المسموحة</label>
               <div class="locations-checkbox-list">
@@ -459,7 +525,6 @@ function openMeetingModal(meetingId) {
 
   modal.style.display = 'flex';
 
-  // Event: تغيير النوع (once/weekly)
   const typeSelect = document.getElementById('meetingType');
   if (typeSelect) {
     typeSelect.onchange = (e) => {
@@ -475,7 +540,6 @@ function openMeetingModal(meetingId) {
     };
   }
 
-  // Event: تغيير وضع الأماكن
   document.querySelectorAll('input[name="locationMode"]').forEach(radio => {
     radio.onchange = (e) => {
       const singleBox = document.getElementById('singleLocationBox');
@@ -511,6 +575,12 @@ function closeMeetingModal() {
 // ═══════════════════════════════════════════════════════
 
 async function saveMeeting() {
+  // ⚡ حماية
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بحفظ الاجتماعات');
+    return;
+  }
+
   const title = document.getElementById('meetingTitle')?.value.trim();
   const type = document.getElementById('meetingType')?.value;
   const date = document.getElementById('meetingDate')?.value || '';
@@ -518,7 +588,6 @@ async function saveMeeting() {
   const time = document.getElementById('meetingTime')?.value || '';
   const isActive = document.getElementById('meetingActive')?.checked;
 
-  // Validation
   if (!title) {
     alert('اسم الاجتماع مطلوب');
     return;
@@ -539,7 +608,6 @@ async function saveMeeting() {
     return;
   }
 
-  // ═══ قراءة الأماكن المسموحة ═══
   let locationMode = 'any';
   let locationIds = [];
 
@@ -564,7 +632,6 @@ async function saveMeeting() {
       return;
     }
   }
-  // لو any → locationIds تفضل فاضية
 
   const status = isActive ? 'active' : 'cancelled';
 
@@ -609,8 +676,7 @@ async function saveMeeting() {
     closeMeetingModal();
 
     const area = document.getElementById('contentArea');
-    await loadMeetingsPage(area);
-
+    await loadMeetingsPage(area, currentMode);
   } catch (err) {
     console.error('❌ Save meeting error:', err);
     alert('خطأ: ' + err.message);
@@ -622,6 +688,10 @@ async function saveMeeting() {
 // ═══════════════════════════════════════════════════════
 
 function editMeeting(meetingId) {
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بتعديل الاجتماعات');
+    return;
+  }
   openMeetingModal(meetingId);
 }
 
@@ -630,6 +700,11 @@ function editMeeting(meetingId) {
 // ═══════════════════════════════════════════════════════
 
 async function archiveMeeting(meetingId) {
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بأرشفة الاجتماعات');
+    return;
+  }
+
   const meeting = meetingsData.find(m => m.id === meetingId);
   if (!meeting) return;
 
@@ -647,8 +722,7 @@ async function archiveMeeting(meetingId) {
     alert('✅ تمت الأرشفة بنجاح');
 
     const area = document.getElementById('contentArea');
-    await loadMeetingsPage(area);
-
+    await loadMeetingsPage(area, currentMode);
   } catch (err) {
     console.error('❌ Archive meeting error:', err);
     alert('خطأ: ' + err.message);
@@ -660,6 +734,11 @@ async function archiveMeeting(meetingId) {
 // ═══════════════════════════════════════════════════════
 
 async function confirmDeleteMeeting(meetingId) {
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بحذف الاجتماعات');
+    return;
+  }
+
   const meeting = meetingsData.find(m => m.id === meetingId);
   if (!meeting) return;
 
@@ -673,8 +752,7 @@ async function confirmDeleteMeeting(meetingId) {
     alert('✅ تم الحذف بنجاح');
 
     const area = document.getElementById('contentArea');
-    await loadMeetingsPage(area);
-
+    await loadMeetingsPage(area, currentMode);
   } catch (err) {
     console.error('❌ Delete meeting error:', err);
     alert('خطأ: ' + err.message);
@@ -682,13 +760,14 @@ async function confirmDeleteMeeting(meetingId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   View Occurrences (المواعيد القادمة)
+//   View Occurrences
 // ═══════════════════════════════════════════════════════
 
 function viewOccurrences(meetingId) {
   const meeting = meetingsData.find(m => m.id === meetingId);
   if (!meeting) return;
 
+  const isView = currentMode === 'view';
   const type = String(meeting.Type || 'once').toLowerCase();
   const canceledOccurrences = meeting.CanceledOccurrences || [];
 
@@ -712,14 +791,20 @@ function viewOccurrences(meetingId) {
 
     occurrencesHtml = upcomingDates.map(dateStr => {
       const isCancelled = canceledOccurrences.includes(dateStr);
+
+      // ⚡ في View Mode: بدون أزرار إلغاء/استعادة
+      const actionsHtml = isView
+        ? (isCancelled ? '<span class="status-badge inactive">❌ ملغي</span>' : '<span class="status-badge active">✅ نشط</span>')
+        : (isCancelled
+          ? `<button class="btn-small" onclick="restoreOccurrence('${meetingId}', '${dateStr}')">↺ استعادة</button>`
+          : `<button class="btn-small danger" onclick="cancelOccurrence('${meetingId}', '${dateStr}')">✕ إلغاء</button>`
+        );
+
       return `
         <div class="occurrence-item ${isCancelled ? 'cancelled' : ''}">
           <div class="occurrence-date">${formatDate(dateStr)}</div>
           <div class="occurrence-actions">
-            ${isCancelled
-              ? `<button class="btn-small" onclick="restoreOccurrence('${meetingId}', '${dateStr}')">↺ استعادة</button>`
-              : `<button class="btn-small danger" onclick="cancelOccurrence('${meetingId}', '${dateStr}')">✕ إلغاء</button>`
-            }
+            ${actionsHtml}
           </div>
         </div>
       `;
@@ -766,6 +851,11 @@ function closeOccurrencesModal() {
 // ═══════════════════════════════════════════════════════
 
 async function cancelOccurrence(meetingId, dateStr) {
+  if (currentMode === 'view') {
+    alert('غير مصرح لك بإلغاء المواعيد');
+    return;
+  }
+
   const meeting = meetingsData.find(m => m.id === meetingId);
   if (!meeting) return;
 
@@ -787,7 +877,6 @@ async function cancelOccurrence(meetingId, dateStr) {
     alert('✅ تم الإلغاء');
     closeOccurrencesModal();
     viewOccurrences(meetingId);
-
   } catch (err) {
     console.error('❌ Cancel occurrence error:', err);
     alert('خطأ: ' + err.message);
@@ -795,6 +884,11 @@ async function cancelOccurrence(meetingId, dateStr) {
 }
 
 async function restoreOccurrence(meetingId, dateStr) {
+  if (currentMode === 'view') {
+    alert('غير مصرح لك باستعادة المواعيد');
+    return;
+  }
+
   const meeting = meetingsData.find(m => m.id === meetingId);
   if (!meeting) return;
 
@@ -811,7 +905,6 @@ async function restoreOccurrence(meetingId, dateStr) {
     alert('✅ تمت الاستعادة');
     closeOccurrencesModal();
     viewOccurrences(meetingId);
-
   } catch (err) {
     console.error('❌ Restore occurrence error:', err);
     alert('خطأ: ' + err.message);
