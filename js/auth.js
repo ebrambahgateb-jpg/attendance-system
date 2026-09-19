@@ -10,7 +10,14 @@ import {
 
 import {
   doc,
-  getDoc
+  getDoc,
+  updateDoc,
+  setDoc,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -58,7 +65,6 @@ async function signInWithGoogle() {
 
     console.log('✅ Signed in:', firebaseUser.email);
 
-    // التحقق من وجود الحساب في Firestore
     await checkUserInFirestore(firebaseUser);
 
   } catch (error) {
@@ -84,22 +90,18 @@ async function checkUserInFirestore(firebaseUser) {
     const accountRef = doc(db, COLLECTIONS.ACCOUNTS, firebaseUser.uid);
     const accountSnap = await getDoc(accountRef);
 
-    // الحالة 1: الحساب غير موجود
+    // ═══ الحالة 1: الحساب غير موجود → دوّر بالبريد ═══
     if (!accountSnap.exists()) {
       console.log('⚠️ Account not found for UID:', firebaseUser.uid);
       console.log('📧 Email:', firebaseUser.email);
 
-      // ابحث في accounts بالـ Email
-      // (لأن الحسابات القديمة اتُرحّلت من Sheets بدون UID)
       const found = await findAccountByEmail(firebaseUser.email);
 
       if (found) {
-        // اربط الحساب بالـ UID الجديد
         await linkAccountToUid(found.id, firebaseUser.uid, firebaseUser);
         return;
       }
 
-      // الحساب مش موجود خالص
       if (deniedMessage) {
         deniedMessage.textContent = 'الحساب غير موجود في النظام. تواصل مع المسؤول.';
       }
@@ -108,15 +110,29 @@ async function checkUserInFirestore(firebaseUser) {
       return;
     }
 
-    // الحالة 2: الحساب موجود لكن معطل
-    const account = accountSnap.data();
-    if (account.Status && account.Status.toLowerCase() === 'disabled') {
+    // ═══ الحالة 2: الحساب موجود لكن معطل ═══
+    let account = accountSnap.data();
+    if (account.Status && String(account.Status).toLowerCase() === 'disabled') {
       showScreen('disabledScreen');
       await signOut(auth);
       return;
     }
 
-    // الحالة 3: الحساب سليم
+    // ═══ الحالة 3: اربط بـPersonID (لو مش مربوط) ═══
+    const personId = await ensurePersonLink(firebaseUser, account);
+
+    // احفظ PersonID في account إذا اتربط
+    if (personId && !account.PersonID) {
+      try {
+        await updateDoc(accountRef, { PersonID: personId });
+        account.PersonID = personId;
+        console.log('✅ Account linked to person:', personId);
+      } catch (e) {
+        console.warn('Could not save PersonID:', e);
+      }
+    }
+
+    // ═══ الحالة 4: الأدوار ═══
     const roles = getRolesFromAccount(account);
 
     if (roles.length === 0) {
@@ -136,6 +152,7 @@ async function checkUserInFirestore(firebaseUser) {
       photoURL: firebaseUser.photoURL || '',
       account: account,
       roles: roles,
+      personId: personId || account.PersonID || null,
       selectedRole: null
     };
 
@@ -155,13 +172,40 @@ async function checkUserInFirestore(firebaseUser) {
   }
 }
 
+// ═══ Ensure Person Link ═══
+async function ensurePersonLink(firebaseUser, account) {
+  // 1. لو account.PersonID موجود → تأكد إنه لسه في people
+  if (account.PersonID) {
+    try {
+      const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, account.PersonID));
+      if (pDoc.exists()) return account.PersonID;
+    } catch (e) {}
+  }
+
+  // 2. دوّر بالبريد
+  if (firebaseUser.email) {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.PEOPLE),
+        where('Email', '==', firebaseUser.email)
+      );
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const personDoc = snap.docs[0];
+        return personDoc.id;
+      }
+    } catch (e) {
+      console.warn('Person link by email error:', e);
+    }
+  }
+
+  return null;
+}
+
 // ═══ Find Account by Email ═══
 async function findAccountByEmail(email) {
   try {
-    const { collection, query, where, getDocs } = await import(
-      "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js"
-    );
-
     const q = query(
       collection(db, COLLECTIONS.ACCOUNTS),
       where('Email', '==', email)
@@ -181,11 +225,6 @@ async function findAccountByEmail(email) {
 // ═══ Link Account to UID ═══
 async function linkAccountToUid(oldDocId, newUid, firebaseUser) {
   try {
-    const { setDoc, deleteDoc } = await import(
-      "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js"
-    );
-
-    // اقرأ البيانات القديمة
     const oldRef = doc(db, COLLECTIONS.ACCOUNTS, oldDocId);
     const oldSnap = await getDoc(oldRef);
 
@@ -282,7 +321,6 @@ onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.uid === firebaseUser.uid && parsed.selectedRole) {
-          // ادخل مباشرة
           window.location.href = 'pages/dashboard.html';
           return;
         }
