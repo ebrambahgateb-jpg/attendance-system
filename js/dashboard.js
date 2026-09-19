@@ -141,6 +141,8 @@ function navigateTo(pageId) {
     loadMeetingsLazy(area);
   } else if (pageId === 'attendance') {
     loadAttendanceLazy(area);
+  } else if (pageId === 'accounts') {
+    loadAccountsLazy(area);
   } else if (pageId === 'settings') {
     loadSettingsLazy(area);
   } else {
@@ -617,10 +619,15 @@ function loadMyAttendanceLazy(area) {
   else showLoadError(area, 'سجل حضورك بنفسك');
 }
 
-// ⚡ جديد: Load Attendance Viewer
 function loadAttendanceLazy(area) {
   if (typeof window.loadAttendancePage === 'function') window.loadAttendancePage(area);
   else showLoadError(area, 'الحضور');
+}
+
+// ⚡ جديد: Load Accounts
+function loadAccountsLazy(area) {
+  if (typeof window.loadAccountsPage === 'function') window.loadAccountsPage(area);
+  else showLoadError(area, 'الحسابات');
 }
 
 function showLoadError(area, name) {
