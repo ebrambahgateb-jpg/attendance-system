@@ -4,12 +4,15 @@
 
 import {
   collection,
-  getDocs
+  getDocs,
+  doc,
+  getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
   db,
-  COLLECTIONS
+  COLLECTIONS,
+  SETTINGS_DOC
 } from './firebase-config.js';
 
 // ═══ State ═══
@@ -18,6 +21,7 @@ let attFiltered = [];
 let attPeople = {};
 let attMeetings = {};
 let attCurrentPage = 1;
+let attSettings = {};
 const ATT_PER_PAGE = 50;
 
 let attFilters = {
@@ -37,16 +41,16 @@ async function loadAttendancePage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    // ⚡ اجلب الكل بشكل متوازي
-    const [attSnap, peopleSnap, meetingsSnap] = await Promise.all([
+    const [attSnap, peopleSnap, meetingsSnap, settingsDoc] = await Promise.all([
       getDocs(collection(db, COLLECTIONS.ATTENDANCE)),
       getDocs(collection(db, COLLECTIONS.PEOPLE)),
-      getDocs(collection(db, COLLECTIONS.MEETINGS))
+      getDocs(collection(db, COLLECTIONS.MEETINGS)),
+      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC))
     ]);
 
     attData = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    attSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // Map للوصول السريع
     attPeople = {};
     peopleSnap.docs.forEach(d => {
       attPeople[d.id] = { id: d.id, ...d.data() };
@@ -57,7 +61,6 @@ async function loadAttendancePage(area) {
       attMeetings[d.id] = { id: d.id, ...d.data() };
     });
 
-    // ترتيب حسب وقت المسح (الأحدث أول)
     attData.sort((a, b) => {
       const da = parseDate(a.ScanTime) || new Date(0);
       const db2 = parseDate(b.ScanTime) || new Date(0);
@@ -86,15 +89,14 @@ function renderAttendancePage(area) {
   area.innerHTML = `
     <div class="att-container">
 
-      <!-- Header -->
       <div class="att-header">
         <div class="att-search">
           <input type="text" id="attSearchInput" placeholder="🔍 ابحث بالاسم أو الاجتماع..." value="${escapeHtml(attFilters.search)}" />
         </div>
-        <button class="btn-secondary" onclick="exportAttendanceCSV()">📥 تصدير CSV</button>
+        <button class="btn-secondary" onclick="exportAttendanceCSV()">📥 CSV</button>
+        <button class="btn-primary" onclick="exportAttendancePDF()">📄 PDF</button>
       </div>
 
-      <!-- Stats -->
       <div class="att-stats">
         <div class="att-stat">
           <span class="att-stat-value">${attData.length}</span>
@@ -114,7 +116,6 @@ function renderAttendancePage(area) {
         </div>
       </div>
 
-      <!-- Filters -->
       <div class="att-filters">
         <div class="att-filter-group">
           <label>من تاريخ</label>
@@ -148,7 +149,6 @@ function renderAttendancePage(area) {
         <button class="btn-secondary" onclick="clearAttendanceFilters()">مسح الفلاتر</button>
       </div>
 
-      <!-- Table -->
       <div class="att-table-wrapper">
         <table class="att-table">
           <thead>
@@ -166,10 +166,8 @@ function renderAttendancePage(area) {
         </table>
       </div>
 
-      <!-- Pagination -->
       <div class="att-pagination" id="attPagination"></div>
 
-      <!-- Empty State -->
       <div id="attEmptyState" class="att-empty" style="display:none;">
         <div class="att-empty-icon">✅</div>
         <h3>لا يوجد سجلات حضور</h3>
@@ -206,7 +204,6 @@ function renderAttendanceTable() {
   if (emptyState) emptyState.style.display = 'none';
   if (tableWrapper) tableWrapper.style.display = 'block';
 
-  // Pagination
   const totalPages = Math.ceil(attFiltered.length / ATT_PER_PAGE);
   const start = (attCurrentPage - 1) * ATT_PER_PAGE;
   const end = start + ATT_PER_PAGE;
@@ -258,7 +255,6 @@ function renderAttendanceTable() {
     `;
   }).join('');
 
-  // Pagination
   renderPagination(totalPages);
 }
 
@@ -275,7 +271,6 @@ function renderPagination(totalPages) {
 
   html += `<button class="att-page-btn" onclick="attGoToPage(${attCurrentPage - 1})" ${attCurrentPage === 1 ? 'disabled' : ''}>« السابق</button>`;
 
-  // عرض الصفحات
   const pages = [];
   const maxVisible = 5;
 
@@ -361,7 +356,6 @@ function applyAttFilters() {
   const term = attFilters.search;
 
   attFiltered = attData.filter(record => {
-    // Search
     if (term) {
       const person = attPeople[record.PersonID];
       const personName = record.PersonName
@@ -372,18 +366,15 @@ function applyAttFilters() {
       if (!combined.includes(term)) return false;
     }
 
-    // Meeting Filter
     if (attFilters.meetingId && record.MeetingID !== attFilters.meetingId) {
       return false;
     }
 
-    // Method Filter
     if (attFilters.method) {
       const m = record.Method || 'scanner';
       if (m !== attFilters.method) return false;
     }
 
-    // Date Range
     if (attFilters.dateFrom || attFilters.dateTo) {
       const scanDate = parseDate(record.ScanTime);
       if (!scanDate) return false;
@@ -454,7 +445,6 @@ window.exportAttendanceCSV = function() {
     .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     .join('\n');
 
-  // BOM للعربية
   const BOM = '\uFEFF';
   const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
 
@@ -463,6 +453,311 @@ window.exportAttendanceCSV = function() {
   link.setAttribute('href', url);
   link.setAttribute('download', `attendance_${formatDateISO(new Date())}.csv`);
   link.click();
+};
+
+// ═══════════════════════════════════════════════════════
+//   Export PDF (Print Dialog)
+// ═══════════════════════════════════════════════════════
+
+window.exportAttendancePDF = function() {
+  if (attFiltered.length === 0) {
+    alert('لا يوجد بيانات للتصدير');
+    return;
+  }
+
+  // ⚡ اجلب اسم المؤسسة من الإعدادات
+  const organizationName = attSettings.OrganizationName || 'نظام تسجيل الحضور';
+  const systemName = attSettings.SystemName || '';
+  const logoUrl = attSettings.ThemeLogoUrl || '';
+
+  // ⚡ اجلب اسم المستخدم الحالي
+  let currentUserName = '';
+  try {
+    const cu = JSON.parse(localStorage.getItem('currentUser'));
+    currentUserName = cu?.name || cu?.email || '';
+  } catch (e) {}
+
+  // ⚡ نطاق التاريخ
+  let dateRangeText = 'كل السجلات';
+  if (attFilters.dateFrom || attFilters.dateTo) {
+    const from = attFilters.dateFrom || 'البداية';
+    const to = attFilters.dateTo || 'اليوم';
+    dateRangeText = `من ${from} إلى ${to}`;
+  }
+
+  // ⚡ فلتر إضافي
+  let filterInfo = '';
+  if (attFilters.meetingId) {
+    const meetingTitle = attMeetings[attFilters.meetingId]?.Title || '';
+    filterInfo += ` • الاجتماع: ${meetingTitle}`;
+  }
+  if (attFilters.method) {
+    filterInfo += ` • النوع: ${attFilters.method === 'self' ? 'تسجيل ذاتي' : 'ماسح'}`;
+  }
+  if (attFilters.search) {
+    filterInfo += ` • بحث: "${attFilters.search}"`;
+  }
+
+  // ⚡ التاريخ والوقت الحالي
+  const now = new Date();
+  const nowText = `${formatDateShort(now)} ${formatTimeShort(now)}`;
+
+  // ⚡ JPG أو PNG للـLogo
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" class="pdf-logo" alt="" />`
+    : '';
+
+  // ⚡ ابنِ صفوف الجدول
+  const rowsHtml = attFiltered.map((record, idx) => {
+    const person = attPeople[record.PersonID];
+    const meeting = attMeetings[record.MeetingID];
+    const scanDate = parseDate(record.ScanTime);
+
+    const personName = record.PersonName
+      || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
+
+    const methodText = record.Method === 'self' ? 'ذاتي' : 'ماسح';
+
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(personName)}</td>
+        <td>${escapeHtml(person?.Mobile || '-')}</td>
+        <td>${escapeHtml(meeting?.Title || record.MeetingTitle || '-')}</td>
+        <td>${scanDate ? formatDateShort(scanDate) : '-'}</td>
+        <td>${scanDate ? formatTimeShort(scanDate) : '-'}</td>
+        <td>${methodText}</td>
+        <td>${escapeHtml(record.Location?.name || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // ⚡ HTML التقرير
+  const reportHtml = `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+      <meta charset="UTF-8">
+      <title>تقرير الحضور</title>
+      <style>
+        @page {
+          size: A4 landscape;
+          margin: 15mm 10mm;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          font-family: 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
+          direction: rtl;
+          color: #0f172a;
+          margin: 0;
+          padding: 0;
+          font-size: 12px;
+        }
+
+        .pdf-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 15px;
+          border-bottom: 3px solid #475569;
+          margin-bottom: 20px;
+          gap: 20px;
+        }
+
+        .pdf-header-left {
+          flex: 1;
+        }
+
+        .pdf-header-right {
+          flex-shrink: 0;
+        }
+
+        .pdf-logo {
+          max-height: 70px;
+          max-width: 150px;
+          object-fit: contain;
+        }
+
+        .pdf-title {
+          font-size: 24px;
+          font-weight: 800;
+          margin: 0 0 5px 0;
+          color: #1e293b;
+        }
+
+        .pdf-subtitle {
+          font-size: 14px;
+          color: #64748b;
+          margin: 0;
+        }
+
+        .pdf-meta {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+          background: #f8fafc;
+          padding: 12px 16px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .pdf-meta-item {
+          font-size: 12px;
+          color: #475569;
+        }
+
+        .pdf-meta-item strong {
+          color: #0f172a;
+        }
+
+        .pdf-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
+        }
+
+        .pdf-table thead {
+          background: #1e293b;
+          color: #fff;
+        }
+
+        .pdf-table th {
+          padding: 10px 8px;
+          text-align: right;
+          font-weight: 700;
+          font-size: 11px;
+          border: 1px solid #1e293b;
+        }
+
+        .pdf-table td {
+          padding: 8px;
+          border: 1px solid #e2e8f0;
+          text-align: right;
+          vertical-align: middle;
+        }
+
+        .pdf-table tbody tr:nth-child(even) {
+          background: #f8fafc;
+        }
+
+        .pdf-table tbody tr:hover {
+          background: #f1f5f9;
+        }
+
+        .pdf-footer {
+          margin-top: 20px;
+          padding-top: 12px;
+          border-top: 1px solid #cbd5e1;
+          font-size: 10px;
+          color: #64748b;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+        }
+
+        .pdf-footer-left,
+        .pdf-footer-right {
+          flex: 1;
+        }
+
+        .pdf-footer-right {
+          text-align: left;
+        }
+
+        .pdf-count {
+          background: #475569;
+          color: #fff;
+          padding: 3px 10px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 11px;
+        }
+
+        @media print {
+          body { margin: 0; }
+          .pdf-table tbody tr { page-break-inside: avoid; }
+        }
+      </style>
+    </head>
+    <body>
+
+      <div class="pdf-header">
+        <div class="pdf-header-left">
+          <h1 class="pdf-title">تقرير الحضور</h1>
+          <p class="pdf-subtitle">${escapeHtml(organizationName)}</p>
+        </div>
+        <div class="pdf-header-right">
+          ${logoHtml}
+        </div>
+      </div>
+
+      <div class="pdf-meta">
+        <div class="pdf-meta-item"><strong>النطاق:</strong> ${escapeHtml(dateRangeText)}${escapeHtml(filterInfo)}</div>
+        <div class="pdf-meta-item"><strong>عدد السجلات:</strong> ${attFiltered.length}</div>
+      </div>
+
+      <table class="pdf-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>الموبايل</th>
+            <th>الاجتماع</th>
+            <th>التاريخ</th>
+            <th>الوقت</th>
+            <th>الطريقة</th>
+            <th>الموقع</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div class="pdf-footer">
+        <div class="pdf-footer-left">
+          تم الإنشاء: ${nowText}
+        </div>
+        <div class="pdf-footer-right">
+          <span class="pdf-count">${attFiltered.length} سجل</span>
+          ${currentUserName ? ` • بواسطة: ${escapeHtml(currentUserName)}` : ''}
+        </div>
+      </div>
+
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 500);
+
+          window.onafterprint = function() {
+            setTimeout(function() {
+              window.close();
+            }, 500);
+          };
+        };
+      <\/script>
+
+    </body>
+    </html>
+  `;
+
+  // ⚡ افتح نافذة جديدة
+  const win = window.open('', '_blank', 'width=1200,height=800');
+  if (!win) {
+    alert('الرجاء السماح بالنوافذ المنبثقة لتصدير PDF');
+    return;
+  }
+
+  win.document.open();
+  win.document.write(reportHtml);
+  win.document.close();
 };
 
 // ═══════════════════════════════════════════════════════
