@@ -415,3 +415,45 @@
     min-height: 200px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Social Links
+   ═══════════════════════════════════════════ */
+
+.pd-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1877f2;
+  color: #fff;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+  direction: ltr;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pd-social-link:hover {
+  background: #166fe5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 119, 242, 0.3);
+  color: #fff;
+  text-decoration: none;
+}
+
+.pd-social-link span:first-child {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.pd-social-link span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
