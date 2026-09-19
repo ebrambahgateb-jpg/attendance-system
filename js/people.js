@@ -825,4 +825,58 @@ function renderPersonDetailsModal(modal, person, stats) {
           text: person.QRCode,
           width: 200,
           height: 200,
-          colorDark: '#000000
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.H
+        });
+      }
+    }, 100);
+  }
+}
+
+function closePersonDetails() {
+  const modal = document.getElementById('personDetailsModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function downloadPersonQR(personId) {
+  const person = peopleData.find(p => p.id === personId);
+  if (!person) return;
+
+  const container = document.getElementById('pdQrCanvas');
+  if (!container) return;
+
+  const canvas = container.querySelector('canvas');
+  const img = container.querySelector('img');
+
+  let dataUrl = null;
+  if (canvas) dataUrl = canvas.toDataURL('image/png');
+  else if (img && img.src) dataUrl = img.src;
+
+  if (!dataUrl) { alert('لا يمكن تحميل الصورة'); return; }
+
+  const fullName = getFullName(person).replace(/\s+/g, '_');
+  const link = document.createElement('a');
+  link.download = `QR_${fullName}.png`;
+  link.href = dataUrl;
+  link.click();
+}
+
+// ═══════════════════════════════════════════════════════
+//   Expose to window
+// ═══════════════════════════════════════════════════════
+
+window.loadPeoplePage = loadPeoplePage;
+window.openPersonModal = openPersonModal;
+window.closePersonModal = closePersonModal;
+window.savePerson = savePerson;
+window.editPerson = editPerson;
+window.togglePersonStatus = togglePersonStatus;
+window.confirmDeletePerson = confirmDeletePerson;
+window.generateQR = generateQR;
+window.viewQR = viewQR;
+window.closeQRModal = closeQRModal;
+window.downloadQR = downloadQR;
+window.viewPersonDetails = viewPersonDetails;
+window.closePersonDetails = closePersonDetails;
+window.downloadPersonQR = downloadPersonQR;
