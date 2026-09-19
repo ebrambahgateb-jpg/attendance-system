@@ -80,6 +80,38 @@ function formatDateTime(date) {
   }
 }
 
+// ═══ Facebook URL Helpers ═══
+function formatFacebookUrl(value) {
+  if (!value) return '';
+  let url = String(value).trim();
+
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  if (url.startsWith('facebook.com') ||
+      url.startsWith('www.facebook.com') ||
+      url.startsWith('m.facebook.com') ||
+      url.startsWith('fb.com') ||
+      url.startsWith('fb.me')) {
+    return 'https://' + url;
+  }
+
+  url = url.replace(/^@/, '');
+  return 'https://facebook.com/' + url;
+}
+
+function getFacebookDisplay(value) {
+  if (!value) return '-';
+  let url = String(value).trim();
+
+  url = url.replace(/^https?:\/\//, '');
+  url = url.replace(/^www\./, '');
+  url = url.replace(/^m\./, '');
+
+  return url;
+}
+
 // ═══════════════════════════════════════════════════════
 //   Load People Page
 // ═══════════════════════════════════════════════════════
@@ -356,7 +388,7 @@ function openPersonModal(personId) {
           </div>
           <div class="form-row">
             <label>Facebook</label>
-            <input type="text" id="p_Facebook" value="${escapeHtml(p.Facebook || '')}" placeholder="facebook.com/username" dir="ltr" />
+            <input type="text" id="p_Facebook" value="${escapeHtml(p.Facebook || '')}" placeholder="username أو facebook.com/username" dir="ltr" />
           </div>
         </div>
 
@@ -803,7 +835,16 @@ function renderPersonDetailsModal(modal, person, stats) {
           <div class="pd-info-item"><div class="pd-info-label">واتساب</div><div class="pd-info-value ltr">${escapeHtml(person.WhatsApp || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">البريد</div><div class="pd-info-value ltr">${escapeHtml(person.Email || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">العنوان</div><div class="pd-info-value">${escapeHtml(person.Address || '-')}</div></div>
-          <div class="pd-info-item"><div class="pd-info-label">Facebook</div><div class="pd-info-value ltr">${escapeHtml(person.Facebook || '-')}</div></div>
+          <div class="pd-info-item">
+            <div class="pd-info-label">Facebook</div>
+            ${person.Facebook
+              ? `<a href="${escapeHtml(formatFacebookUrl(person.Facebook))}" target="_blank" rel="noopener noreferrer" class="pd-social-link">
+                  <span>🔗</span>
+                  <span>${escapeHtml(getFacebookDisplay(person.Facebook))}</span>
+                </a>`
+              : `<div class="pd-info-value ltr">-</div>`
+            }
+          </div>
           <div class="pd-info-item"><div class="pd-info-label">تاريخ الإضافة</div><div class="pd-info-value">${formatDate(person.CreatedAt)}</div></div>
         </div>
       </div>
