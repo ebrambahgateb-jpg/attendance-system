@@ -13,7 +13,7 @@ body.scanner-body {
   margin: 0;
   padding: 0;
 }
-
+ 
 /* ═══ Header ═══ */
 .scanner-header {
   background: var(--card-bg);
