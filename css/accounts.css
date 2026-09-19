@@ -1,0 +1,405 @@
+/* ═══════════════════════════════════════════
+   Accounts Management Styles
+   ═══════════════════════════════════════════ */
+
+.acc-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Header */
+.acc-header {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.acc-search {
+  flex: 1;
+}
+
+.acc-search input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.acc-search input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Stats */
+.acc-stats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.acc-stat {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.acc-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.acc-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Table */
+.acc-table-wrapper {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.acc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.acc-table thead {
+  background: var(--bg);
+}
+
+.acc-table th {
+  padding: 14px 12px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.acc-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.acc-table tr:last-child td {
+  border-bottom: none;
+}
+
+.acc-table tr:hover {
+  background: var(--bg);
+}
+
+/* Avatar */
+.acc-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.acc-avatar-placeholder {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* Email */
+.acc-email {
+  direction: ltr;
+  text-align: right;
+  font-family: 'Segoe UI', monospace;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Roles */
+.acc-roles {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.acc-role-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.acc-role-badge.role-owner {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.acc-role-badge.role-admin {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.acc-role-badge.role-scanner {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.acc-role-badge.role-user {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.acc-role-badge.role-none {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Person */
+.acc-person-name {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.acc-person-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Action Buttons */
+.actions-cell {
+  white-space: nowrap;
+}
+
+.btn-icon {
+  background: transparent;
+  border: 1px solid var(--border);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 4px;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background: var(--bg);
+  border-color: var(--primary);
+}
+
+.btn-icon.danger:hover {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+/* Empty */
+.acc-empty {
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--card-bg);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.acc-empty-icon {
+  font-size: 60px;
+  margin-bottom: 12px;
+}
+
+.acc-empty h3 {
+  color: var(--text);
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+
+.acc-empty p {
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+/* Roles Checkbox List (Modal) */
+.roles-checkbox-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.role-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--card-bg);
+}
+
+.role-checkbox-item:hover {
+  border-color: var(--primary);
+}
+
+.role-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.role-checkbox-item .role-icon {
+  font-size: 18px;
+}
+
+.role-checkbox-item .role-label {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  flex: 1;
+}
+
+.role-checkbox-item:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.role-checkbox-item.role-owner:has(input:checked) {
+  border-color: #d97706;
+  background: #fef3c7;
+}
+
+.role-checkbox-item.role-admin:has(input:checked) {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+.role-checkbox-item.role-scanner:has(input:checked) {
+  border-color: #16a34a;
+  background: #dcfce7;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .acc-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acc-header .btn-primary {
+    width: 100%;
+    padding: 14px;
+  }
+
+  .acc-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .acc-stat-value {
+    font-size: 16px;
+  }
+
+  .acc-stat-label {
+    font-size: 10px;
+  }
+
+  .acc-table {
+    font-size: 12px;
+  }
+
+  .acc-table th,
+  .acc-table td {
+    padding: 9px 8px;
+  }
+
+  /* إخفاء أعمدة على الموبايل */
+  .acc-table th:nth-child(1),
+  .acc-table td:nth-child(1) {
+    display: none;
+  }
+
+  .acc-avatar,
+  .acc-avatar-placeholder {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .btn-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+
+  .roles-checkbox-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .acc-stat-value {
+    font-size: 14px;
+  }
+
+  .acc-stat-label {
+    font-size: 9px;
+  }
+
+  .acc-role-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
