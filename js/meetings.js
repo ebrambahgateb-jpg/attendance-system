@@ -24,6 +24,7 @@ let filteredMeetings = [];
 let currentEditId = null;
 let currentFilter = 'all';
 let settingsCache = null;
+let availableLocations = [];
 
 // ═══ أيام الأسبوع ═══
 const DAYS_OF_WEEK = [
@@ -35,6 +36,13 @@ const DAYS_OF_WEEK = [
   { value: 'Friday',    label: 'الجمعة' },
   { value: 'Saturday',  label: 'السبت' }
 ];
+
+// ═══ أنماط تحديد الأماكن ═══
+const LOCATION_MODES = {
+  SINGLE: 'single',    // مكان واحد محدد
+  ANY: 'any',          // أي مكان متسجل
+  MULTIPLE: 'multiple' // أماكن محددة (متعددة)
+};
 
 // ═══════════════════════════════════════════════════════
 //   Load Meetings Page
@@ -51,6 +59,9 @@ async function loadMeetingsPage(area) {
 
     meetingsData = meetingsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     settingsCache = settingsDoc.exists() ? settingsDoc.data() : {};
+
+    // ⚡ اجلب الأماكن المسجلة
+    availableLocations = Array.isArray(settingsCache.Locations) ? settingsCache.Locations : [];
 
     // ترتيب حسب الوقت
     meetingsData.sort((a, b) => {
@@ -186,6 +197,9 @@ function renderMeetingsGrid() {
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
+    // ⚡ معلومات الأماكن
+    const locationsInfo = getLocationsInfoText(meeting);
+
     return `
       <div class="meeting-card" data-id="${meeting.id}">
         <div class="meeting-card-header">
@@ -212,6 +226,11 @@ function renderMeetingsGrid() {
               <span>${escapeHtml(meeting.Time || '-')}</span>
             </div>
 
+            <div class="meeting-info-row">
+              <span class="meeting-info-icon">📍</span>
+              <span>${locationsInfo}</span>
+            </div>
+
             ${cancelInfo ? `
               <div class="meeting-info-row">
                 <span class="meeting-info-icon">⚠️</span>
@@ -232,6 +251,32 @@ function renderMeetingsGrid() {
       </div>
     `;
   }).join('');
+}
+
+// ═══ معلومات الأماكن في الكارت ═══
+function getLocationsInfoText(meeting) {
+  const mode = String(meeting.LocationMode || 'any').toLowerCase();
+
+  if (mode === 'any') {
+    return `<span style="color:#16a34a;">أي مكان مسجل</span>`;
+  }
+
+  const ids = Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
+
+  if (ids.length === 0) {
+    return `<span style="color:#d97706;">لم يتم تحديد أماكن</span>`;
+  }
+
+  const names = ids.map(id => {
+    const loc = availableLocations.find(l => l.id === id);
+    return loc ? loc.name : 'مكان محذوف';
+  });
+
+  if (mode === 'single') {
+    return escapeHtml(names[0] || 'مكان محدد');
+  }
+
+  return escapeHtml(names.join(' • '));
 }
 
 // ═══════════════════════════════════════════════════════
@@ -293,9 +338,14 @@ function openMeetingModal(meetingId) {
   }
 
   const type = meeting ? String(meeting.Type || 'once').toLowerCase() : 'once';
+  const locationMode = meeting ? String(meeting.LocationMode || 'any').toLowerCase() : 'any';
+  const locationIds = meeting && Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
+
+  // ⚡ لو مفيش أماكن مسجلة
+  const noLocations = availableLocations.length === 0;
 
   modal.innerHTML = `
-    <div class="modal-content">
+    <div class="modal-content modal-large">
       <div class="modal-header">
         <h2>${isEdit ? '✏️ تعديل اجتماع' : '➕ إضافة اجتماع جديد'}</h2>
         <button class="modal-close" onclick="closeMeetingModal()">✕</button>
@@ -344,6 +394,60 @@ function openMeetingModal(meetingId) {
           <input type="checkbox" id="meetingActive" ${!meeting || String(meeting.Status || 'active').toLowerCase() === 'active' ? 'checked' : ''} />
           <label for="meetingActive">نشط</label>
         </div>
+
+        <!-- ═══ الأماكن المسموحة ═══ -->
+        <div class="modal-section">
+          <h4 class="modal-section-title">📍 الأماكن المسموحة</h4>
+
+          ${noLocations ? `
+            <div class="locations-warning">
+              ⚠️ لا توجد أماكن مسجلة. أضف أماكن من الإعدادات أولاً.
+            </div>
+          ` : `
+            <div class="location-mode-options">
+              <label class="location-mode-option">
+                <input type="radio" name="locationMode" value="any" ${locationMode === 'any' ? 'checked' : ''} />
+                <span>🌍 أي مكان مسجل</span>
+                <small>يمكن التسجيل من أي مكان مضاف في النظام</small>
+              </label>
+
+              <label class="location-mode-option">
+                <input type="radio" name="locationMode" value="single" ${locationMode === 'single' ? 'checked' : ''} />
+                <span>📍 مكان واحد محدد</span>
+                <small>التسجيل من مكان واحد فقط</small>
+              </label>
+
+              <label class="location-mode-option">
+                <input type="radio" name="locationMode" value="multiple" ${locationMode === 'multiple' ? 'checked' : ''} />
+                <span>📌 أماكن محددة (متعددة)</span>
+                <small>اختر مجموعة من الأماكن المسموح بها</small>
+              </label>
+            </div>
+
+            <!-- اختيار مكان واحد -->
+            <div id="singleLocationBox" class="location-picker-box" style="${locationMode === 'single' ? '' : 'display:none;'}">
+              <label>اختر المكان</label>
+              <select id="singleLocationSelect">
+                ${availableLocations.map(loc => `
+                  <option value="${loc.id}" ${locationIds[0] === loc.id ? 'selected' : ''}>${escapeHtml(loc.name)}</option>
+                `).join('')}
+              </select>
+            </div>
+
+            <!-- اختيار أماكن متعددة -->
+            <div id="multipleLocationsBox" class="location-picker-box" style="${locationMode === 'multiple' ? '' : 'display:none;'}">
+              <label>اختر الأماكن المسموحة</label>
+              <div class="locations-checkbox-list">
+                ${availableLocations.map(loc => `
+                  <label class="location-checkbox-item">
+                    <input type="checkbox" value="${loc.id}" ${locationIds.includes(loc.id) ? 'checked' : ''} />
+                    <span>${escapeHtml(loc.name)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+          `}
+        </div>
       </div>
 
       <div class="modal-footer">
@@ -355,7 +459,7 @@ function openMeetingModal(meetingId) {
 
   modal.style.display = 'flex';
 
-  // Event: تغيير النوع
+  // Event: تغيير النوع (once/weekly)
   const typeSelect = document.getElementById('meetingType');
   if (typeSelect) {
     typeSelect.onchange = (e) => {
@@ -370,6 +474,25 @@ function openMeetingModal(meetingId) {
       }
     };
   }
+
+  // Event: تغيير وضع الأماكن
+  document.querySelectorAll('input[name="locationMode"]').forEach(radio => {
+    radio.onchange = (e) => {
+      const singleBox = document.getElementById('singleLocationBox');
+      const multipleBox = document.getElementById('multipleLocationsBox');
+
+      if (e.target.value === 'single') {
+        if (singleBox) singleBox.style.display = 'block';
+        if (multipleBox) multipleBox.style.display = 'none';
+      } else if (e.target.value === 'multiple') {
+        if (singleBox) singleBox.style.display = 'none';
+        if (multipleBox) multipleBox.style.display = 'block';
+      } else {
+        if (singleBox) singleBox.style.display = 'none';
+        if (multipleBox) multipleBox.style.display = 'none';
+      }
+    };
+  });
 
   setTimeout(() => {
     const titleInput = document.getElementById('meetingTitle');
@@ -416,6 +539,33 @@ async function saveMeeting() {
     return;
   }
 
+  // ═══ قراءة الأماكن المسموحة ═══
+  let locationMode = 'any';
+  let locationIds = [];
+
+  const modeRadio = document.querySelector('input[name="locationMode"]:checked');
+  if (modeRadio) {
+    locationMode = modeRadio.value;
+  }
+
+  if (locationMode === 'single') {
+    const singleVal = document.getElementById('singleLocationSelect')?.value;
+    if (!singleVal) {
+      alert('اختر مكان واحد على الأقل');
+      return;
+    }
+    locationIds = [singleVal];
+  } else if (locationMode === 'multiple') {
+    const checked = document.querySelectorAll('#multipleLocationsBox input[type="checkbox"]:checked');
+    locationIds = Array.from(checked).map(c => c.value);
+
+    if (locationIds.length === 0) {
+      alert('اختر مكان واحد على الأقل');
+      return;
+    }
+  }
+  // لو any → locationIds تفضل فاضية
+
   const status = isActive ? 'active' : 'cancelled';
 
   try {
@@ -428,6 +578,8 @@ async function saveMeeting() {
         DayOfWeek: type === 'weekly' ? dayOfWeek : '',
         Time: time,
         Status: status,
+        LocationMode: locationMode,
+        LocationIds: locationIds,
         UpdatedAt: new Date().toISOString()
       };
 
@@ -443,6 +595,8 @@ async function saveMeeting() {
         DayOfWeek: type === 'weekly' ? dayOfWeek : '',
         Time: time,
         Status: status,
+        LocationMode: locationMode,
+        LocationIds: locationIds,
         CreatedAt: new Date().toISOString(),
         CreatedBy: user?.email || '',
         CanceledOccurrences: []
@@ -554,7 +708,6 @@ function viewOccurrences(meetingId) {
       </div>
     `;
   } else {
-    // weekly - اعرض 4 أسابيع قادمة
     const upcomingDates = getUpcomingOccurrences(meeting.DayOfWeek, 4);
 
     occurrencesHtml = upcomingDates.map(dateStr => {
@@ -703,7 +856,6 @@ function getUpcomingOccurrences(dayOfWeek, count) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // ابحث عن أول موعد قادم
   let current = new Date(today);
   const diff = (targetDay - current.getDay() + 7) % 7;
   current.setDate(current.getDate() + diff);
