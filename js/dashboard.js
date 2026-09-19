@@ -671,11 +671,16 @@ function escapeHtml(str) {
 
 // ═══ Sidebar Management ═══
 function ensureSidebarOverlay() {
-  if (document.querySelector('.sidebar-overlay')) return;
-  const overlay = document.createElement('div');
-  overlay.className = 'sidebar-overlay';
+  let overlay = document.querySelector('.sidebar-overlay');
+
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  // ⚡ اربط الحدث دايمًا (حتى لو الـoverlay موجود)
   overlay.onclick = closeSidebar;
-  document.body.appendChild(overlay);
 }
 
 function toggleSidebar() {
