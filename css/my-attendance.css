@@ -1,0 +1,369 @@
+/* ═══════════════════════════════════════════
+   My Attendance Page Styles
+   ═══════════════════════════════════════════ */
+
+.ma-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ═══ Step Header ═══ */
+.ma-step {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.ma-step-title {
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 700;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ma-step-title .step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ═══ Select ═══ */
+.ma-select {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  font-size: 15px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ma-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ═══ Meeting Info ═══ */
+.ma-meeting-info {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ma-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ma-info-row .icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ma-info-row .status-open {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.ma-info-row .status-closed {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.ma-info-row .status-pending {
+  color: #d97706;
+  font-weight: 700;
+}
+
+/* ═══ Action Button ═══ */
+.ma-action-btn {
+  width: 100%;
+  padding: 18px;
+  border: none;
+  border-radius: 14px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.ma-action-btn:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.ma-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ma-action-btn.success {
+  background: #16a34a;
+}
+
+.ma-action-btn.danger {
+  background: #dc2626;
+}
+
+/* ═══ Scanner View ═══ */
+.ma-scanner-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+}
+
+.ma-scanner-header {
+  background: rgba(0, 0, 0, 0.85);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  z-index: 10;
+}
+
+.ma-scanner-header h2 {
+  font-size: 16px;
+  margin: 0;
+  color: #fff;
+}
+
+.ma-scanner-close {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ma-scanner-body {
+  flex: 1;
+  position: relative;
+}
+
+#maQrReader {
+  width: 100%;
+  height: 100%;
+}
+
+#maQrReader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+#maQrReader__dashboard {
+  display: none !important;
+}
+
+.ma-scanner-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 14px;
+  z-index: 10;
+}
+
+/* ═══ Location Status ═══ */
+.ma-location-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  font-size: 13px;
+  margin-top: 12px;
+  color: var(--text-muted);
+}
+
+.ma-location-status .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+
+.ma-location-status.checking .dot {
+  background: #d97706;
+  animation: pulse 1.5s infinite;
+}
+
+.ma-location-status.valid .dot {
+  background: #16a34a;
+}
+
+.ma-location-status.invalid .dot {
+  background: #dc2626;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ═══ Result Popup ═══ */
+.ma-result-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ma-result-card {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 32px 24px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  animation: resultPop 0.4s ease;
+}
+
+@keyframes resultPop {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.ma-result-icon {
+  font-size: 72px;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.ma-result-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.ma-result-title.success { color: #16a34a; }
+.ma-result-title.error { color: #dc2626; }
+
+.ma-result-message {
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.ma-result-btn {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ma-result-btn:hover {
+  background: var(--primary-hover);
+}
+
+/* ═══ Empty State ═══ */
+.ma-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+.ma-empty-icon {
+  font-size: 60px;
+  margin-bottom: 16px;
+}
+
+.ma-empty h2 {
+  color: var(--text);
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.ma-empty p {
+  font-size: 14px;
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .ma-container {
+    padding: 12px;
+  }
+
+  .ma-step {
+    padding: 18px;
+    border-radius: 12px;
+  }
+
+  .ma-step-title {
+    font-size: 16px;
+  }
+
+  .ma-action-btn {
+    padding: 16px;
+    font-size: 15px;
+  }
+}
