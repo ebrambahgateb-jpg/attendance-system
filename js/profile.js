@@ -24,7 +24,7 @@ let profilePerson = null;
 let profileSettings = {};
 let isEditMode = false;
 let isViewingOther = false;
-
+ 
 // ═══════════════════════════════════════════════════════
 //   Load Profile Page
 // ═══════════════════════════════════════════════════════
