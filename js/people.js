@@ -191,7 +191,11 @@ function renderPeopleTable() {
             : `<div class="person-avatar-placeholder">${escapeHtml(getInitial(person))}</div>`
           }
         </td>
-        <td><strong>${escapeHtml(getFullName(person) || '-')}</strong></td>
+        <td>
+  <a href="profile.html?id=${person.id}" class="person-name-link" title="عرض الملف الشخصي">
+    <strong>${escapeHtml(getFullName(person) || '-')}</strong>
+  </a>
+</td>
         <td class="ltr-cell">${escapeHtml(person.Mobile || '-')}</td>
         <td class="ltr-cell">${escapeHtml(person.WhatsApp || '-')}</td>
         <td class="ltr-cell">${escapeHtml(person.Email || '-')}</td>
