@@ -591,9 +591,10 @@ window.regenerateLocationQR = async function(locationId) {
   const loc = locationsData.find(l => l.id === locationId);
   if (!loc) return;
 
-  if (!confirm(`⚠️ تحذير: تجديد QR لمكان "${loc.name}"\n\nسيتم إلغاء QR القديم.\nالأفراد اللي عندهم QR قديم مش هيقدروا يسجلوا.\n\nهل أنت متأكد؟`)) {
+  if (!confirm(`⚠️ تحذير: تجديد QR لمكان "${loc.name}"\n\nسيتم إلغاء الـQR القديم نهائيًا، ولن يعمل.\n\nيجب استبدال الـQR المطبوع/المعلّق في المكان بالـQR الجديد بعد التجديد.\n\nهل أنت متأكد؟`)) {
     return;
   }
+  ...
 
   try {
     const newQR = generateLocationQR(locationId);
