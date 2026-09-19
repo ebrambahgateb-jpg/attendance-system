@@ -574,4 +574,25 @@ function formatDateTime(date) {
   try {
     const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
     const h = String(date.getHours()).padStart(2, '0');
-    const m = String(date
+    const m = String(date.getMinutes()).padStart(2, '0');
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()} - ${h}:${m}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ═══════════════════════════════════════════════════════
+//   Expose
+// ═══════════════════════════════════════════════════════
+
+window.loadProfilePage = loadProfilePage;
