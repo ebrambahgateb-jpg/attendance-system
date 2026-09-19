@@ -28,6 +28,8 @@ let maHtml5QrCode = null;
 let maIsScanning = false;
 let maLastScanTime = 0;
 let maUserLocation = null;
+let maAvailableLocations = [];        // كل الأماكن المسجلة في النظام
+let maMatchedLocation = null;          // المكان اللي User داخله
 const MA_SCAN_COOLDOWN = 2000;
 
 // ═══════════════════════════════════════════════════════
@@ -47,6 +49,9 @@ async function loadMyAttendancePage(area) {
     // اجلب الإعدادات
     const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
     maSettings = settingsDoc.exists() ? settingsDoc.data() : {};
+
+    // ⚡ اجلب الأماكن المسجلة
+    maAvailableLocations = Array.isArray(maSettings.Locations) ? maSettings.Locations : [];
 
     // ⚡ اجلب بيانات الشخص المرتبط
     maPerson = null;
@@ -70,7 +75,6 @@ async function loadMyAttendancePage(area) {
         const docSnap = snap.docs[0];
         maPerson = { id: docSnap.id, ...docSnap.data() };
 
-        // احفظ
         maUser.personId = maPerson.id;
         localStorage.setItem('currentUser', JSON.stringify(maUser));
       }
@@ -105,7 +109,6 @@ function renderMyAttendancePage(area) {
   area.innerHTML = '';
   area.appendChild(container);
 
-  // ⚡ لو مفيش شخص مرتبط
   if (!maPerson) {
     container.innerHTML = `
       <div class="ma-empty">
@@ -118,7 +121,6 @@ function renderMyAttendancePage(area) {
     return;
   }
 
-  // ⚡ لو شخص معطل
   const personStatus = String(maPerson.Status || 'active').toLowerCase();
   if (personStatus !== 'active') {
     container.innerHTML = `
@@ -135,7 +137,6 @@ function renderMyAttendancePage(area) {
     maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName
   ].filter(Boolean).join(' ');
 
-  // ⚡ لو مفيش اجتماعات
   if (maMeetings.length === 0) {
     container.innerHTML = `
       <div class="ma-empty">
@@ -148,7 +149,6 @@ function renderMyAttendancePage(area) {
   }
 
   container.innerHTML = `
-    <!-- Header -->
     <div style="text-align:center;margin-bottom:20px;">
       <h2 style="color:var(--text);margin-bottom:6px;">مرحبًا ${escapeHtml(fullName)}</h2>
       <p style="color:var(--text-muted);font-size:14px;">سجّل حضورك بمسح QR النظام</p>
@@ -225,7 +225,9 @@ function setupMyAttendanceEvents() {
         renderMeetingInfo();
         const scanStep = document.getElementById('maScanStep');
         if (scanStep) scanStep.style.display = 'block';
-        updateScanButton();
+
+        // ⚡ أعد فحص الموقع بناءً على الاجتماع المختار
+        checkLocation();
       }
     };
   }
@@ -244,8 +246,6 @@ function renderMeetingInfo() {
   if (!info || !maSelectedMeeting) return;
 
   const type = String(maSelectedMeeting.Type || 'once').toLowerCase();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   let dayText = '';
   if (type === 'weekly') {
@@ -260,6 +260,23 @@ function renderMeetingInfo() {
     ? { class: 'status-open', icon: '🟢', text: 'الحضور مفتوح الآن' }
     : { class: 'status-closed', icon: '🔴', text: 'الحضور مغلق حالياً' };
 
+  // ⚡ معلومات الأماكن المسموحة
+  const locMode = String(maSelectedMeeting.LocationMode || 'any').toLowerCase();
+  let locText = '';
+  let locIcon = '📍';
+
+  if (locMode === 'any') {
+    locText = 'أي مكان مسجل';
+  } else {
+    const ids = Array.isArray(maSelectedMeeting.LocationIds) ? maSelectedMeeting.LocationIds : [];
+    const names = ids.map(id => {
+      const loc = maAvailableLocations.find(l => l.id === id);
+      return loc ? loc.name : null;
+    }).filter(Boolean);
+
+    locText = names.length > 0 ? names.join(' • ') : 'لم يتم تحديد أماكن';
+  }
+
   info.innerHTML = `
     <div class="ma-info-row">
       <span class="icon">${type === 'weekly' ? '🔄' : '📅'}</span>
@@ -268,6 +285,10 @@ function renderMeetingInfo() {
     <div class="ma-info-row">
       <span class="icon">🕐</span>
       <span>${maSelectedMeeting.Time || ''}</span>
+    </div>
+    <div class="ma-info-row">
+      <span class="icon">${locIcon}</span>
+      <span>${escapeHtml(locText)}</span>
     </div>
     <div class="ma-info-row">
       <span class="icon">${timeStatus.icon}</span>
@@ -288,14 +309,17 @@ function checkLocation() {
   const locationEnabled = maSettings.LocationEnabled !== false;
 
   if (!locationEnabled) {
-    statusEl.innerHTML = '<span class="dot valid"></span><span>التحقق من الموقع غير مفعّل</span>';
     statusEl.className = 'ma-location-status valid';
+    statusEl.innerHTML = '<span class="dot"></span><span>التحقق من الموقع غير مفعّل</span>';
+    maMatchedLocation = null;
+    updateScanButton();
     return;
   }
 
   if (!navigator.geolocation) {
-    statusEl.innerHTML = '<span class="dot invalid"></span><span>متصفحك لا يدعم تحديد الموقع</span>';
     statusEl.className = 'ma-location-status invalid';
+    statusEl.innerHTML = '<span class="dot"></span><span>متصفحك لا يدعم تحديد الموقع</span>';
+    updateScanButton();
     return;
   }
 
@@ -314,10 +338,11 @@ function checkLocation() {
 
       if (check.valid) {
         statusEl.className = 'ma-location-status valid';
-        statusEl.innerHTML = `<span class="dot"></span><span>✅ أنت داخل النطاق (${Math.round(check.distance)}م)</span>`;
+        const locName = check.location ? check.location.name : '';
+        statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}</span>`;
       } else {
         statusEl.className = 'ma-location-status invalid';
-        statusEl.innerHTML = `<span class="dot"></span><span>❌ أنت خارج النطاق (${Math.round(check.distance)}م)</span>`;
+        statusEl.innerHTML = `<span class="dot"></span><span>❌ أنت خارج النطاق المسموح</span>`;
       }
 
       updateScanButton();
@@ -333,30 +358,72 @@ function checkLocation() {
   );
 }
 
+// ═══════════════════════════════════════════════════════
+//   Validate Location (Multi-location)
+// ═══════════════════════════════════════════════════════
+
 function validateLocation(loc) {
   const locationEnabled = maSettings.LocationEnabled !== false;
-  if (!locationEnabled) return { valid: true, distance: 0 };
+  if (!locationEnabled) return { valid: true, location: null };
 
-  const targetLat = parseFloat(maSettings.LocationLatitude);
-  const targetLng = parseFloat(maSettings.LocationLongitude);
-
-  if (isNaN(targetLat) || isNaN(targetLng)) {
-    return { valid: true, distance: 0 };
+  if (!maSelectedMeeting) {
+    return { valid: false, location: null, reason: 'no_meeting' };
   }
 
-  const radius = parseFloat(maSettings.LocationRadius) || 4;
-  const tolerance = parseFloat(maSettings.LocationAccuracyTolerance) || 15;
+  // ⚡ اجلب الأماكن المسموحة للاجتماع
+  const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
 
-  const distance = getDistance(loc.lat, loc.lng, targetLat, targetLng);
-  const effectiveDistance = distance - (loc.accuracy || 0);
+  if (allowedLocations.length === 0) {
+    return { valid: false, location: null, reason: 'no_locations' };
+  }
+
+  // ⚡ دوّر على مكان User داخله
+  let bestMatch = null;
+  let bestDistance = Infinity;
+
+  for (const targetLoc of allowedLocations) {
+    const distance = getDistance(loc.lat, loc.lng, targetLoc.lat, targetLoc.lng);
+    const effectiveDistance = distance - (loc.accuracy || 0);
+    const allowed = (targetLoc.radius || 4) + (targetLoc.tolerance || 15);
+
+    if (effectiveDistance <= allowed) {
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestMatch = targetLoc;
+      }
+    }
+  }
+
+  if (bestMatch) {
+    return {
+      valid: true,
+      location: bestMatch,
+      distance: bestDistance
+    };
+  }
 
   return {
-    valid: effectiveDistance <= (radius + tolerance),
-    distance: distance,
-    effectiveDistance: effectiveDistance,
-    target: { lat: targetLat, lng: targetLng },
-    radius: radius + tolerance
+    valid: false,
+    location: null,
+    reason: 'out_of_range'
   };
+}
+
+// ═══ الأماكن المسموحة للاجتماع ═══
+function getAllowedLocationsForMeeting(meeting) {
+  const mode = String(meeting.LocationMode || 'any').toLowerCase();
+
+  if (mode === 'any') {
+    return maAvailableLocations;
+  }
+
+  const ids = Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  return maAvailableLocations.filter(loc => ids.includes(loc.id));
 }
 
 function getDistance(lat1, lon1, lat2, lon2) {
@@ -392,14 +459,24 @@ function updateScanButton() {
   } else if (!isOpen) {
     canScan = false;
     reason = 'الحضور مغلق حالياً';
-  } else if (locationEnabled && !maUserLocation) {
-    canScan = false;
-    reason = 'جاري التحقق من الموقع...';
-  } else if (locationEnabled && maUserLocation) {
-    const check = validateLocation(maUserLocation);
-    if (!check.valid) {
+  } else if (locationEnabled) {
+    if (!maUserLocation) {
       canScan = false;
-      reason = 'أنت خارج نطاق المكان';
+      reason = 'جاري التحقق من الموقع...';
+    } else {
+      const check = validateLocation(maUserLocation);
+
+      if (!check.valid) {
+        canScan = false;
+
+        if (check.reason === 'no_locations') {
+          reason = 'الاجتماع غير مرتبط بأماكن';
+        } else if (check.reason === 'out_of_range') {
+          reason = 'أنت خارج نطاق الأماكن المسموحة';
+        } else {
+          reason = 'الموقع غير صالح';
+        }
+      }
     }
   }
 
@@ -420,12 +497,11 @@ async function openScanner() {
     if (!maUserLocation) { alert('جاري التحقق من الموقع، انتظر قليلاً'); return; }
     const check = validateLocation(maUserLocation);
     if (!check.valid) {
-      alert(`أنت خارج نطاق المكان (${Math.round(check.distance)}م). اقترب من المكان وحاول مرة أخرى.`);
+      alert('أنت خارج نطاق الأماكن المسموحة. اقترب من المكان وحاول مرة أخرى.');
       return;
     }
   }
 
-  // أنشئ واجهة الـScanner
   let scannerView = document.getElementById('maScannerView');
   if (!scannerView) {
     scannerView = document.createElement('div');
@@ -478,7 +554,6 @@ async function onScanSuccess(decodedText) {
   if (now - maLastScanTime < MA_SCAN_COOLDOWN) return;
   maLastScanTime = now;
 
-  // أوقف المسح
   if (maHtml5QrCode && maIsScanning) {
     try { await maHtml5QrCode.pause(true); } catch (e) {}
   }
@@ -486,69 +561,90 @@ async function onScanSuccess(decodedText) {
   await processScan(decodedText);
 }
 
+// ═══════════════════════════════════════════════════════
+//   Process Scan (Checks)
+// ═══════════════════════════════════════════════════════
+
 async function processScan(scannedText) {
   try {
-    // ═══ Check 1: QR صالح؟ ═══
-    const expectedQr = maSettings.SystemQRCode;
-    if (!expectedQr) {
-      return showResult('error', 'خطأ في الإعدادات', 'لم يتم إعداد QR النظام بعد.');
-    }
-
-    if (scannedText !== expectedQr) {
-      return showResult('error', 'QR غير صالح', 'هذا ليس رمز الحضور الرسمي للنظام.');
-    }
-
-    // ═══ Check 2: شخص موجود؟ ═══
+    // ═══ Check 1: شخص موجود؟ ═══
     if (!maPerson) {
       return showResult('error', 'لا يوجد ملف شخصي', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 3: الشخص Active؟ ═══
+    // ═══ Check 2: الشخص Active؟ ═══
     if (String(maPerson.Status || '').toLowerCase() !== 'active') {
       return showResult('error', 'حساب معطل', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 4: الاجتماع؟ ═══
+    // ═══ Check 3: الاجتماع؟ ═══
     if (!maSelectedMeeting) {
       return showResult('error', 'لا يوجد اجتماع', 'اختر اجتماع أولاً.');
     }
 
-    // ═══ Check 5: الموعد صحيح؟ ═══
+    // ═══ Check 4: الموعد صحيح؟ ═══
     const occurrenceDate = getTodayOccurrence(maSelectedMeeting);
     if (!occurrenceDate) {
       return showResult('error', 'لا يوجد موعد اليوم', 'لا يوجد اجتماع مجدول اليوم.');
     }
 
-    // ═══ Check 6: موعد ملغي؟ ═══
+    // ═══ Check 5: موعد ملغي؟ ═══
     const cancelled = maSelectedMeeting.CanceledOccurrences || [];
     if (cancelled.includes(occurrenceDate)) {
       return showResult('error', 'الموعد ملغي', 'تم إلغاء هذا الموعد.');
     }
 
-    // ═══ Check 7: الحضور مفتوح؟ ═══
+    // ═══ Check 6: الحضور مفتوح؟ ═══
     if (!isMeetingOpenNow(maSelectedMeeting)) {
       return showResult('error', 'الحضور مغلق', 'وقت التسجيل انتهى.');
     }
 
-    // ═══ Check 8: مسجّل قبل كده؟ ═══
-    const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedMeeting.id, occurrenceDate);
-    const preventDup = maSettings.PreventDuplicateAttendance !== false;
+    // ═══ Check 7: QR صالح لهذا المكان؟ ═══
+    const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
 
-    if (isDup && preventDup) {
-      return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الاجتماع.');
+    if (allowedLocations.length === 0) {
+      return showResult('error', 'الاجتماع غير مرتبط بأماكن', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 9: الموقع؟ ═══
+    // ═══ Check 8: موقع User الحالي - يدوّر على المكان اللي الـQR بتاعه ═══
+    const scannedLocation = allowedLocations.find(loc => loc.qrCode === scannedText);
+
+    if (!scannedLocation) {
+      return showResult('error', 'QR غير صالح', 'هذا QR ليس من الأماكن المسموحة لهذا الاجتماع.');
+    }
+
+    // ═══ Check 9: موقع User — لازم يكون داخل نطاق المكان اللي مسح QR بتاعه ═══
     const locationEnabled = maSettings.LocationEnabled !== false;
+
     if (locationEnabled) {
       if (!maUserLocation) {
         return showResult('error', 'لم يتم تحديد الموقع', 'اسمح بالوصول للموقع وحاول مرة أخرى.');
       }
 
-      const check = validateLocation(maUserLocation);
-      if (!check.valid) {
-        return showResult('error', 'خارج النطاق', `أنت على بعد ${Math.round(check.distance)} متر من المكان.`);
+      const distance = getDistance(
+        maUserLocation.lat,
+        maUserLocation.lng,
+        scannedLocation.lat,
+        scannedLocation.lng
+      );
+      const effectiveDistance = distance - (maUserLocation.accuracy || 0);
+      const allowed = (scannedLocation.radius || 4) + (scannedLocation.tolerance || 15);
+
+      if (effectiveDistance > allowed) {
+        return showResult(
+          'error',
+          'خارج النطاق',
+          `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.name}".`
+        );
       }
+    }
+
+    // ═══ Check 10: مسجّل قبل كده؟ ═══
+    const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedMeeting.id, occurrenceDate);
+    const preventDup = maSettings.PreventDuplicateAttendance !== false;
+
+    if (isDup && preventDup) {
+      return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الاجتماع.');
     }
 
     // ═══ كل الشروط صحيحة → سجّل ═══
@@ -562,17 +658,19 @@ async function processScan(scannedText) {
       Status: 'present',
       ScannerEmail: maUser.email,
       ScannerName: maUser.name || maUser.email,
-      Method: 'self', // ⚡ جديد: عشان نعرف إنها تسجيل ذاتي
-      Location: maUserLocation ? {
-        lat: maUserLocation.lat,
-        lng: maUserLocation.lng,
-        accuracy: maUserLocation.accuracy
-      } : null,
+      Method: 'self',
+      Location: {
+        id: scannedLocation.id,
+        name: scannedLocation.name,
+        lat: maUserLocation?.lat || null,
+        lng: maUserLocation?.lng || null,
+        accuracy: maUserLocation?.accuracy || null
+      },
       Notes: ''
     });
 
     playSound('success');
-    showResult('success', 'تم تسجيل حضورك', maSelectedMeeting.Title || '');
+    showResult('success', 'تم تسجيل حضورك', `${maSelectedMeeting.Title || ''} — ${scannedLocation.name}`);
 
   } catch (err) {
     console.error('❌ Process scan error:', err);
@@ -622,7 +720,6 @@ function showResult(type, title, message) {
     </div>
   `;
 
-  // لو نجح → اقفل الـScanner بعد 3 ثواني
   if (type === 'success') {
     setTimeout(() => {
       const overlayEl = document.getElementById('maResultOverlay');
