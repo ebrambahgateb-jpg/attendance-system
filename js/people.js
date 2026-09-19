@@ -836,15 +836,14 @@ function renderPersonDetailsModal(modal, person, stats) {
           <div class="pd-info-item"><div class="pd-info-label">البريد</div><div class="pd-info-value ltr">${escapeHtml(person.Email || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">العنوان</div><div class="pd-info-value">${escapeHtml(person.Address || '-')}</div></div>
           <div class="pd-info-item">
-            <div class="pd-info-label">Facebook</div>
-            ${person.Facebook
-              ? `<a href="${escapeHtml(formatFacebookUrl(person.Facebook))}" target="_blank" rel="noopener noreferrer" class="pd-social-link">
-                  <span>🔗</span>
-                  <span>${escapeHtml(getFacebookDisplay(person.Facebook))}</span>
-                </a>`
-              : `<div class="pd-info-value ltr">-</div>`
-            }
-          </div>
+          <div class="pd-info-label">Facebook</div>
+          ${person.Facebook
+          ? `<a href="${escapeHtml(formatFacebookUrl(person.Facebook))}" target="_blank" rel="noopener noreferrer" class="pd-facebook-btn">
+          🔗 فتح الصفحة
+          </a>`
+          : `<div class="pd-info-value ltr">-</div>`
+           }
+       </div>
           <div class="pd-info-item"><div class="pd-info-label">تاريخ الإضافة</div><div class="pd-info-value">${formatDate(person.CreatedAt)}</div></div>
         </div>
       </div>
