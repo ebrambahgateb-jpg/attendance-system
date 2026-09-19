@@ -414,3 +414,153 @@
     font-size: 9px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Location Modes (Meeting Modal)
+   ═══════════════════════════════════════════ */
+
+.location-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.location-mode-option {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.location-mode-option:hover {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.location-mode-option input[type="radio"] {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.location-mode-option input[type="radio"]:checked ~ span {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.location-mode-option > span {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  padding-right: 30px;
+  margin-bottom: 4px;
+}
+
+.location-mode-option > small {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-right: 30px;
+  line-height: 1.5;
+}
+
+.location-mode-option:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.location-picker-box {
+  padding: 14px;
+  background: var(--bg);
+  border-radius: 12px;
+  margin-top: 8px;
+}
+
+.location-picker-box label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.location-picker-box select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.locations-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.location-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--border);
+}
+
+.location-checkbox-item:hover {
+  border-color: var(--primary);
+}
+
+.location-checkbox-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.location-checkbox-item span {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.locations-warning {
+  padding: 14px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  color: #92400e;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .location-mode-option {
+    padding: 10px 12px;
+  }
+
+  .location-mode-option > span {
+    font-size: 14px;
+  }
+
+  .location-mode-option > small {
+    font-size: 11px;
+  }
+}
