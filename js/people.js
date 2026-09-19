@@ -192,9 +192,9 @@ function renderPeopleTable() {
           }
         </td>
         <td><strong>${escapeHtml(getFullName(person) || '-')}</strong></td>
-        <td>${escapeHtml(person.Mobile || '-')}</td>
-        <td>${escapeHtml(person.WhatsApp || '-')}</td>
-        <td>${escapeHtml(person.Email || '-')}</td>
+        <td class="ltr-cell">${escapeHtml(person.Mobile || '-')}</td>
+        <td class="ltr-cell">${escapeHtml(person.WhatsApp || '-')}</td>
+        <td class="ltr-cell">${escapeHtml(person.Email || '-')}</td>
         <td>${gender}</td>
         <td>
           <span class="status-badge ${isActive ? 'active' : 'inactive'}">
