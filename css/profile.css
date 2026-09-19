@@ -1,0 +1,417 @@
+/* ═══════════════════════════════════════════
+   Profile Page Styles
+   ═══════════════════════════════════════════ */
+
+.profile-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* ═══ Header Card ═══ */
+.profile-header-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.profile-photo-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.profile-photo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid var(--primary);
+}
+
+.profile-photo-placeholder {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  font-weight: 700;
+  border: 4px solid var(--border);
+}
+
+.profile-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-header-info h1 {
+  font-size: 26px;
+  color: var(--text);
+  margin: 0 0 6px 0;
+  font-weight: 700;
+}
+
+.profile-header-info p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 4px 0;
+}
+
+.profile-header-info .profile-email {
+  direction: ltr;
+  text-align: right;
+  font-family: 'Segoe UI', monospace;
+}
+
+.profile-header-info .profile-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.profile-status-badge.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.profile-status-badge.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ═══ Stats Grid ═══ */
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.profile-stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.profile-stat-card:hover {
+  border-color: var(--primary);
+}
+
+.profile-stat-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.profile-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.profile-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ═══ Sections ═══ */
+.profile-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.profile-section-title {
+  font-size: 16px;
+  color: var(--text);
+  margin: 0 0 18px 0;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-section-title span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ═══ Info Grid ═══ */
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.profile-info-item {
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-info-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.profile-info-value {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.profile-info-value.ltr {
+  direction: ltr;
+  text-align: right;
+  font-family: 'Segoe UI', monospace;
+}
+
+/* ═══ Buttons ═══ */
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ═══ QR Section ═══ */
+.profile-qr-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+}
+
+.profile-qr-box {
+  padding: 20px;
+  background: #fff;
+  border-radius: 14px;
+  border: 2px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 240px;
+  min-height: 240px;
+}
+
+.profile-qr-box canvas,
+.profile-qr-box img {
+  display: block;
+}
+
+/* ═══ Attendance List ═══ */
+.profile-attendance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-attendance-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.profile-attendance-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.profile-attendance-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-attendance-title {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.profile-attendance-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ═══ Edit Form ═══ */
+.profile-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-edit-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.profile-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-edit-row label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.profile-edit-row input,
+.profile-edit-row select {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.profile-edit-row input:focus,
+.profile-edit-row select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.profile-edit-row input:disabled {
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.profile-edit-row.ltr input {
+  direction: ltr;
+  text-align: right;
+}
+
+/* ═══ Empty State ═══ */
+.profile-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.profile-empty-icon {
+  font-size: 60px;
+  margin-bottom: 12px;
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+
+  .profile-container {
+    padding: 12px;
+  }
+
+  .profile-header-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 22px 18px;
+  }
+
+  .profile-photo,
+  .profile-photo-placeholder {
+    width: 100px;
+    height: 100px;
+    font-size: 40px;
+  }
+
+  .profile-header-info h1 {
+    font-size: 22px;
+  }
+
+  .profile-header-info .profile-email {
+    text-align: center;
+  }
+
+  .profile-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .profile-stat-card {
+    padding: 14px 8px;
+  }
+
+  .profile-stat-icon {
+    font-size: 22px;
+  }
+
+  .profile-stat-value {
+    font-size: 20px;
+  }
+
+  .profile-stat-label {
+    font-size: 10px;
+  }
+
+  .profile-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-edit-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-section {
+    padding: 16px;
+  }
+
+  .profile-section-title {
+    font-size: 15px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-actions {
+    flex-direction: column;
+  }
+
+  .profile-actions button {
+    width: 100%;
+  }
+
+  .profile-qr-box {
+    min-width: 200px;
+    min-height: 200px;
+  }
+}
