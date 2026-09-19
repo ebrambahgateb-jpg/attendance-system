@@ -10,10 +10,10 @@
   <link rel="stylesheet" href="../css/settings.css" />
   <link rel="stylesheet" href="../css/people.css" />
   <link rel="stylesheet" href="../css/meetings.css" />
+  <link rel="stylesheet" href="../css/profile.css" />
 </head>
 <body class="dashboard-body">
 
-  <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-logo">
@@ -22,9 +22,7 @@
       </div>
     </div>
 
-    <nav class="sidebar-nav" id="sidebarNav">
-      <!-- يتولد بـ JS -->
-    </nav>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
 
     <div class="sidebar-footer">
       <div class="user-box">
@@ -38,10 +36,8 @@
     </div>
   </aside>
 
-  <!-- Overlay للـSidebar -->
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <!-- Main -->
   <main class="main-content">
     <header class="topbar">
       <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
@@ -51,19 +47,16 @@
       </div>
     </header>
 
-    <section class="content-area" id="contentArea">
-      <!-- المحتوى يتغير هنا -->
-    </section>
+    <section class="content-area" id="contentArea"></section>
   </main>
 
-  <!-- QRCode Library -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
-  <!-- Firebase SDK + Modules -->
   <script type="module" src="../js/firebase-config.js"></script>
   <script type="module" src="../js/settings.js"></script>
   <script type="module" src="../js/people.js"></script>
   <script type="module" src="../js/meetings.js"></script>
+  <script type="module" src="../js/profile.js"></script>
   <script type="module" src="../js/dashboard.js"></script>
 </body>
 </html>
