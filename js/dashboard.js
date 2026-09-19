@@ -701,16 +701,40 @@ function closeSidebar() {
 }
 
 // ═══ Logout ═══
-window.logout = async function() {
+async function handleLogout() {
+  // ⚡ أول حاجة: امسح الحالة المحلية وروح فورًا
   try {
     localStorage.removeItem('currentUser');
-    try { sessionStorage.clear(); } catch (e) {}
+  } catch (e) {}
+
+  try {
+    sessionStorage.clear();
+  } catch (e) {}
+
+  // ⚡ روح لصفحة الدخول فورًا
+  window.location.href = '../index.html';
+
+  // ⚡ بعدها جرّب signOut من Firebase (مش هيأثر على الانتقال)
+  try {
     await signOut(auth);
   } catch (err) {
-    console.error('Logout error:', err);
+    console.warn('SignOut error (non-blocking):', err);
   }
-  window.location.href = '../index.html';
-};
+}
+
+window.logout = handleLogout;
+
+// ⚡ كمان اربط الزرار مباشرة لو موجود
+document.addEventListener('DOMContentLoaded', () => {
+  const logoutBtn = document.querySelector('.logout-btn');
+  if (logoutBtn && !logoutBtn._bound) {
+    logoutBtn._bound = true;
+    logoutBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      handleLogout();
+    });
+  }
+});
 
 // ═══ Expose to window ═══
 window.toggleSidebar = toggleSidebar;
