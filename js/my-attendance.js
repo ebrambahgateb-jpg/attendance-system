@@ -28,9 +28,13 @@ let maHtml5QrCode = null;
 let maIsScanning = false;
 let maLastScanTime = 0;
 let maUserLocation = null;
-let maAvailableLocations = [];        // كل الأماكن المسجلة في النظام
-let maMatchedLocation = null;          // المكان اللي User داخله
+let maAvailableLocations = [];
+let maMatchedLocation = null;
+
+// ═══ Constants ═══
 const MA_SCAN_COOLDOWN = 2000;
+const MA_MAX_ACCURACY = 15;          // ⚡ أقصى دقة GPS مقبولة (بالمتر)
+const MA_STRICT_RADIUS = true;        // ⚡ وضع صارم: نستخدم Radius فقط بدون Tolerance
 
 // ═══════════════════════════════════════════════════════
 //   Load Page
@@ -46,14 +50,11 @@ async function loadMyAttendancePage(area) {
       return;
     }
 
-    // اجلب الإعدادات
     const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
     maSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ اجلب الأماكن المسجلة
     maAvailableLocations = Array.isArray(maSettings.Locations) ? maSettings.Locations : [];
 
-    // ⚡ اجلب بيانات الشخص المرتبط
     maPerson = null;
     const personId = maUser.personId || maUser.account?.PersonID;
 
@@ -64,7 +65,6 @@ async function loadMyAttendancePage(area) {
       }
     }
 
-    // لو مش موجود، دوّر بالبريد
     if (!maPerson && maUser.email) {
       const q = query(
         collection(db, COLLECTIONS.PEOPLE),
@@ -80,7 +80,6 @@ async function loadMyAttendancePage(area) {
       }
     }
 
-    // اجلب الاجتماعات
     const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
     maMeetings = meetingsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -154,7 +153,6 @@ function renderMyAttendancePage(area) {
       <p style="color:var(--text-muted);font-size:14px;">سجّل حضورك بمسح QR النظام</p>
     </div>
 
-    <!-- Step 1: Choose Meeting -->
     <div class="ma-step">
       <div class="ma-step-title">
         <span class="step-num">1</span>
@@ -173,7 +171,6 @@ function renderMyAttendancePage(area) {
       <div id="maMeetingInfo" class="ma-meeting-info" style="display:none;"></div>
     </div>
 
-    <!-- Step 2: Scan QR -->
     <div class="ma-step" id="maScanStep" style="display:none;">
       <div class="ma-step-title">
         <span class="step-num">2</span>
@@ -226,7 +223,6 @@ function setupMyAttendanceEvents() {
         const scanStep = document.getElementById('maScanStep');
         if (scanStep) scanStep.style.display = 'block';
 
-        // ⚡ أعد فحص الموقع بناءً على الاجتماع المختار
         checkLocation();
       }
     };
@@ -260,10 +256,8 @@ function renderMeetingInfo() {
     ? { class: 'status-open', icon: '🟢', text: 'الحضور مفتوح الآن' }
     : { class: 'status-closed', icon: '🔴', text: 'الحضور مغلق حالياً' };
 
-  // ⚡ معلومات الأماكن المسموحة
   const locMode = String(maSelectedMeeting.LocationMode || 'any').toLowerCase();
   let locText = '';
-  let locIcon = '📍';
 
   if (locMode === 'any') {
     locText = 'أي مكان مسجل';
@@ -287,7 +281,7 @@ function renderMeetingInfo() {
       <span>${maSelectedMeeting.Time || ''}</span>
     </div>
     <div class="ma-info-row">
-      <span class="icon">${locIcon}</span>
+      <span class="icon">📍</span>
       <span>${escapeHtml(locText)}</span>
     </div>
     <div class="ma-info-row">
@@ -299,7 +293,7 @@ function renderMeetingInfo() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Location
+//   Location Check
 // ═══════════════════════════════════════════════════════
 
 function checkLocation() {
@@ -334,12 +328,21 @@ function checkLocation() {
         accuracy: pos.coords.accuracy
       };
 
+      // ⚡ فحص دقة GPS أولاً
+      if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
+        statusEl.className = 'ma-location-status invalid';
+        statusEl.innerHTML = `<span class="dot"></span><span>⚠️ دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)}م). اقترب من المكان.</span>`;
+        updateScanButton();
+        return;
+      }
+
       const check = validateLocation(maUserLocation);
 
       if (check.valid) {
         statusEl.className = 'ma-location-status valid';
         const locName = check.location ? check.location.name : '';
-        statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}</span>`;
+        const distStr = check.distance ? ` (${Math.round(check.distance)}م)` : '';
+        statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}${distStr}</span>`;
       } else {
         statusEl.className = 'ma-location-status invalid';
         statusEl.innerHTML = `<span class="dot"></span><span>❌ أنت خارج النطاق المسموح</span>`;
@@ -354,12 +357,12 @@ function checkLocation() {
       statusEl.innerHTML = `<span class="dot"></span><span>❌ ${msg}</span>`;
       updateScanButton();
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
 // ═══════════════════════════════════════════════════════
-//   Validate Location (Multi-location)
+//   Validate Location (Strict)
 // ═══════════════════════════════════════════════════════
 
 function validateLocation(loc) {
@@ -370,23 +373,31 @@ function validateLocation(loc) {
     return { valid: false, location: null, reason: 'no_meeting' };
   }
 
-  // ⚡ اجلب الأماكن المسموحة للاجتماع
+  // ⚡ رفض لو دقة GPS ضعيفة
+  if ((loc.accuracy || 0) > MA_MAX_ACCURACY) {
+    return { valid: false, location: null, reason: 'low_accuracy' };
+  }
+
   const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
 
   if (allowedLocations.length === 0) {
     return { valid: false, location: null, reason: 'no_locations' };
   }
 
-  // ⚡ دوّر على مكان User داخله
+  // ⚡ دوّر على مكان User داخله — بالمسافة الفعلية بدون Tolerance
   let bestMatch = null;
   let bestDistance = Infinity;
 
   for (const targetLoc of allowedLocations) {
     const distance = getDistance(loc.lat, loc.lng, targetLoc.lat, targetLoc.lng);
-    const effectiveDistance = distance - (loc.accuracy || 0);
-    const allowed = (targetLoc.radius || 4) + (targetLoc.tolerance || 15);
 
-    if (effectiveDistance <= allowed) {
+    // ⚡ في الوضع الصارم: نستخدم Radius فقط (بدون Tolerance)
+    // لو MA_STRICT_RADIUS = false → نستخدم Radius + Tolerance
+    const allowed = MA_STRICT_RADIUS
+      ? (targetLoc.radius || 4)
+      : ((targetLoc.radius || 4) + (targetLoc.tolerance || 15));
+
+    if (distance <= allowed) {
       if (distance < bestDistance) {
         bestDistance = distance;
         bestMatch = targetLoc;
@@ -409,7 +420,6 @@ function validateLocation(loc) {
   };
 }
 
-// ═══ الأماكن المسموحة للاجتماع ═══
 function getAllowedLocationsForMeeting(meeting) {
   const mode = String(meeting.LocationMode || 'any').toLowerCase();
 
@@ -463,6 +473,9 @@ function updateScanButton() {
     if (!maUserLocation) {
       canScan = false;
       reason = 'جاري التحقق من الموقع...';
+    } else if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
+      canScan = false;
+      reason = `دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)}م)`;
     } else {
       const check = validateLocation(maUserLocation);
 
@@ -471,8 +484,10 @@ function updateScanButton() {
 
         if (check.reason === 'no_locations') {
           reason = 'الاجتماع غير مرتبط بأماكن';
+        } else if (check.reason === 'low_accuracy') {
+          reason = `دقة GPS ضعيفة`;
         } else if (check.reason === 'out_of_range') {
-          reason = 'أنت خارج نطاق الأماكن المسموحة';
+          reason = 'أنت خارج نطاق الأماكن';
         } else {
           reason = 'الموقع غير صالح';
         }
@@ -495,6 +510,12 @@ async function openScanner() {
   const locationEnabled = maSettings.LocationEnabled !== false;
   if (locationEnabled) {
     if (!maUserLocation) { alert('جاري التحقق من الموقع، انتظر قليلاً'); return; }
+
+    if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
+      alert(`دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)} متر). اقترب من المكان وحاول مرة أخرى.`);
+      return;
+    }
+
     const check = validateLocation(maUserLocation);
     if (!check.valid) {
       alert('أنت خارج نطاق الأماكن المسموحة. اقترب من المكان وحاول مرة أخرى.');
@@ -562,63 +583,63 @@ async function onScanSuccess(decodedText) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Process Scan (Checks)
+//   Process Scan
 // ═══════════════════════════════════════════════════════
 
 async function processScan(scannedText) {
   try {
-    // ═══ Check 1: شخص موجود؟ ═══
     if (!maPerson) {
       return showResult('error', 'لا يوجد ملف شخصي', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 2: الشخص Active؟ ═══
     if (String(maPerson.Status || '').toLowerCase() !== 'active') {
       return showResult('error', 'حساب معطل', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 3: الاجتماع؟ ═══
     if (!maSelectedMeeting) {
       return showResult('error', 'لا يوجد اجتماع', 'اختر اجتماع أولاً.');
     }
 
-    // ═══ Check 4: الموعد صحيح؟ ═══
     const occurrenceDate = getTodayOccurrence(maSelectedMeeting);
     if (!occurrenceDate) {
       return showResult('error', 'لا يوجد موعد اليوم', 'لا يوجد اجتماع مجدول اليوم.');
     }
 
-    // ═══ Check 5: موعد ملغي؟ ═══
     const cancelled = maSelectedMeeting.CanceledOccurrences || [];
     if (cancelled.includes(occurrenceDate)) {
       return showResult('error', 'الموعد ملغي', 'تم إلغاء هذا الموعد.');
     }
 
-    // ═══ Check 6: الحضور مفتوح؟ ═══
     if (!isMeetingOpenNow(maSelectedMeeting)) {
       return showResult('error', 'الحضور مغلق', 'وقت التسجيل انتهى.');
     }
 
-    // ═══ Check 7: QR صالح لهذا المكان؟ ═══
     const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
 
     if (allowedLocations.length === 0) {
       return showResult('error', 'الاجتماع غير مرتبط بأماكن', 'تواصل مع المسؤول.');
     }
 
-    // ═══ Check 8: موقع User الحالي - يدوّر على المكان اللي الـQR بتاعه ═══
     const scannedLocation = allowedLocations.find(loc => loc.qrCode === scannedText);
 
     if (!scannedLocation) {
       return showResult('error', 'QR غير صالح', 'هذا QR ليس من الأماكن المسموحة لهذا الاجتماع.');
     }
 
-    // ═══ Check 9: موقع User — لازم يكون داخل نطاق المكان اللي مسح QR بتاعه ═══
+    // ═══ الموقع ═══
     const locationEnabled = maSettings.LocationEnabled !== false;
 
     if (locationEnabled) {
       if (!maUserLocation) {
         return showResult('error', 'لم يتم تحديد الموقع', 'اسمح بالوصول للموقع وحاول مرة أخرى.');
+      }
+
+      if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
+        return showResult(
+          'error',
+          'دقة GPS ضعيفة',
+          `دقة الموقع ${Math.round(maUserLocation.accuracy)} متر. اقترب من المكان.`
+        );
       }
 
       const distance = getDistance(
@@ -627,19 +648,22 @@ async function processScan(scannedText) {
         scannedLocation.lat,
         scannedLocation.lng
       );
-      const effectiveDistance = distance - (maUserLocation.accuracy || 0);
-      const allowed = (scannedLocation.radius || 4) + (scannedLocation.tolerance || 15);
 
-      if (effectiveDistance > allowed) {
+      // ⚡ نطاق صارم: 4 متر (أو Radius + Tolerance لو الوضع مش صارم)
+      const allowed = MA_STRICT_RADIUS
+        ? (scannedLocation.radius || 4)
+        : ((scannedLocation.radius || 4) + (scannedLocation.tolerance || 15));
+
+      if (distance > allowed) {
         return showResult(
           'error',
           'خارج النطاق',
-          `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.name}".`
+          `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.name}". النطاق المسموح ${allowed} متر.`
         );
       }
     }
 
-    // ═══ Check 10: مسجّل قبل كده؟ ═══
+    // ═══ منع التكرار ═══
     const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedMeeting.id, occurrenceDate);
     const preventDup = maSettings.PreventDuplicateAttendance !== false;
 
@@ -647,7 +671,7 @@ async function processScan(scannedText) {
       return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الاجتماع.');
     }
 
-    // ═══ كل الشروط صحيحة → سجّل ═══
+    // ═══ التسجيل ═══
     await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
       PersonID: maPerson.id,
       PersonName: [maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName].filter(Boolean).join(' '),
