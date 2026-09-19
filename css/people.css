@@ -605,3 +605,24 @@
   font-family: 'Segoe UI', 'Tahoma', monospace;
   letter-spacing: 0.3px;
 }
+
+/* ═══════════════════════════════════════════
+   Person Name Link
+   ═══════════════════════════════════════════ */
+
+.person-name-link {
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.person-name-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.person-name-link strong {
+  font-weight: 700;
+}
