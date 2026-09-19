@@ -22,6 +22,49 @@ let filteredPeople = [];
 let currentEditId = null;
 
 // ═══════════════════════════════════════════════════════
+//   Helpers
+// ═══════════════════════════════════════════════════════
+
+function getFullName(person) {
+  return [
+    person.FirstName,
+    person.SecondName,
+    person.ThirdName,
+    person.FourthName
+  ].filter(Boolean).join(' ');
+}
+
+function getShortName(person) {
+  return [person.FirstName, person.SecondName].filter(Boolean).join(' ');
+}
+
+function getInitial(person) {
+  return (person.FirstName || '?').charAt(0);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //   Load People Page
 // ═══════════════════════════════════════════════════════
 
@@ -31,8 +74,13 @@ async function loadPeoplePage(area) {
   try {
     const snap = await getDocs(collection(db, COLLECTIONS.PEOPLE));
     peopleData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    filteredPeople = [...peopleData];
 
+    // ترتيب حسب الاسم
+    peopleData.sort((a, b) =>
+      getFullName(a).localeCompare(getFullName(b), 'ar')
+    );
+
+    filteredPeople = [...peopleData];
     renderPeoplePage(area);
   } catch (err) {
     console.error('❌ Load people error:', err);
@@ -54,7 +102,7 @@ function renderPeoplePage(area) {
 
       <div class="people-header">
         <div class="people-search">
-          <input type="text" id="peopleSearchInput" placeholder="🔍 ابحث بالاسم، الهاتف، أو البريد..." />
+          <input type="text" id="peopleSearchInput" placeholder="🔍 ابحث بالاسم، الموبايل، أو البريد..." />
         </div>
         <button class="btn-primary" onclick="openPersonModal()">
           ➕ إضافة شخص
@@ -67,7 +115,7 @@ function renderPeoplePage(area) {
           <span class="people-stat-label">إجمالي</span>
         </div>
         <div class="people-stat">
-          <span class="people-stat-value">${peopleData.filter(p => String(p.Status || '').toLowerCase() === 'active').length}</span>
+          <span class="people-stat-value">${peopleData.filter(p => String(p.Status || 'active').toLowerCase() === 'active').length}</span>
           <span class="people-stat-label">نشط</span>
         </div>
         <div class="people-stat">
@@ -82,8 +130,10 @@ function renderPeoplePage(area) {
             <tr>
               <th>الصورة</th>
               <th>الاسم</th>
-              <th>الهاتف</th>
+              <th>الموبايل</th>
+              <th>واتساب</th>
               <th>البريد</th>
+              <th>النوع</th>
               <th>الحالة</th>
               <th>QR</th>
               <th>إجراءات</th>
@@ -131,18 +181,21 @@ function renderPeopleTable() {
   tbody.innerHTML = filteredPeople.map(person => {
     const status = String(person.Status || 'active').toLowerCase();
     const isActive = status === 'active';
+    const gender = person.Gender === 'female' ? 'أنثى' : (person.Gender === 'male' ? 'ذكر' : '-');
 
     return `
       <tr>
         <td>
           ${person.PhotoURL
             ? `<img src="${person.PhotoURL}" alt="" class="person-avatar" />`
-            : `<div class="person-avatar-placeholder">${(person.Name || '?').charAt(0)}</div>`
+            : `<div class="person-avatar-placeholder">${escapeHtml(getInitial(person))}</div>`
           }
         </td>
-        <td><strong>${escapeHtml(person.Name || '-')}</strong></td>
-        <td>${escapeHtml(person.Phone || '-')}</td>
+        <td><strong>${escapeHtml(getFullName(person) || '-')}</strong></td>
+        <td>${escapeHtml(person.Mobile || '-')}</td>
+        <td>${escapeHtml(person.WhatsApp || '-')}</td>
         <td>${escapeHtml(person.Email || '-')}</td>
+        <td>${gender}</td>
         <td>
           <span class="status-badge ${isActive ? 'active' : 'inactive'}">
             ${isActive ? '✅ نشط' : '⛔ معطل'}
@@ -179,11 +232,13 @@ function setupPeopleEvents() {
       if (!term) {
         filteredPeople = [...peopleData];
       } else {
-        filteredPeople = peopleData.filter(p =>
-          String(p.Name || '').toLowerCase().includes(term) ||
-          String(p.Phone || '').toLowerCase().includes(term) ||
-          String(p.Email || '').toLowerCase().includes(term)
-        );
+        filteredPeople = peopleData.filter(p => {
+          const fullName = getFullName(p).toLowerCase();
+          return fullName.includes(term) ||
+            String(p.Mobile || '').includes(term) ||
+            String(p.WhatsApp || '').includes(term) ||
+            String(p.Email || '').toLowerCase().includes(term);
+        });
       }
 
       renderPeopleTable();
@@ -208,38 +263,105 @@ function openPersonModal(personId) {
     document.body.appendChild(modal);
   }
 
+  const p = person || {};
+
   modal.innerHTML = `
-    <div class="modal-content">
+    <div class="modal-content modal-large">
       <div class="modal-header">
-        <h2>${isEdit ? '✏️ تعديل شخص' : '➕ إضافة شخص جديد'}</h2>
+        <h2>${isEdit ? '✏️ تعديل بيانات شخص' : '➕ إضافة شخص جديد'}</h2>
         <button class="modal-close" onclick="closePersonModal()">✕</button>
       </div>
 
       <div class="modal-body">
-        <div class="form-row">
-          <label>الاسم *</label>
-          <input type="text" id="personName" value="${person ? escapeHtml(person.Name || '') : ''}" placeholder="الاسم الكامل" />
+
+        <!-- الأسماء -->
+        <div class="modal-section">
+          <h4 class="modal-section-title">الاسم</h4>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label>الاسم الأول *</label>
+              <input type="text" id="p_FirstName" value="${escapeHtml(p.FirstName || '')}" placeholder="محمد" />
+            </div>
+            <div class="form-row">
+              <label>الاسم الثاني *</label>
+              <input type="text" id="p_SecondName" value="${escapeHtml(p.SecondName || '')}" placeholder="أحمد" />
+            </div>
+            <div class="form-row">
+              <label>الاسم الثالث</label>
+              <input type="text" id="p_ThirdName" value="${escapeHtml(p.ThirdName || '')}" placeholder="إبراهيم" />
+            </div>
+            <div class="form-row">
+              <label>الاسم الرابع</label>
+              <input type="text" id="p_FourthName" value="${escapeHtml(p.FourthName || '')}" placeholder="عبد الله" />
+            </div>
+          </div>
         </div>
 
-        <div class="form-row">
-          <label>الهاتف</label>
-          <input type="tel" id="personPhone" value="${person ? escapeHtml(person.Phone || '') : ''}" placeholder="01xxxxxxxxx" />
+        <!-- معلومات شخصية -->
+        <div class="modal-section">
+          <h4 class="modal-section-title">معلومات شخصية</h4>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label>تاريخ الميلاد</label>
+              <input type="date" id="p_BirthDate" value="${p.BirthDate || ''}" />
+            </div>
+            <div class="form-row">
+              <label>النوع</label>
+              <select id="p_Gender">
+                <option value="">-- اختر --</option>
+                <option value="male" ${p.Gender === 'male' ? 'selected' : ''}>ذكر</option>
+                <option value="female" ${p.Gender === 'female' ? 'selected' : ''}>أنثى</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>العنوان</label>
+            <input type="text" id="p_Address" value="${escapeHtml(p.Address || '')}" placeholder="أسيوط - شارع الجمهورية" />
+          </div>
         </div>
 
-        <div class="form-row">
-          <label>البريد الإلكتروني</label>
-          <input type="email" id="personEmail" value="${person ? escapeHtml(person.Email || '') : ''}" placeholder="name@example.com" />
+        <!-- معلومات تواصل -->
+        <div class="modal-section">
+          <h4 class="modal-section-title">معلومات التواصل</h4>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label>رقم الموبايل *</label>
+              <input type="tel" id="p_Mobile" value="${escapeHtml(p.Mobile || '')}" placeholder="01xxxxxxxxx" />
+            </div>
+            <div class="form-row">
+              <label>رقم واتساب</label>
+              <input type="tel" id="p_WhatsApp" value="${escapeHtml(p.WhatsApp || '')}" placeholder="01xxxxxxxxx" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label>البريد الإلكتروني</label>
+            <input type="email" id="p_Email" value="${escapeHtml(p.Email || '')}" placeholder="name@example.com" />
+            <p class="hint">البريد مهم — هو اللي بيتم الربط بحساب Google</p>
+          </div>
+          <div class="form-row">
+            <label>Facebook</label>
+            <input type="text" id="p_Facebook" value="${escapeHtml(p.Facebook || '')}" placeholder="facebook.com/username أو username" />
+          </div>
         </div>
 
-        <div class="form-row">
-          <label>رابط الصورة (اختياري)</label>
-          <input type="text" id="personPhotoURL" value="${person ? escapeHtml(person.PhotoURL || '') : ''}" placeholder="https://..." />
+        <!-- الصورة والحالة -->
+        <div class="modal-section">
+          <h4 class="modal-section-title">الصورة والحالة</h4>
+          <div class="form-row">
+            <label>رابط الصورة</label>
+            <input type="text" id="p_PhotoURL" value="${escapeHtml(p.PhotoURL || '')}" placeholder="https://..." />
+          </div>
+
+          <div id="photoPreviewBox" class="photo-preview-box" style="${p.PhotoURL ? '' : 'display:none;'}">
+            <img id="photoPreviewImg" src="${p.PhotoURL || ''}" alt="" />
+          </div>
+
+          <div class="form-row checkbox-row">
+            <input type="checkbox" id="p_Active" ${!person || String(p.Status || 'active').toLowerCase() === 'active' ? 'checked' : ''} />
+            <label for="p_Active">حساب نشط</label>
+          </div>
         </div>
 
-        <div class="form-row checkbox-row">
-          <input type="checkbox" id="personActive" ${!person || String(person.Status || 'active').toLowerCase() === 'active' ? 'checked' : ''} />
-          <label for="personActive">حساب نشط</label>
-        </div>
       </div>
 
       <div class="modal-footer">
@@ -251,9 +373,25 @@ function openPersonModal(personId) {
 
   modal.style.display = 'flex';
 
+  // Preview للصورة
+  const photoInput = document.getElementById('p_PhotoURL');
+  if (photoInput) {
+    photoInput.addEventListener('input', (e) => {
+      const url = e.target.value.trim();
+      const box = document.getElementById('photoPreviewBox');
+      const img = document.getElementById('photoPreviewImg');
+      if (url && box && img) {
+        img.src = url;
+        box.style.display = 'block';
+      } else if (box) {
+        box.style.display = 'none';
+      }
+    });
+  }
+
   setTimeout(() => {
-    const nameInput = document.getElementById('personName');
-    if (nameInput) nameInput.focus();
+    const el = document.getElementById('p_FirstName');
+    if (el) el.focus();
   }, 100);
 }
 
@@ -268,46 +406,54 @@ function closePersonModal() {
 // ═══════════════════════════════════════════════════════
 
 async function savePerson() {
-  const name = document.getElementById('personName')?.value.trim();
-  const phone = document.getElementById('personPhone')?.value.trim() || '';
-  const email = document.getElementById('personEmail')?.value.trim() || '';
-  const photoURL = document.getElementById('personPhotoURL')?.value.trim() || '';
-  const isActive = document.getElementById('personActive')?.checked;
+  const firstName = document.getElementById('p_FirstName')?.value.trim();
+  const secondName = document.getElementById('p_SecondName')?.value.trim();
+  const thirdName = document.getElementById('p_ThirdName')?.value.trim() || '';
+  const fourthName = document.getElementById('p_FourthName')?.value.trim() || '';
+  const birthDate = document.getElementById('p_BirthDate')?.value || '';
+  const gender = document.getElementById('p_Gender')?.value || '';
+  const address = document.getElementById('p_Address')?.value.trim() || '';
+  const mobile = document.getElementById('p_Mobile')?.value.trim();
+  const whatsapp = document.getElementById('p_WhatsApp')?.value.trim() || '';
+  const email = document.getElementById('p_Email')?.value.trim() || '';
+  const facebook = document.getElementById('p_Facebook')?.value.trim() || '';
+  const photoURL = document.getElementById('p_PhotoURL')?.value.trim() || '';
+  const isActive = document.getElementById('p_Active')?.checked;
 
-  if (!name) {
-    alert('الاسم مطلوب');
-    return;
-  }
+  // Validation
+  if (!firstName) { alert('الاسم الأول مطلوب'); return; }
+  if (!secondName) { alert('الاسم الثاني مطلوب'); return; }
+  if (!mobile) { alert('رقم الموبايل مطلوب'); return; }
 
   const status = isActive ? 'active' : 'inactive';
+
+  const personData = {
+    FirstName: firstName,
+    SecondName: secondName,
+    ThirdName: thirdName,
+    FourthName: fourthName,
+    BirthDate: birthDate,
+    Gender: gender,
+    Address: address,
+    Mobile: mobile,
+    WhatsApp: whatsapp,
+    Email: email,
+    Facebook: facebook,
+    PhotoURL: photoURL,
+    Status: status,
+    UpdatedAt: new Date().toISOString()
+  };
 
   try {
     if (currentEditId) {
       const personRef = doc(db, COLLECTIONS.PEOPLE, currentEditId);
-      await updateDoc(personRef, {
-        Name: name,
-        Phone: phone,
-        Email: email,
-        PhotoURL: photoURL,
-        Status: status,
-        UpdatedAt: new Date().toISOString()
-      });
-
+      await updateDoc(personRef, personData);
       alert('✅ تم التعديل بنجاح');
     } else {
-      const personData = {
-        Name: name,
-        Phone: phone,
-        Email: email,
-        PhotoURL: photoURL,
-        QRCode: '',
-        Status: status,
-        CreatedAt: new Date().toISOString(),
-        ExtraData: ''
-      };
+      personData.QRCode = '';
+      personData.CreatedAt = new Date().toISOString();
 
       await addDoc(collection(db, COLLECTIONS.PEOPLE), personData);
-
       alert('✅ تمت الإضافة بنجاح');
     }
 
@@ -315,7 +461,6 @@ async function savePerson() {
 
     const area = document.getElementById('contentArea');
     await loadPeoplePage(area);
-
   } catch (err) {
     console.error('❌ Save person error:', err);
     alert('خطأ: ' + err.message);
@@ -337,9 +482,11 @@ async function togglePersonStatus(personId) {
   const currentStatus = String(person.Status || 'active').toLowerCase();
   const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
 
+  const fullName = getFullName(person);
+
   const confirmMsg = newStatus === 'inactive'
-    ? `هل تريد تعطيل "${person.Name}"؟`
-    : `هل تريد تفعيل "${person.Name}"؟`;
+    ? `هل تريد تعطيل "${fullName}"؟`
+    : `هل تريد تفعيل "${fullName}"؟`;
 
   if (!confirm(confirmMsg)) return;
 
@@ -352,7 +499,6 @@ async function togglePersonStatus(personId) {
 
     person.Status = newStatus;
     renderPeopleTable();
-
   } catch (err) {
     console.error('❌ Toggle status error:', err);
     alert('خطأ: ' + err.message);
@@ -363,18 +509,18 @@ async function confirmDeletePerson(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
 
-  if (!confirm(`⚠️ هل أنت متأكد من حذف "${person.Name}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) {
+  const fullName = getFullName(person);
+
+  if (!confirm(`⚠️ هل أنت متأكد من حذف "${fullName}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) {
     return;
   }
 
   try {
     await deleteDoc(doc(db, COLLECTIONS.PEOPLE, personId));
-
     alert('✅ تم الحذف بنجاح');
 
     const area = document.getElementById('contentArea');
     await loadPeoplePage(area);
-
   } catch (err) {
     console.error('❌ Delete person error:', err);
     alert('خطأ: ' + err.message);
@@ -399,10 +545,8 @@ async function generateQR(personId) {
     });
 
     person.QRCode = qrValue;
-
     alert('✅ تم إنشاء QR بنجاح');
     viewQR(personId);
-
   } catch (err) {
     console.error('❌ Generate QR error:', err);
     alert('خطأ: ' + err.message);
@@ -412,6 +556,8 @@ async function generateQR(personId) {
 function viewQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person || !person.QRCode) return;
+
+  const fullName = getFullName(person);
 
   let modal = document.getElementById('qrModal');
   if (!modal) {
@@ -424,18 +570,19 @@ function viewQR(personId) {
   modal.innerHTML = `
     <div class="modal-content qr-modal-content">
       <div class="modal-header">
-        <h2>📱 QR - ${escapeHtml(person.Name)}</h2>
+        <h2>📱 QR - ${escapeHtml(fullName)}</h2>
         <button class="modal-close" onclick="closeQRModal()">✕</button>
       </div>
 
       <div class="modal-body qr-body">
         <div id="qrCodeContainer" class="qr-container"></div>
-        <p class="qr-person-name">${escapeHtml(person.Name)}</p>
+        <p class="qr-person-name">${escapeHtml(fullName)}</p>
         <p class="qr-person-id">ID: ${person.id}</p>
       </div>
 
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeQRModal()">إغلاق</button>
+        <button class="btn-secondary" onclick="downloadQR('${person.id}')">💾 تحميل كصورة</button>
         <button class="btn-primary" onclick="printQR('${person.id}')">🖨️ طباعة</button>
       </div>
     </div>
@@ -469,6 +616,36 @@ function closeQRModal() {
   if (modal) modal.style.display = 'none';
 }
 
+function downloadQR(personId) {
+  const person = peopleData.find(p => p.id === personId);
+  if (!person) return;
+
+  const container = document.getElementById('qrCodeContainer');
+  if (!container) return;
+
+  const canvas = container.querySelector('canvas');
+  const img = container.querySelector('img');
+
+  let dataUrl = null;
+
+  if (canvas) {
+    dataUrl = canvas.toDataURL('image/png');
+  } else if (img && img.src) {
+    dataUrl = img.src;
+  }
+
+  if (!dataUrl) {
+    alert('لا يمكن تحميل الصورة');
+    return;
+  }
+
+  const fullName = getFullName(person).replace(/\s+/g, '_');
+  const link = document.createElement('a');
+  link.download = `QR_${fullName}.png`;
+  link.href = dataUrl;
+  link.click();
+}
+
 function printQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
@@ -476,11 +653,13 @@ function printQR(personId) {
   const qrContainer = document.getElementById('qrCodeContainer');
   if (!qrContainer) return;
 
+  const fullName = getFullName(person);
+
   const printWindow = window.open('', '_blank');
   printWindow.document.write(`
     <html dir="rtl">
       <head>
-        <title>QR - ${person.Name}</title>
+        <title>QR - ${fullName}</title>
         <style>
           body { font-family: Arial; text-align: center; padding: 40px; }
           h2 { margin-bottom: 20px; }
@@ -488,7 +667,7 @@ function printQR(personId) {
         </style>
       </head>
       <body>
-        <h2>${person.Name}</h2>
+        <h2>${fullName}</h2>
         <div class="qr-box">${qrContainer.innerHTML}</div>
         <p style="margin-top:20px;color:#666;">ID: ${person.id}</p>
       </body>
@@ -496,20 +675,6 @@ function printQR(personId) {
   `);
   printWindow.document.close();
   setTimeout(() => printWindow.print(), 500);
-}
-
-// ═══════════════════════════════════════════════════════
-//   Helpers
-// ═══════════════════════════════════════════════════════
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -526,4 +691,7 @@ window.confirmDeletePerson = confirmDeletePerson;
 window.generateQR = generateQR;
 window.viewQR = viewQR;
 window.closeQRModal = closeQRModal;
+window.downloadQR = downloadQR;
 window.printQR = printQR;
+window.getFullName = getFullName;
+window.getShortName = getShortName;
