@@ -674,28 +674,47 @@
 }
 
 /* ═══════════════════════════════════════════
-   Facebook Button (Modal)
+   Facebook Button
    ═══════════════════════════════════════════ */
 
 .pd-facebook-btn {
-  display: block;
-  width: 100%;
-  padding: 10px 16px;
-  background: #1877f2;
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #1877f2;
   color: #ffffff !important;
   border-radius: 10px;
   text-decoration: none !important;
   font-size: 14px;
   font-weight: 700;
   text-align: center;
-  transition: all 0.2s;
+  transition: background-color 0.2s;
   margin-top: 8px;
   border: none;
   cursor: pointer;
   font-family: inherit;
-  box-sizing: border-box;
+  line-height: 1.4;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
+.pd-facebook-btn:hover,
+.pd-facebook-btn:active,
+.pd-facebook-btn:focus {
+  background-color: #166fe5;
+  color: #ffffff !important;
+  text-decoration: none !important;
+}
+
+/* الموبايل - عرض كامل */
+@media (max-width: 768px) {
+  .pd-facebook-btn {
+    display: block;
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 15px;
+    text-align: center;
+  }
+}
 .pd-facebook-btn:hover,
 .pd-facebook-btn:active,
 .pd-facebook-btn:focus {
