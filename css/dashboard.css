@@ -816,3 +816,25 @@ body.dashboard-body {
     text-align: center;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Logout Button - Mobile
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .logout-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .logout-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .sidebar-footer {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+}
