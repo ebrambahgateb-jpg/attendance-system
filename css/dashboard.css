@@ -838,3 +838,82 @@ body.dashboard-body {
     gap: 8px;
   }
 }
+/* ═══════════════════════════════════════════
+   Sidebar Overlay (Mobile)
+   ═══════════════════════════════════════════ */
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 99;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  cursor: pointer;
+}
+
+.sidebar-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+/* إخفاء الـoverlay على الشاشات الكبيرة */
+@media (min-width: 769px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Logout Button (SVG)
+   ═══════════════════════════════════════════ */
+
+.logout-btn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+  font-family: inherit;
+}
+
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.logout-btn:active {
+  transform: scale(0.95);
+}
+
+.logout-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .logout-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .logout-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+}
