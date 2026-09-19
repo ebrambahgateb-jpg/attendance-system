@@ -139,6 +139,8 @@ function navigateTo(pageId) {
     loadPeopleLazy(area);
   } else if (pageId === 'meetings') {
     loadMeetingsLazy(area);
+  } else if (pageId === 'attendance') {
+    loadAttendanceLazy(area);
   } else if (pageId === 'settings') {
     loadSettingsLazy(area);
   } else {
@@ -244,7 +246,6 @@ async function renderScannerDashboard(area) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // عدد المسحات اللي عملها اليوم
   const attSnap = await getDocs(query(
     collection(db, COLLECTIONS.ATTENDANCE),
     where('ScannerEmail', '==', dashboardUser.email)
@@ -258,7 +259,6 @@ async function renderScannerDashboard(area) {
     return d.getTime() === today.getTime();
   });
 
-  // الاجتماعات القادمة
   const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
   const meetings = meetingsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -283,14 +283,12 @@ async function renderUserDashboard(area) {
   const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
   const settings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-  // اجلب بيانات الشخص
   let person = null;
   if (dashboardUser.personId) {
     const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, dashboardUser.personId));
     if (pDoc.exists()) person = { id: pDoc.id, ...pDoc.data() };
   }
 
-  // إحصائيات حضور الشخص
   let myAttendance = [];
   if (dashboardUser.personId) {
     const attSnap = await getDocs(query(
@@ -300,7 +298,6 @@ async function renderUserDashboard(area) {
     myAttendance = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  // الاجتماعات القادمة
   const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
   const meetings = meetingsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -606,7 +603,6 @@ function loadPeopleLazy(area) {
 
 function loadMeetingsLazy(area) {
   if (typeof window.loadMeetingsPage === 'function') {
-    // مرر الوضع (view/manage) للصفحة
     window.loadMeetingsPage(area, getMeetingsMode());
   } else showLoadError(area, 'الاجتماعات');
 }
@@ -619,6 +615,12 @@ function loadProfileLazy(area) {
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
+}
+
+// ⚡ جديد: Load Attendance Viewer
+function loadAttendanceLazy(area) {
+  if (typeof window.loadAttendancePage === 'function') window.loadAttendancePage(area);
+  else showLoadError(area, 'الحضور');
 }
 
 function showLoadError(area, name) {
@@ -680,7 +682,6 @@ function ensureSidebarOverlay() {
     document.body.appendChild(overlay);
   }
 
-  // ⚡ اربط الحدث دايمًا
   overlay.onclick = closeSidebar;
 }
 
@@ -708,7 +709,6 @@ function closeSidebar() {
 
 // ═══ Logout ═══
 async function handleLogout() {
-  // ⚡ أول حاجة: امسح الحالة المحلية وروح فورًا
   try {
     localStorage.removeItem('currentUser');
   } catch (e) {}
@@ -717,10 +717,8 @@ async function handleLogout() {
     sessionStorage.clear();
   } catch (e) {}
 
-  // ⚡ روح لصفحة الدخول فورًا
   window.location.href = '../index.html';
 
-  // ⚡ بعدها جرّب signOut من Firebase (مش هيأثر على الانتقال)
   try {
     await signOut(auth);
   } catch (err) {
@@ -730,7 +728,6 @@ async function handleLogout() {
 
 window.logout = handleLogout;
 
-// ⚡ كمان اربط الزرار مباشرة لو موجود
 document.addEventListener('DOMContentLoaded', () => {
   const logoutBtn = document.querySelector('.logout-btn');
   if (logoutBtn && !logoutBtn._bound) {
