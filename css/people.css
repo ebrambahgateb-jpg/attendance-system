@@ -839,3 +839,47 @@
     font-size: 11px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   QR Modal Footer
+   ═══════════════════════════════════════════ */
+
+.qr-modal-footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.qr-modal-footer button {
+  flex: 1;
+  min-width: 120px;
+}
+
+.pd-qr-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .qr-modal-footer {
+    flex-direction: column;
+  }
+
+  .qr-modal-footer button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pd-qr-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .pd-qr-actions button {
+    width: 100%;
+  }
+}
