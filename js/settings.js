@@ -391,8 +391,16 @@ window.syncGoogleFormNow = async function() {
   }
 
   try {
-    const url = SYNC_WEBAPP_URL + '?action=sync';
-    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+    // ⚡ POST بدل GET لتجنب CORS
+    const response = await fetch(SYNC_WEBAPP_URL, {
+      method: 'POST',
+      mode: 'cors',
+      redirect: 'follow',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({ action: 'sync' })
+    });
 
     if (!response.ok) {
       throw new Error('HTTP ' + response.status);
