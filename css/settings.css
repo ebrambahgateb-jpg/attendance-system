@@ -290,3 +290,130 @@
     width: 100%;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Google Form Sync Section
+   ═══════════════════════════════════════════ */
+
+.sync-group {
+  border: 2px solid var(--primary);
+  background: linear-gradient(135deg, var(--bg) 0%, var(--card-bg) 100%);
+}
+
+.sync-info-box {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sync-info-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.sync-info-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sync-info-row strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sync-actions button {
+  flex: 1;
+  min-width: 140px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.sync-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sync-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid;
+}
+
+.sync-result.success {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.sync-result.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.sync-result-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.sync-result-details {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sync-result-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.sync-result-icon {
+  font-size: 16px;
+}
+
+.sync-result-item strong {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sync-actions {
+    flex-direction: column;
+  }
+
+  .sync-actions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sync-result-details {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
