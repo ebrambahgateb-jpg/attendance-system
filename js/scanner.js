@@ -36,7 +36,6 @@ const SCAN_COOLDOWN = 2000;
 function getPersonFullName(person) {
   if (!person) return '';
 
-  // ⚡ الشكل الجديد (4 حقول)
   if (person.FirstName || person.SecondName) {
     return [
       person.FirstName,
@@ -46,7 +45,6 @@ function getPersonFullName(person) {
     ].filter(Boolean).join(' ').trim();
   }
 
-  // ⚡ Fallback للشكل القديم
   if (person.Name) return String(person.Name).trim();
 
   return '';
@@ -95,16 +93,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════
-//   Load Meetings
+//   Load Meetings (⚡ اجتماعات النهاردة فقط)
 // ═══════════════════════════════════════════════════════
 
 async function loadMeetings() {
   try {
     const snap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
 
+    // ⚡ فلتر: Active + عنده موعد النهاردة
     meetings = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(m => String(m.Status || '').toLowerCase() === 'active');
+      .filter(m => String(m.Status || '').toLowerCase() === 'active')
+      .filter(m => getTodayOccurrence(m) !== null);
 
     meetings.sort((a, b) =>
       String(a.Time || '').localeCompare(String(b.Time || ''))
@@ -124,7 +124,7 @@ function renderMeetingOptions() {
   select.innerHTML = '<option value="">-- اختر الاجتماع --</option>';
 
   if (meetings.length === 0) {
-    select.innerHTML = '<option value="">لا يوجد اجتماعات نشطة</option>';
+    select.innerHTML = '<option value="">لا يوجد اجتماعات مجدولة اليوم</option>';
     return;
   }
 
@@ -133,14 +133,16 @@ function renderMeetingOptions() {
     opt.value = meeting.id;
 
     const type = String(meeting.Type || 'once').toLowerCase();
+    const endTime = getMeetingEndTime(meeting);
+
     let dayInfo = '';
     if (type === 'weekly') {
-      dayInfo = 'كل ' + getDayLabel(meeting.DayOfWeek);
+      dayInfo = getDayLabel(meeting.DayOfWeek);
     } else {
-      dayInfo = meeting.Date || '';
+      dayInfo = 'اليوم';
     }
 
-    opt.textContent = `${meeting.Title} — ${dayInfo} — ${meeting.Time}`;
+    opt.textContent = `${meeting.Title} — ${dayInfo} — ${meeting.Time} - ${endTime}`;
     select.appendChild(opt);
   });
 }
@@ -190,12 +192,13 @@ function renderMeetingInfo(meeting) {
 
   const type = String(meeting.Type || 'once').toLowerCase();
   const isOpen = isMeetingOpen(meeting);
+  const endTime = getMeetingEndTime(meeting);
 
   let dateInfo = '';
   if (type === 'weekly') {
     dateInfo = 'كل ' + getDayLabel(meeting.DayOfWeek);
   } else {
-    dateInfo = meeting.Date || '-';
+    dateInfo = formatDateShort(meeting.Date);
   }
 
   info.innerHTML = `
@@ -205,7 +208,7 @@ function renderMeetingInfo(meeting) {
     </div>
     <div class="info-line">
       <span class="icon">🕐</span>
-      <span>${meeting.Time || '-'}</span>
+      <span>${meeting.Time || '-'} - ${endTime}</span>
     </div>
     <div class="info-line">
       <span class="icon">${isOpen ? '🟢' : '🔴'}</span>
@@ -340,7 +343,6 @@ async function processScan(decodedText) {
       peopleCache[personId] = person;
     }
 
-    // ⚡ اسم الشخص (من الحقول الجديدة أو القديمة)
     const personName = getPersonFullName(person);
     const personInitial = getPersonInitial(person);
 
@@ -432,7 +434,7 @@ async function processScan(decodedText) {
     // ═══ كل الشروط صحيحة → سجّل الحضور ═══
     const attendanceData = {
       PersonID: personId,
-      PersonName: personName || 'غير معروف',      // ⚡ الاسم الكامل من الحقول الجديدة
+      PersonName: personName || 'غير معروف',
       MeetingID: selectedMeeting.id,
       MeetingTitle: selectedMeeting.Title || '',
       OccurrenceDate: occurrenceDate,
@@ -440,8 +442,8 @@ async function processScan(decodedText) {
       Status: 'present',
       ScannerEmail: currentUser.email || '',
       ScannerName: currentUser.name || currentUser.email || '',
-      Method: 'scanner',                            // ⚡ جديد: تمييز نوع التسجيل
-      Location: null,                                // ⚡ جديد: Scanner مش محتاج موقع
+      Method: 'scanner',
+      Location: null,
       Notes: ''
     };
 
@@ -510,6 +512,35 @@ function formatDateISO(date) {
   return `${y}-${m}-${d}`;
 }
 
+function formatDateShort(dateStr) {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+/**
+ * ⚡ EndTime مع Fallback (+2 ساعات)
+ */
+function getMeetingEndTime(meeting) {
+  if (!meeting) return '';
+
+  if (meeting.EndTime) return String(meeting.EndTime);
+
+  const time = String(meeting.Time || '00:00');
+  const [h, m] = time.split(':').map(Number);
+
+  const totalMinutes = (h || 0) * 60 + (m || 0) + 120;
+  const newH = Math.floor(totalMinutes / 60) % 24;
+  const newM = totalMinutes % 60;
+
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+}
+
 function getTodayOccurrence(meeting) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -531,21 +562,31 @@ function getTodayOccurrence(meeting) {
   return null;
 }
 
+/**
+ * ⚡ هل الحضور مفتوح الآن؟ (يستخدم EndTime)
+ */
 function isMeetingOpen(meeting) {
   const today = new Date();
   const occurrenceDate = getTodayOccurrence(meeting);
 
   if (!occurrenceDate) return false;
 
-  const [hours, minutes] = String(meeting.Time || '00:00').split(':').map(Number);
-  const meetingTime = new Date(today);
-  meetingTime.setHours(hours || 0, minutes || 0, 0, 0);
+  // وقت البداية
+  const [sh, sm] = String(meeting.Time || '00:00').split(':').map(Number);
+  const meetingStart = new Date(today);
+  meetingStart.setHours(sh || 0, sm || 0, 0, 0);
+
+  // وقت النهاية (مع Fallback)
+  const endTime = getMeetingEndTime(meeting);
+  const [eh, em] = String(endTime).split(':').map(Number);
+  const meetingEnd = new Date(today);
+  meetingEnd.setHours(eh || 0, em || 0, 0, 0);
 
   const openBefore = Number(settings.OpenBeforeMinutes || 30);
   const closeAfter = Number(settings.CloseAfterMinutes || 15);
 
-  const openTime = new Date(meetingTime.getTime() - openBefore * 60 * 1000);
-  const closeTime = new Date(meetingTime.getTime() + closeAfter * 60 * 1000);
+  const openTime = new Date(meetingStart.getTime() - openBefore * 60 * 1000);
+  const closeTime = new Date(meetingEnd.getTime() + closeAfter * 60 * 1000);
 
   return today >= openTime && today <= closeTime;
 }
@@ -585,7 +626,6 @@ async function showResult({ type, title, message, person, playSound }) {
   const personName = person ? getPersonFullName(person) : '';
   const personInitial = person ? getPersonInitial(person) : '?';
 
-  // ⚡ الصورة
   let photoHtml = '';
   const showPhoto = settings.ShowPersonPhoto !== false;
 
