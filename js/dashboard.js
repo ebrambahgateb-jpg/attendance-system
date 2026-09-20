@@ -54,6 +54,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadThemeFromStorage();
   await loadTabPermissions();
 
+  // ⚡ Auto Deactivate Once Meetings (في الخلفية)
+  autoDeactivateOnceMeetingsSafe();
+
   renderUserInfo();
   renderSidebar();
   await loadDashboardInit(true);
@@ -81,21 +84,15 @@ async function loadTabPermissions() {
   }
 }
 
-/**
- * ⚡ الحصول على التابات المسموحة لدور معين
- */
 function getTabsForRole(role) {
-  // ⚡ Owner دايمًا كل التابات
   if (role === 'Owner') {
     return TABS_REGISTRY.map(item => item.id);
   }
 
-  // ⚡ لو TabPermissions موجودة في Firestore
   if (tabPermissions && Array.isArray(tabPermissions[role])) {
     return tabPermissions[role];
   }
 
-  // ⚡ Fallback: القيم الافتراضية
   return DEFAULT_TAB_PERMISSIONS[role] || ['dashboard'];
 }
 
@@ -134,12 +131,10 @@ function renderSidebar() {
     btn.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>`;
 
     btn.onclick = () => {
-      // ⚡ لو صفحة منفصلة
       if (item.isPage && item.pageUrl) {
         window.location.href = item.pageUrl;
         return;
       }
-
       navigateTo(item.id);
     };
 
@@ -162,19 +157,16 @@ function navigateTo(pageId) {
   const area = document.getElementById('contentArea');
   if (!area) return;
 
-  // ⚡ dashboard حالة خاصة
   if (pageId === 'dashboard') {
     loadDashboardInit(false);
     closeSidebar();
     return;
   }
 
-  // ⚡ لو التاب عنده handler
   if (item && item.handler) {
     const handlerFn = window[item.handler];
 
     if (typeof handlerFn === 'function') {
-      // ⚡ meetings محتاجة mode
       if (pageId === 'meetings') {
         handlerFn(area, getMeetingsMode());
       } else {
@@ -184,7 +176,6 @@ function navigateTo(pageId) {
       showLoadError(area, item.label);
     }
   } else {
-    // ⚡ صفحة قيد التطوير
     area.innerHTML = `<div class="placeholder-page">
       <h2>${item ? item.label : pageId}</h2>
       <p>هذه الصفحة قيد التطوير.</p>
@@ -750,6 +741,19 @@ function closeSidebar() {
   const overlay = document.querySelector('.sidebar-overlay');
   if (overlay) overlay.classList.remove('active');
   document.body.style.overflow = '';
+}
+
+// ═══ ⚡ Auto Deactivate Once Meetings ═══
+async function autoDeactivateOnceMeetingsSafe() {
+  if (!['Owner', 'Admin'].includes(dashboardUser.selectedRole)) return;
+
+  if (typeof window.autoDeactivateOnceMeetings === 'function') {
+    try {
+      await window.autoDeactivateOnceMeetings();
+    } catch (e) {
+      console.warn('autoDeactivate error:', e);
+    }
+  }
 }
 
 // ═══ Logout ═══
