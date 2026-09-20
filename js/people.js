@@ -565,7 +565,7 @@ async function confirmDeletePerson(personId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   QR Code
+//   QR Code - Generate
 // ═══════════════════════════════════════════════════════
 
 async function generateQR(personId) {
@@ -589,6 +589,10 @@ async function generateQR(personId) {
   }
 }
 
+// ═══════════════════════════════════════════════════════
+//   QR Code - View (مع زر تجديد)
+// ═══════════════════════════════════════════════════════
+
 function viewQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person || !person.QRCode) return;
@@ -609,14 +613,17 @@ function viewQR(personId) {
         <h2>📱 QR - ${escapeHtml(fullName)}</h2>
         <button class="modal-close" onclick="closeQRModal()">✕</button>
       </div>
+
       <div class="modal-body qr-body">
         <div id="qrCodeContainer" class="qr-container"></div>
         <p class="qr-person-name">${escapeHtml(fullName)}</p>
         <p class="qr-person-id">ID: ${person.id}</p>
       </div>
-      <div class="modal-footer">
+
+      <div class="modal-footer qr-modal-footer">
         <button class="btn-secondary" onclick="closeQRModal()">إغلاق</button>
         <button class="btn-secondary" onclick="downloadQR('${person.id}')">💾 تحميل كصورة</button>
+        <button class="btn-danger" onclick="confirmRegenerateQR('${person.id}')">🔄 تجديد QR</button>
       </div>
     </div>
   `;
@@ -643,6 +650,59 @@ function closeQRModal() {
   const modal = document.getElementById('qrModal');
   if (modal) modal.style.display = 'none';
 }
+
+// ═══════════════════════════════════════════════════════
+//   QR Code - Regenerate
+// ═══════════════════════════════════════════════════════
+
+async function confirmRegenerateQR(personId) {
+  const person = peopleData.find(p => p.id === personId);
+  if (!person) return;
+
+  const fullName = getFullName(person);
+
+  if (!confirm(
+    `⚠️ تحذير: تجديد QR لـ "${fullName}"\n\n` +
+    `سيتم إلغاء الـ QR القديم نهائيًا، ولن يعمل.\n\n` +
+    `يجب عليك طباعة/إرسال الـ QR الجديد للشخص.\n\n` +
+    `هل أنت متأكد؟`
+  )) {
+    return;
+  }
+
+  try {
+    // ⚡ توليد QR جديد (باستخدام timestamp لضمان عدم التكرار)
+    const timestamp = Date.now().toString(36);
+    const randomPart = Math.random().toString(36).substring(2, 8);
+    const newQRCode = `PERSON_${personId}_${timestamp}${randomPart}`;
+
+    // ⚡ حفظ في Firestore
+    const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
+    await updateDoc(personRef, {
+      QRCode: newQRCode,
+      QRRegeneratedAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ تحديث النسخة المحلية
+    person.QRCode = newQRCode;
+    person.QRRegeneratedAt = new Date().toISOString();
+
+    alert('✅ تم تجديد QR بنجاح\n\nالـ QR القديم لم يعد صالحاً.');
+
+    // ⚡ إعادة فتح الـ Modal بالـ QR الجديد
+    closeQRModal();
+    setTimeout(() => viewQR(personId), 200);
+
+  } catch (err) {
+    console.error('❌ Regenerate QR error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   QR Code - Download
+// ═══════════════════════════════════════════════════════
 
 function downloadQR(personId) {
   const person = peopleData.find(p => p.id === personId);
@@ -809,7 +869,10 @@ function renderPersonDetailsModal(modal, person, stats) {
           <h3 class="pd-section-title">📱 QR</h3>
           <div class="pd-qr-wrapper">
             <div class="pd-qr-box" id="pdQrCanvas"></div>
-            <button class="btn-secondary" onclick="downloadPersonQR('${person.id}')">💾 تحميل كصورة</button>
+            <div class="pd-qr-actions">
+              <button class="btn-secondary" onclick="downloadPersonQR('${person.id}')">💾 تحميل كصورة</button>
+              <button class="btn-danger" onclick="confirmRegenerateQRDetails('${person.id}')">🔄 تجديد QR</button>
+            </div>
           </div>
         </div>
       ` : `
@@ -836,14 +899,12 @@ function renderPersonDetailsModal(modal, person, stats) {
           <div class="pd-info-item"><div class="pd-info-label">البريد</div><div class="pd-info-value ltr">${escapeHtml(person.Email || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">العنوان</div><div class="pd-info-value">${escapeHtml(person.Address || '-')}</div></div>
           <div class="pd-info-item">
-          <div class="pd-info-label">Facebook</div>
-          ${person.Facebook
-          ? `<a href="${escapeHtml(formatFacebookUrl(person.Facebook))}" target="_blank" rel="noopener noreferrer" class="pd-facebook-btn">
-          🔗 فتح الصفحة
-          </a>`
-          : `<div class="pd-info-value ltr">-</div>`
-           }
-       </div>
+            <div class="pd-info-label">Facebook</div>
+            ${person.Facebook
+              ? `<a href="${escapeHtml(formatFacebookUrl(person.Facebook))}" target="_blank" rel="noopener noreferrer" class="pd-facebook-btn">🔗 فتح الصفحة</a>`
+              : `<div class="pd-info-value ltr">-</div>`
+            }
+          </div>
           <div class="pd-info-item"><div class="pd-info-label">تاريخ الإضافة</div><div class="pd-info-value">${formatDate(person.CreatedAt)}</div></div>
         </div>
       </div>
@@ -879,6 +940,50 @@ function closePersonDetails() {
   if (modal) modal.style.display = 'none';
 }
 
+// ═══ Regenerate QR من نافذة التفاصيل ═══
+async function confirmRegenerateQRDetails(personId) {
+  const person = peopleData.find(p => p.id === personId);
+  if (!person) return;
+
+  const fullName = getFullName(person);
+
+  if (!confirm(
+    `⚠️ تحذير: تجديد QR لـ "${fullName}"\n\n` +
+    `سيتم إلغاء الـ QR القديم نهائيًا، ولن يعمل.\n\n` +
+    `يجب عليك طباعة/إرسال الـ QR الجديد للشخص.\n\n` +
+    `هل أنت متأكد؟`
+  )) {
+    return;
+  }
+
+  try {
+    const timestamp = Date.now().toString(36);
+    const randomPart = Math.random().toString(36).substring(2, 8);
+    const newQRCode = `PERSON_${personId}_${timestamp}${randomPart}`;
+
+    const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
+    await updateDoc(personRef, {
+      QRCode: newQRCode,
+      QRRegeneratedAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    person.QRCode = newQRCode;
+    person.QRRegeneratedAt = new Date().toISOString();
+
+    alert('✅ تم تجديد QR بنجاح\n\nالـ QR القديم لم يعد صالحاً.');
+
+    // ⚡ أعد تحميل نافذة التفاصيل
+    closePersonDetails();
+    setTimeout(() => viewPersonDetails(personId), 200);
+
+  } catch (err) {
+    console.error('❌ Regenerate QR error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+// ═══ Download QR من نافذة التفاصيل ═══
 function downloadPersonQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
@@ -917,6 +1022,8 @@ window.generateQR = generateQR;
 window.viewQR = viewQR;
 window.closeQRModal = closeQRModal;
 window.downloadQR = downloadQR;
+window.confirmRegenerateQR = confirmRegenerateQR;
+window.confirmRegenerateQRDetails = confirmRegenerateQRDetails;
 window.viewPersonDetails = viewPersonDetails;
 window.closePersonDetails = closePersonDetails;
 window.downloadPersonQR = downloadPersonQR;
