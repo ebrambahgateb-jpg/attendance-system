@@ -25,24 +25,33 @@ import {
 
 // ═══ Menu Configuration ═══
 const MENU_ITEMS = [
-  { id: 'dashboard',      label: 'لوحة التحكم',          icon: '🏠', roles: ['Owner','Admin','Scanner','User'] },
-  { id: 'profile',        label: 'حسابي',                 icon: '👤', roles: ['Owner','Admin','Scanner','User'] },
-  { id: 'my-attendance',  label: 'سجل حضورك بنفسك',      icon: '📱', roles: ['Owner','Admin','Scanner'] },
-  { id: 'scanner',        label: 'الماسح',                icon: '📷', roles: ['Owner','Admin','Scanner'] },
-  { id: 'meetings',       label: 'الاجتماعات',           icon: '📅', roles: ['Owner','Admin','Scanner','User'], modes: { Scanner: 'view', User: 'view', Owner: 'manage', Admin: 'manage' } },
-  { id: 'people',         label: 'الأشخاص',              icon: '👥', roles: ['Owner','Admin'] },
-  { id: 'attendance',     label: 'الحضور',                icon: '✅', roles: ['Owner','Admin'] },
-  { id: 'reports',        label: 'التقارير',              icon: '📈', roles: ['Owner','Admin'] },
-  { id: 'accounts',       label: 'الحسابات',              icon: '🔑', roles: ['Owner'] },
-  { id: 'logs',           label: 'السجلات',               icon: '📋', roles: ['Owner','Admin'] },
-  { id: 'archive',        label: 'الأرشيف',               icon: '📦', roles: ['Owner','Admin'] },
-  { id: 'settings',       label: 'الإعدادات',             icon: '⚙️', roles: ['Owner'] }
+  { id: 'dashboard',      label: 'لوحة التحكم',          icon: '🏠' },
+  { id: 'profile',        label: 'حسابي',                 icon: '👤' },
+  { id: 'my-attendance',  label: 'سجل حضورك بنفسك',      icon: '📱' },
+  { id: 'scanner',        label: 'الماسح',                icon: '📷' },
+  { id: 'meetings',       label: 'الاجتماعات',           icon: '📅' },
+  { id: 'people',         label: 'الأشخاص',              icon: '👥' },
+  { id: 'attendance',     label: 'الحضور',                icon: '✅' },
+  { id: 'reports',        label: 'التقارير',              icon: '📈' },
+  { id: 'accounts',       label: 'الحسابات',              icon: '🔑' },
+  { id: 'logs',           label: 'السجلات',               icon: '📋' },
+  { id: 'archive',        label: 'الأرشيف',               icon: '📦' },
+  { id: 'settings',       label: 'الإعدادات',             icon: '⚙️' }
 ];
+
+// ═══ ⚡ Default Tab Permissions ═══
+const DEFAULT_TAB_PERMISSIONS = {
+  User:    ['dashboard', 'profile', 'meetings'],
+  Admin:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'logs', 'archive'],
+  Scanner: ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings'],
+  Owner:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'accounts', 'logs', 'archive', 'settings']
+};
 
 // ═══ Global State ═══
 let dashboardUser = null;
 let currentPage = 'dashboard';
 let dashInitCache = null;
+let tabPermissions = null;
 
 // ═══ Initialize on Load ═══
 document.addEventListener('DOMContentLoaded', async () => {
@@ -60,6 +69,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   ensureSidebarOverlay();
 
   loadThemeFromStorage();
+
+  // ⚡ حمّل Tab Permissions من Firestore
+  await loadTabPermissions();
+
   renderUserInfo();
   renderSidebar();
   await loadDashboardInit(true);
@@ -68,6 +81,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.innerWidth > 768) closeSidebar();
   });
 });
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Load Tab Permissions
+// ═══════════════════════════════════════════════════════
+
+async function loadTabPermissions() {
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    const snap = await getDoc(settingsRef);
+
+    if (snap.exists()) {
+      const data = snap.data();
+      tabPermissions = data.TabPermissions || null;
+    }
+  } catch (e) {
+    console.warn('Load tab permissions error:', e);
+  }
+}
+
+/**
+ * ⚡ الحصول على التابات المسموحة لدور معين
+ */
+function getTabsForRole(role) {
+  // ⚡ Owner دايمًا كل التابات
+  if (role === 'Owner') {
+    return MENU_ITEMS.map(item => item.id);
+  }
+
+  // ⚡ لو TabPermissions موجودة في Firestore
+  if (tabPermissions && Array.isArray(tabPermissions[role])) {
+    return tabPermissions[role];
+  }
+
+  // ⚡ Fallback: القيم الافتراضية
+  return DEFAULT_TAB_PERMISSIONS[role] || ['dashboard'];
+}
 
 // ═══ User Info ═══
 function renderUserInfo() {
@@ -93,9 +142,11 @@ function renderSidebar() {
   nav.innerHTML = '';
 
   const role = dashboardUser.selectedRole;
+  const allowedTabs = getTabsForRole(role);
 
   MENU_ITEMS.forEach(item => {
-    if (item.roles.indexOf(role) === -1) return;
+    // ⚡ اظهر التاب بس لو مسموح للدور
+    if (allowedTabs.indexOf(item.id) === -1) return;
 
     const btn = document.createElement('button');
     btn.className = 'nav-item';
@@ -624,7 +675,6 @@ function loadAttendanceLazy(area) {
   else showLoadError(area, 'الحضور');
 }
 
-// ⚡ جديد: Load Accounts
 function loadAccountsLazy(area) {
   if (typeof window.loadAccountsPage === 'function') window.loadAccountsPage(area);
   else showLoadError(area, 'الحسابات');
