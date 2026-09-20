@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   People Management (Firestore)
+//   People Management (Firestore) + Auto Accounts
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -8,7 +8,9 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  getDocs
+  getDocs,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -20,6 +22,9 @@ import {
 let peopleData = [];
 let filteredPeople = [];
 let currentEditId = null;
+
+// ═══ Constant ═══
+const DEFAULT_ROLE = 'User';
 
 // ═══════════════════════════════════════════════════════
 //   Helpers
@@ -110,6 +115,87 @@ function getFacebookDisplay(value) {
   url = url.replace(/^m\./, '');
 
   return url;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Auto Account Creation
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ينشئ أو يحدّث account للشخص
+ * @param {string} personId - ID الشخص
+ * @param {object} personData - بيانات الشخص
+ * @returns {object} - { action, accountId, message }
+ */
+async function ensureAccountForPerson(personId, personData) {
+  const email = String(personData.Email || '').toLowerCase().trim();
+
+  // ⚡ لو مفيش بريد → تخطى
+  if (!email) {
+    return { action: 'skipped', reason: 'no_email' };
+  }
+
+  try {
+    // ⚡ دور على account بنفس البريد
+    const q = query(
+      collection(db, COLLECTIONS.ACCOUNTS),
+      where('Email', '==', email)
+    );
+    const snap = await getDocs(q);
+
+    const accountStatus = String(personData.Status || 'active').toLowerCase() === 'active'
+      ? 'active'
+      : 'disabled';
+
+    if (!snap.empty) {
+      // ⚡ موجود → حدّث
+      const existingDoc = snap.docs[0];
+      const existingData = existingDoc.data();
+
+      const updateData = {
+        PersonID: personId,
+        Status: accountStatus,
+        UpdatedAt: new Date().toISOString()
+      };
+
+      // ⚡ لو ملوش دور، ضيف User
+      if (!existingData.Role) {
+        updateData.Role = DEFAULT_ROLE;
+      }
+
+      await updateDoc(doc(db, COLLECTIONS.ACCOUNTS, existingDoc.id), updateData);
+
+      return {
+        action: 'updated',
+        accountId: existingDoc.id,
+        message: `تم ربط الحساب الموجود (${email}) بالشخص`
+      };
+    } else {
+      // ⚡ مش موجود → أنشئ جديد
+      const newAccount = {
+        Email: email,
+        Role: DEFAULT_ROLE,
+        PersonID: personId,
+        Status: accountStatus,
+        CreatedAt: new Date().toISOString(),
+        Source: 'auto_from_person'
+      };
+
+      const docRef = await addDoc(collection(db, COLLECTIONS.ACCOUNTS), newAccount);
+
+      return {
+        action: 'created',
+        accountId: docRef.id,
+        message: `تم إنشاء حساب جديد (${email}) كـ User`
+      };
+    }
+  } catch (err) {
+    console.error('❌ ensureAccountForPerson error:', err);
+    return {
+      action: 'error',
+      message: err.message
+    };
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -384,7 +470,7 @@ function openPersonModal(personId) {
           <div class="form-row">
             <label>البريد الإلكتروني</label>
             <input type="email" id="p_Email" value="${escapeHtml(p.Email || '')}" placeholder="name@example.com" dir="ltr" />
-            <p class="hint">البريد مهم — هو اللي بيتم الربط بحساب Google</p>
+            <p class="hint">البريد مهم — سيتم إنشاء حساب User تلقائيًا به</p>
           </div>
           <div class="form-row">
             <label>Facebook</label>
@@ -448,7 +534,7 @@ function closePersonModal() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Save Person
+//   ⚡ Save Person (with auto Account)
 // ═══════════════════════════════════════════════════════
 
 async function savePerson() {
@@ -490,16 +576,44 @@ async function savePerson() {
   };
 
   try {
+    let personId = currentEditId;
+    let isNew = false;
+
+    // ═══ Save Person ═══
     if (currentEditId) {
       const personRef = doc(db, COLLECTIONS.PEOPLE, currentEditId);
       await updateDoc(personRef, personData);
-      alert('✅ تم التعديل بنجاح');
     } else {
       personData.QRCode = '';
       personData.CreatedAt = new Date().toISOString();
-      await addDoc(collection(db, COLLECTIONS.PEOPLE), personData);
-      alert('✅ تمت الإضافة بنجاح');
+      const docRef = await addDoc(collection(db, COLLECTIONS.PEOPLE), personData);
+      personId = docRef.id;
+      isNew = true;
     }
+
+    // ═══ ⚡ Ensure Account ═══
+    let accountMessage = '';
+
+    if (email) {
+      const result = await ensureAccountForPerson(personId, personData);
+
+      if (result.action === 'created') {
+        accountMessage = '\n\n👤 تم إنشاء حساب User جديد تلقائيًا.';
+      } else if (result.action === 'updated') {
+        accountMessage = '\n\n🔗 تم ربط الحساب الموجود بالشخص.';
+      } else if (result.action === 'skipped') {
+        accountMessage = '\n\n⚠️ لم يتم إنشاء حساب (لا يوجد بريد).';
+      } else if (result.action === 'error') {
+        accountMessage = '\n\n⚠️ لم يتم إنشاء الحساب: ' + result.message;
+      }
+    } else {
+      accountMessage = '\n\n⚠️ لا يوجد بريد — لم يتم إنشاء حساب.';
+    }
+
+    alert(
+      (isNew ? '✅ تمت الإضافة بنجاح' : '✅ تم التعديل بنجاح') +
+      accountMessage
+    );
 
     closePersonModal();
     const area = document.getElementById('contentArea');
@@ -527,18 +641,38 @@ async function togglePersonStatus(personId) {
   const fullName = getFullName(person);
 
   const confirmMsg = newStatus === 'inactive'
-    ? `هل تريد تعطيل "${fullName}"؟`
-    : `هل تريد تفعيل "${fullName}"؟`;
+    ? `هل تريد تعطيل "${fullName}"؟\n\nسيتم تعطيل حسابه أيضاً.`
+    : `هل تريد تفعيل "${fullName}"؟\n\nسيتم تفعيل حسابه أيضاً.`;
 
   if (!confirm(confirmMsg)) return;
 
   try {
+    // ═══ Update Person ═══
     const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
     await updateDoc(personRef, {
       Status: newStatus,
       UpdatedAt: new Date().toISOString()
     });
     person.Status = newStatus;
+
+    // ═══ ⚡ Sync Account Status ═══
+    if (person.Email) {
+      const email = String(person.Email).toLowerCase().trim();
+      const q = query(
+        collection(db, COLLECTIONS.ACCOUNTS),
+        where('Email', '==', email)
+      );
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const accountStatus = newStatus === 'active' ? 'active' : 'disabled';
+        await updateDoc(doc(db, COLLECTIONS.ACCOUNTS, snap.docs[0].id), {
+          Status: accountStatus,
+          UpdatedAt: new Date().toISOString()
+        });
+      }
+    }
+
     renderPeopleTable();
   } catch (err) {
     console.error('❌ Toggle status error:', err);
@@ -555,7 +689,7 @@ async function confirmDeletePerson(personId) {
 
   try {
     await deleteDoc(doc(db, COLLECTIONS.PEOPLE, personId));
-    alert('✅ تم الحذف بنجاح');
+    alert('✅ تم الحذف بنجاح\n\nملاحظة: الحساب المرتبط لم يُحذف.');
     const area = document.getElementById('contentArea');
     await loadPeoplePage(area);
   } catch (err) {
@@ -590,7 +724,7 @@ async function generateQR(personId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   QR Code - View (مع زر تجديد)
+//   QR Code - View
 // ═══════════════════════════════════════════════════════
 
 function viewQR(personId) {
@@ -671,12 +805,10 @@ async function confirmRegenerateQR(personId) {
   }
 
   try {
-    // ⚡ توليد QR جديد (باستخدام timestamp لضمان عدم التكرار)
     const timestamp = Date.now().toString(36);
     const randomPart = Math.random().toString(36).substring(2, 8);
     const newQRCode = `PERSON_${personId}_${timestamp}${randomPart}`;
 
-    // ⚡ حفظ في Firestore
     const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
     await updateDoc(personRef, {
       QRCode: newQRCode,
@@ -684,13 +816,11 @@ async function confirmRegenerateQR(personId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ تحديث النسخة المحلية
     person.QRCode = newQRCode;
     person.QRRegeneratedAt = new Date().toISOString();
 
     alert('✅ تم تجديد QR بنجاح\n\nالـ QR القديم لم يعد صالحاً.');
 
-    // ⚡ إعادة فتح الـ Modal بالـ QR الجديد
     closeQRModal();
     setTimeout(() => viewQR(personId), 200);
 
@@ -728,7 +858,7 @@ function downloadQR(personId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   View Person Details (Modal)
+//   View Person Details
 // ═══════════════════════════════════════════════════════
 
 async function viewPersonDetails(personId) {
@@ -940,7 +1070,6 @@ function closePersonDetails() {
   if (modal) modal.style.display = 'none';
 }
 
-// ═══ Regenerate QR من نافذة التفاصيل ═══
 async function confirmRegenerateQRDetails(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
@@ -973,7 +1102,6 @@ async function confirmRegenerateQRDetails(personId) {
 
     alert('✅ تم تجديد QR بنجاح\n\nالـ QR القديم لم يعد صالحاً.');
 
-    // ⚡ أعد تحميل نافذة التفاصيل
     closePersonDetails();
     setTimeout(() => viewPersonDetails(personId), 200);
 
@@ -983,7 +1111,6 @@ async function confirmRegenerateQRDetails(personId) {
   }
 }
 
-// ═══ Download QR من نافذة التفاصيل ═══
 function downloadPersonQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
