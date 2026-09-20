@@ -417,3 +417,95 @@
     gap: 8px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Tab Permissions
+   ═══════════════════════════════════════════ */
+
+.tab-permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.tab-permission-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--card-bg);
+  user-select: none;
+}
+
+.tab-permission-item:hover {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.tab-permission-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-permission-item .tab-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.tab-permission-item .tab-label {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  flex: 1;
+}
+
+.tab-permission-item:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.tab-permission-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg);
+}
+
+.tab-permission-item.disabled:hover {
+  border-color: var(--border);
+}
+
+.owner-tabs-group {
+  border: 2px solid #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, var(--card-bg) 100%);
+}
+
+.tab-permissions-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .tab-permissions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-permissions-actions {
+    flex-direction: column;
+  }
+
+  .tab-permissions-actions button {
+    width: 100%;
+  }
+}
