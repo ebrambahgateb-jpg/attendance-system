@@ -81,9 +81,12 @@ async function loadMyAttendancePage(area) {
     }
 
     const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
+
+    // ⚡ فلتر: Active + عنده موعد النهاردة
     maMeetings = meetingsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => String(m.Status || '').toLowerCase() === 'active')
+      .filter(m => getTodayOccurrence(m) !== null)
       .sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
 
     renderMyAttendancePage(area);
@@ -136,12 +139,16 @@ function renderMyAttendancePage(area) {
     maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName
   ].filter(Boolean).join(' ');
 
+  // ⚡ لو مفيش اجتماعات النهاردة
   if (maMeetings.length === 0) {
     container.innerHTML = `
+      <div style="text-align:center;margin-bottom:20px;">
+        <h2 style="color:var(--text);margin-bottom:6px;">مرحبًا ${escapeHtml(fullName)}</h2>
+      </div>
       <div class="ma-empty">
         <div class="ma-empty-icon">📅</div>
-        <h2>لا يوجد اجتماعات نشطة</h2>
-        <p>سيظهر هنا الاجتماعات فور إضافتها.</p>
+        <h2>لا يوجد اجتماعات مجدولة اليوم</h2>
+        <p>سيظهر هنا الاجتماعات فور إضافتها، أو عُد غدًا.</p>
       </div>
     `;
     return;
@@ -164,7 +171,8 @@ function renderMyAttendancePage(area) {
         ${maMeetings.map(m => {
           const type = String(m.Type || 'once').toLowerCase();
           const typeLabel = type === 'weekly' ? '🔄' : '📅';
-          return `<option value="${m.id}">${typeLabel} ${escapeHtml(m.Title || '')} - ${m.Time || ''}</option>`;
+          const endTime = getMeetingEndTime(m);
+          return `<option value="${m.id}">${typeLabel} ${escapeHtml(m.Title || '')} — ${m.Time || ''} - ${endTime}</option>`;
         }).join('')}
       </select>
 
@@ -242,6 +250,7 @@ function renderMeetingInfo() {
   if (!info || !maSelectedMeeting) return;
 
   const type = String(maSelectedMeeting.Type || 'once').toLowerCase();
+  const endTime = getMeetingEndTime(maSelectedMeeting);
 
   let dayText = '';
   if (type === 'weekly') {
@@ -278,7 +287,7 @@ function renderMeetingInfo() {
     </div>
     <div class="ma-info-row">
       <span class="icon">🕐</span>
-      <span>${maSelectedMeeting.Time || ''}</span>
+      <span>${maSelectedMeeting.Time || ''} - ${endTime}</span>
     </div>
     <div class="ma-info-row">
       <span class="icon">📍</span>
@@ -328,7 +337,6 @@ function checkLocation() {
         accuracy: pos.coords.accuracy
       };
 
-      // ⚡ فحص دقة GPS أولاً
       if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
         statusEl.className = 'ma-location-status invalid';
         statusEl.innerHTML = `<span class="dot"></span><span>⚠️ دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)}م). اقترب من المكان.</span>`;
@@ -373,7 +381,6 @@ function validateLocation(loc) {
     return { valid: false, location: null, reason: 'no_meeting' };
   }
 
-  // ⚡ رفض لو دقة GPS ضعيفة
   if ((loc.accuracy || 0) > MA_MAX_ACCURACY) {
     return { valid: false, location: null, reason: 'low_accuracy' };
   }
@@ -384,15 +391,12 @@ function validateLocation(loc) {
     return { valid: false, location: null, reason: 'no_locations' };
   }
 
-  // ⚡ دوّر على مكان User داخله — بالمسافة الفعلية بدون Tolerance
   let bestMatch = null;
   let bestDistance = Infinity;
 
   for (const targetLoc of allowedLocations) {
     const distance = getDistance(loc.lat, loc.lng, targetLoc.lat, targetLoc.lng);
 
-    // ⚡ في الوضع الصارم: نستخدم Radius فقط (بدون Tolerance)
-    // لو MA_STRICT_RADIUS = false → نستخدم Radius + Tolerance
     const allowed = MA_STRICT_RADIUS
       ? (targetLoc.radius || 4)
       : ((targetLoc.radius || 4) + (targetLoc.tolerance || 15));
@@ -649,7 +653,6 @@ async function processScan(scannedText) {
         scannedLocation.lng
       );
 
-      // ⚡ نطاق صارم: 4 متر (أو Radius + Tolerance لو الوضع مش صارم)
       const allowed = MA_STRICT_RADIUS
         ? (scannedLocation.radius || 4)
         : ((scannedLocation.radius || 4) + (scannedLocation.tolerance || 15));
@@ -827,22 +830,51 @@ function playSound(type) {
 //   Time Helpers
 // ═══════════════════════════════════════════════════════
 
+/**
+ * ⚡ EndTime مع Fallback (+2 ساعات)
+ */
+function getMeetingEndTime(meeting) {
+  if (!meeting) return '';
+
+  if (meeting.EndTime) return String(meeting.EndTime);
+
+  const time = String(meeting.Time || '00:00');
+  const [h, m] = time.split(':').map(Number);
+
+  const totalMinutes = (h || 0) * 60 + (m || 0) + 120;
+  const newH = Math.floor(totalMinutes / 60) % 24;
+  const newM = totalMinutes % 60;
+
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+}
+
+/**
+ * ⚡ هل الحضور مفتوح الآن؟ (يستخدم EndTime)
+ */
 function isMeetingOpenNow(meeting) {
   if (!meeting) return false;
 
   const occurrenceDate = getTodayOccurrence(meeting);
   if (!occurrenceDate) return false;
 
-  const [h, m] = String(meeting.Time || '00:00').split(':').map(Number);
   const now = new Date();
-  const meetingTime = new Date(now);
-  meetingTime.setHours(h || 0, m || 0, 0, 0);
+
+  // وقت البداية
+  const [sh, sm] = String(meeting.Time || '00:00').split(':').map(Number);
+  const meetingStart = new Date(now);
+  meetingStart.setHours(sh || 0, sm || 0, 0, 0);
+
+  // وقت النهاية (مع Fallback)
+  const endTime = getMeetingEndTime(meeting);
+  const [eh, em] = String(endTime).split(':').map(Number);
+  const meetingEnd = new Date(now);
+  meetingEnd.setHours(eh || 0, em || 0, 0, 0);
 
   const openBefore = Number(maSettings.OpenBeforeMinutes || 30);
   const closeAfter = Number(maSettings.CloseAfterMinutes || 15);
 
-  const openTime = new Date(meetingTime.getTime() - openBefore * 60000);
-  const closeTime = new Date(meetingTime.getTime() + closeAfter * 60000);
+  const openTime = new Date(meetingStart.getTime() - openBefore * 60000);
+  const closeTime = new Date(meetingEnd.getTime() + closeAfter * 60000);
 
   return now >= openTime && now <= closeTime;
 }
