@@ -438,11 +438,17 @@ window.syncGoogleFormNow = async function() {
       resultBox.className = 'sync-result success';
       resultBox.innerHTML = `
         <div class="sync-result-title">✅ تمت المزامنة بنجاح</div>
-        <div class="sync-result-details">
+                <div class="sync-result-details">
           <div class="sync-result-item">
             <span class="sync-result-icon">➕</span>
             <span>مضاف: <strong>${data.added || 0}</strong></span>
           </div>
+          ${data.restored ? `
+            <div class="sync-result-item">
+              <span class="sync-result-icon">🔄</span>
+              <span>مُستعاد: <strong>${data.restored}</strong></span>
+            </div>
+          ` : ''}
           <div class="sync-result-item">
             <span class="sync-result-icon">✏️</span>
             <span>محدّث: <strong>${data.updated || 0}</strong></span>
