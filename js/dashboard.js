@@ -23,29 +23,12 @@ import {
   DEFAULT_THEME
 } from './firebase-config.js';
 
-// ═══ Menu Configuration ═══
-const MENU_ITEMS = [
-  { id: 'dashboard',      label: 'لوحة التحكم',          icon: '🏠' },
-  { id: 'profile',        label: 'حسابي',                 icon: '👤' },
-  { id: 'my-attendance',  label: 'سجل حضورك بنفسك',      icon: '📱' },
-  { id: 'scanner',        label: 'الماسح',                icon: '📷' },
-  { id: 'meetings',       label: 'الاجتماعات',           icon: '📅' },
-  { id: 'people',         label: 'الأشخاص',              icon: '👥' },
-  { id: 'attendance',     label: 'الحضور',                icon: '✅' },
-  { id: 'reports',        label: 'التقارير',              icon: '📈' },
-  { id: 'accounts',       label: 'الحسابات',              icon: '🔑' },
-  { id: 'logs',           label: 'السجلات',               icon: '📋' },
-  { id: 'archive',        label: 'الأرشيف',               icon: '📦' },
-  { id: 'settings',       label: 'الإعدادات',             icon: '⚙️' }
-];
-
-// ═══ ⚡ Default Tab Permissions ═══
-const DEFAULT_TAB_PERMISSIONS = {
-  User:    ['dashboard', 'profile', 'meetings'],
-  Admin:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'logs', 'archive'],
-  Scanner: ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings'],
-  Owner:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'accounts', 'logs', 'archive', 'settings']
-};
+import {
+  TABS_REGISTRY,
+  OWNER_ONLY_TAB_IDS,
+  DEFAULT_TAB_PERMISSIONS,
+  getTabById
+} from './tabs-config.js';
 
 // ═══ Global State ═══
 let dashboardUser = null;
@@ -69,8 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   ensureSidebarOverlay();
 
   loadThemeFromStorage();
-
-  // ⚡ حمّل Tab Permissions من Firestore
   await loadTabPermissions();
 
   renderUserInfo();
@@ -83,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Load Tab Permissions
+//   Load Tab Permissions
 // ═══════════════════════════════════════════════════════
 
 async function loadTabPermissions() {
@@ -106,7 +87,7 @@ async function loadTabPermissions() {
 function getTabsForRole(role) {
   // ⚡ Owner دايمًا كل التابات
   if (role === 'Owner') {
-    return MENU_ITEMS.map(item => item.id);
+    return TABS_REGISTRY.map(item => item.id);
   }
 
   // ⚡ لو TabPermissions موجودة في Firestore
@@ -144,8 +125,7 @@ function renderSidebar() {
   const role = dashboardUser.selectedRole;
   const allowedTabs = getTabsForRole(role);
 
-  MENU_ITEMS.forEach(item => {
-    // ⚡ اظهر التاب بس لو مسموح للدور
+  TABS_REGISTRY.forEach(item => {
     if (allowedTabs.indexOf(item.id) === -1) return;
 
     const btn = document.createElement('button');
@@ -154,18 +134,20 @@ function renderSidebar() {
     btn.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>`;
 
     btn.onclick = () => {
-      if (item.id === 'scanner') {
-        window.location.href = 'scanner.html';
-      } else {
-        navigateTo(item.id);
+      // ⚡ لو صفحة منفصلة
+      if (item.isPage && item.pageUrl) {
+        window.location.href = item.pageUrl;
+        return;
       }
+
+      navigateTo(item.id);
     };
 
     nav.appendChild(btn);
   });
 }
 
-// ═══ Navigation ═══
+// ═══ Navigation (ديناميكية) ═══
 function navigateTo(pageId) {
   currentPage = pageId;
 
@@ -173,30 +155,36 @@ function navigateTo(pageId) {
     b.classList.toggle('active', b.dataset.page === pageId);
   });
 
-  const item = MENU_ITEMS.find(m => m.id === pageId);
+  const item = getTabById(pageId);
   const titleEl = document.getElementById('pageTitle');
   if (titleEl && item) titleEl.textContent = item.label;
 
   const area = document.getElementById('contentArea');
   if (!area) return;
 
+  // ⚡ dashboard حالة خاصة
   if (pageId === 'dashboard') {
     loadDashboardInit(false);
-  } else if (pageId === 'profile') {
-    loadProfileLazy(area);
-  } else if (pageId === 'my-attendance') {
-    loadMyAttendanceLazy(area);
-  } else if (pageId === 'people') {
-    loadPeopleLazy(area);
-  } else if (pageId === 'meetings') {
-    loadMeetingsLazy(area);
-  } else if (pageId === 'attendance') {
-    loadAttendanceLazy(area);
-  } else if (pageId === 'accounts') {
-    loadAccountsLazy(area);
-  } else if (pageId === 'settings') {
-    loadSettingsLazy(area);
+    closeSidebar();
+    return;
+  }
+
+  // ⚡ لو التاب عنده handler
+  if (item && item.handler) {
+    const handlerFn = window[item.handler];
+
+    if (typeof handlerFn === 'function') {
+      // ⚡ meetings محتاجة mode
+      if (pageId === 'meetings') {
+        handlerFn(area, getMeetingsMode());
+      } else {
+        handlerFn(area);
+      }
+    } else {
+      showLoadError(area, item.label);
+    }
   } else {
+    // ⚡ صفحة قيد التطوير
     area.innerHTML = `<div class="placeholder-page">
       <h2>${item ? item.label : pageId}</h2>
       <p>هذه الصفحة قيد التطوير.</p>
@@ -654,9 +642,9 @@ function loadPeopleLazy(area) {
   else showLoadError(area, 'الأشخاص');
 }
 
-function loadMeetingsLazy(area) {
+function loadMeetingsLazy(area, mode) {
   if (typeof window.loadMeetingsPage === 'function') {
-    window.loadMeetingsPage(area, getMeetingsMode());
+    window.loadMeetingsPage(area, mode || getMeetingsMode());
   } else showLoadError(area, 'الاجتماعات');
 }
 
@@ -800,3 +788,10 @@ document.addEventListener('DOMContentLoaded', () => {
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
+window.loadSettingsLazy = loadSettingsLazy;
+window.loadPeopleLazy = loadPeopleLazy;
+window.loadMeetingsLazy = loadMeetingsLazy;
+window.loadProfileLazy = loadProfileLazy;
+window.loadMyAttendanceLazy = loadMyAttendanceLazy;
+window.loadAttendanceLazy = loadAttendanceLazy;
+window.loadAccountsLazy = loadAccountsLazy;
