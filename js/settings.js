@@ -25,6 +25,34 @@ let currentLocationId = null;
 const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
 const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeVxvcyHciVG2JH7gJlIzyxbOhmHM2HDafSLIIFuQUtbBqYLg/viewform';
 
+// ⚡ Tab Permissions Constants
+const AVAILABLE_TABS = [
+  { id: 'dashboard',      label: 'لوحة التحكم',          icon: '🏠' },
+  { id: 'profile',        label: 'حسابي',                 icon: '👤' },
+  { id: 'my-attendance',  label: 'سجل حضورك بنفسك',      icon: '📱', excludeRoles: ['User'] },
+  { id: 'scanner',        label: 'الماسح',                icon: '📷', excludeRoles: ['User'] },
+  { id: 'meetings',       label: 'الاجتماعات',           icon: '📅' },
+  { id: 'people',         label: 'الأشخاص',              icon: '👥', excludeRoles: ['Scanner', 'User'] },
+  { id: 'attendance',     label: 'الحضور',                icon: '✅', excludeRoles: ['Scanner', 'User'] },
+  { id: 'reports',        label: 'التقارير',              icon: '📈', excludeRoles: ['Scanner', 'User'] },
+  { id: 'logs',           label: 'السجلات',               icon: '📋', excludeRoles: ['Scanner', 'User'] },
+  { id: 'archive',        label: 'الأرشيف',               icon: '📦', excludeRoles: ['Scanner', 'User'] }
+];
+
+const OWNER_ONLY_TABS = ['accounts', 'settings'];
+
+const EDITABLE_ROLES = [
+  { role: 'User',    label: '👤 User' },
+  { role: 'Admin',   label: '🛠️ Admin' },
+  { role: 'Scanner', label: '📷 Scanner' }
+];
+
+const DEFAULT_TAB_PERMISSIONS = {
+  User:    ['dashboard', 'profile', 'meetings'],
+  Admin:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'logs', 'archive'],
+  Scanner: ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings']
+};
+
 // ═══════════════════════════════════════════════════════
 //   Load Settings Page
 // ═══════════════════════════════════════════════════════
@@ -68,6 +96,7 @@ function renderSettingsPage(area) {
         <button class="settings-tab" data-tab="people">الأشخاص</button>
         <button class="settings-tab" data-tab="photo">الصور</button>
         <button class="settings-tab" data-tab="locations">📍 الأماكن و QR</button>
+        <button class="settings-tab" data-tab="tabs">🎛️ التابات والصلاحيات</button>
       </div>
 
       <!-- عام -->
@@ -268,6 +297,19 @@ function renderSettingsPage(area) {
 
       </div>
 
+      <!-- 🎛️ التابات والصلاحيات -->
+      <div class="settings-tab-content" id="tab-tabs" style="display:none;">
+        <div class="settings-group">
+          <h3>🎛️ التحكم في تابات الـSidebar</h3>
+          <p class="hint">
+            اختر التابات التي تظهر لكل دور. <strong>Owner</strong> يمتلك كل التابات دائمًا (غير قابل للتعديل).
+            التابات <strong>الحسابات</strong> و <strong>الإعدادات</strong> محصورة للـOwner فقط.
+          </p>
+        </div>
+
+        <div id="tabPermissionsContainer"></div>
+      </div>
+
       <div class="settings-actions">
         <button class="btn-danger" onclick="resetThemeToDefault()">↺ استعادة المظهر الافتراضي</button>
         <button class="btn-secondary" onclick="reloadSettings()">إلغاء</button>
@@ -281,6 +323,7 @@ function renderSettingsPage(area) {
   setupSettingsEvents();
   renderLocationsList();
   loadSyncInfo();
+  renderTabPermissions();
 }
 
 // ═══ Fill Form ═══
@@ -337,6 +380,153 @@ function setupSettingsEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Tab Permissions
+// ═══════════════════════════════════════════════════════
+
+function renderTabPermissions() {
+  const container = document.getElementById('tabPermissionsContainer');
+  if (!container) return;
+
+  const perms = settingsData.TabPermissions || DEFAULT_TAB_PERMISSIONS;
+
+  let html = '';
+
+  // ═══ الأدوار القابلة للتعديل ═══
+  EDITABLE_ROLES.forEach(({ role, label }) => {
+    const allowedTabs = perms[role] || DEFAULT_TAB_PERMISSIONS[role] || [];
+
+    html += `
+      <div class="settings-group">
+        <h3>${label}</h3>
+        <div class="tab-permissions-grid">
+          ${AVAILABLE_TABS.map(tab => {
+            if (tab.excludeRoles && tab.excludeRoles.includes(role)) return '';
+
+            const isChecked = allowedTabs.includes(tab.id);
+
+            return `
+              <label class="tab-permission-item">
+                <input type="checkbox"
+                       data-role="${role}"
+                       value="${tab.id}"
+                       ${isChecked ? 'checked' : ''} />
+                <span class="tab-icon">${tab.icon}</span>
+                <span class="tab-label">${tab.label}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  });
+
+  // ═══ Owner (للعرض فقط) ═══
+  html += `
+    <div class="settings-group owner-tabs-group">
+      <h3>👑 Owner</h3>
+      <p class="hint">Owner يمتلك كل التابات دائمًا (غير قابل للتعديل)</p>
+      <div class="tab-permissions-grid">
+        ${AVAILABLE_TABS.map(tab => `
+          <label class="tab-permission-item disabled">
+            <input type="checkbox" checked disabled />
+            <span class="tab-icon">${tab.icon}</span>
+            <span class="tab-label">${tab.label}</span>
+          </label>
+        `).join('')}
+        ${OWNER_ONLY_TABS.map(tabId => {
+          const meta = {
+            'accounts': { icon: '🔑', label: 'الحسابات' },
+            'settings': { icon: '⚙️', label: 'الإعدادات' }
+          }[tabId];
+
+          return `
+            <label class="tab-permission-item disabled">
+              <input type="checkbox" checked disabled />
+              <span class="tab-icon">${meta.icon}</span>
+              <span class="tab-label">${meta.label}</span>
+            </label>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  html += `
+    <div class="tab-permissions-actions">
+      <button class="btn-secondary" onclick="resetTabPermissions()">↺ استعادة الافتراضي</button>
+      <button class="btn-primary" onclick="saveTabPermissions(event)">💾 حفظ التابات</button>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+window.saveTabPermissions = async function(event) {
+  const btn = event ? event.target : null;
+  const originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'جاري الحفظ...'; }
+
+  try {
+    const newPerms = {};
+
+    EDITABLE_ROLES.forEach(({ role }) => {
+      newPerms[role] = [];
+    });
+
+    document.querySelectorAll('#tabPermissionsContainer input[type="checkbox"]:not(:disabled)').forEach(cb => {
+      if (cb.checked) {
+        const role = cb.dataset.role;
+        if (role) {
+          if (!newPerms[role]) newPerms[role] = [];
+          newPerms[role].push(cb.value);
+        }
+      }
+    });
+
+    // ⚡ Validation: كل دور لازم يكون عنده dashboard على الأقل
+    EDITABLE_ROLES.forEach(({ role }) => {
+      if (!newPerms[role] || !newPerms[role].includes('dashboard')) {
+        newPerms[role] = ['dashboard', ...(newPerms[role] || [])];
+      }
+    });
+
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    await setDoc(settingsRef, {
+      TabPermissions: newPerms
+    }, { merge: true });
+
+    settingsData.TabPermissions = newPerms;
+
+    alert('✅ تم حفظ إعدادات التابات بنجاح\n\nسيتم تطبيقها بعد إعادة تحميل الصفحة.');
+
+  } catch (err) {
+    console.error('❌ Save tab permissions error:', err);
+    alert('خطأ: ' + err.message);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = originalText; }
+};
+
+window.resetTabPermissions = async function() {
+  if (!confirm('هل أنت متأكد من استعادة إعدادات التابات الافتراضية؟')) return;
+
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    await setDoc(settingsRef, {
+      TabPermissions: DEFAULT_TAB_PERMISSIONS
+    }, { merge: true });
+
+    settingsData.TabPermissions = DEFAULT_TAB_PERMISSIONS;
+    renderTabPermissions();
+
+    alert('✅ تم استعادة الإعدادات الافتراضية');
+  } catch (err) {
+    console.error('❌ Reset tab permissions error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
 //   Google Form Sync
 // ═══════════════════════════════════════════════════════
 
@@ -391,7 +581,6 @@ window.syncGoogleFormNow = async function() {
   }
 
   try {
-    // ⚡ POST بدل GET لتجنب CORS
     const response = await fetch(SYNC_WEBAPP_URL, {
       method: 'POST',
       mode: 'cors',
@@ -408,7 +597,6 @@ window.syncGoogleFormNow = async function() {
 
     const text = await response.text();
 
-    // ⚡ تأكد إنه JSON
     let data;
     try {
       data = JSON.parse(text);
@@ -420,7 +608,6 @@ window.syncGoogleFormNow = async function() {
       throw new Error(data.message || 'فشلت المزامنة');
     }
 
-    // ⚡ احفظ النتيجة
     const now = new Date().toISOString();
     localStorage.setItem('lastSyncTime', now);
     localStorage.setItem('lastSyncResult', JSON.stringify({
@@ -429,16 +616,14 @@ window.syncGoogleFormNow = async function() {
       skipped: data.skipped || 0
     }));
 
-    // ⚡ حدّث الواجهة
     await loadSyncInfo();
 
-    // ⚡ عرض النتيجة
     if (resultBox) {
       resultBox.style.display = 'block';
       resultBox.className = 'sync-result success';
       resultBox.innerHTML = `
         <div class="sync-result-title">✅ تمت المزامنة بنجاح</div>
-                <div class="sync-result-details">
+        <div class="sync-result-details">
           <div class="sync-result-item">
             <span class="sync-result-icon">➕</span>
             <span>مضاف: <strong>${data.added || 0}</strong></span>
