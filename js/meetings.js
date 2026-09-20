@@ -38,19 +38,10 @@ const DAYS_OF_WEEK = [
   { value: 'Saturday',  label: 'السبت' }
 ];
 
-const LOCATION_MODES = {
-  SINGLE: 'single',
-  ANY: 'any',
-  MULTIPLE: 'multiple'
-};
-
 // ═══════════════════════════════════════════════════════
 //   Date/Time Validation Helpers
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ التحقق من التاريخ: مش في الماضي
- */
 function isDateInPast(dateStr) {
   if (!dateStr) return false;
 
@@ -65,16 +56,12 @@ function isDateInPast(dateStr) {
   return d < today;
 }
 
-/**
- * ⚡ التحقق من الوقت في نفس اليوم
- */
 function isTimeInPast(dateStr, timeStr) {
   if (!dateStr || !timeStr) return false;
 
   const now = new Date();
   const todayStr = formatDateISO(now);
 
-  // الوقت فات بس لو نفس اليوم
   if (dateStr !== todayStr) return false;
 
   const [h, m] = String(timeStr).split(':').map(Number);
@@ -84,9 +71,6 @@ function isTimeInPast(dateStr, timeStr) {
   return meetingTime < now;
 }
 
-/**
- * ⚡ التحقق من اجتماع Weekly: اليوم نفسه والوقت فات
- */
 function isWeeklyTimeInPast(dayOfWeek, timeStr) {
   if (!dayOfWeek || !timeStr) return false;
 
@@ -100,6 +84,14 @@ function isWeeklyTimeInPast(dayOfWeek, timeStr) {
   meetingTime.setHours(h || 0, m || 0, 0, 0);
 
   return meetingTime < now;
+}
+
+/**
+ * ⚡ التحقق: EndTime بعد Time
+ */
+function isEndTimeAfterStart(startTime, endTime) {
+  if (!startTime || !endTime) return false;
+  return String(endTime) > String(startTime);
 }
 
 function getDayNameFromDate(date) {
@@ -125,6 +117,27 @@ function formatDateArabic(date) {
   const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * ⚡ الحصول على EndTime (مع Fallback للاجتماعات القديمة)
+ * Time + 2 ساعات
+ */
+function getMeetingEndTime(meeting) {
+  if (!meeting) return '';
+
+  // ⚡ لو EndTime موجود
+  if (meeting.EndTime) return String(meeting.EndTime);
+
+  // ⚡ Fallback: Time + 2 ساعات
+  const time = String(meeting.Time || '00:00');
+  const [h, m] = time.split(':').map(Number);
+
+  const totalMinutes = (h || 0) * 60 + (m || 0) + 120; // +2 hours
+  const newH = Math.floor(totalMinutes / 60) % 24;
+  const newM = totalMinutes % 60;
+
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -155,9 +168,9 @@ async function loadMeetingsPage(area, mode) {
     }
 
     meetingsToShow.sort((a, b) => {
-      const statusOrder = { active: 0, cancelled: 1, archived: 2 };
-      const aOrder = statusOrder[String(a.Status || '').toLowerCase()] ?? 3;
-      const bOrder = statusOrder[String(b.Status || '').toLowerCase()] ?? 3;
+      const statusOrder = { active: 0, cancelled: 1, inactive: 2, archived: 3 };
+      const aOrder = statusOrder[String(a.Status || '').toLowerCase()] ?? 4;
+      const bOrder = statusOrder[String(b.Status || '').toLowerCase()] ?? 4;
       if (aOrder !== bOrder) return aOrder - bOrder;
       return String(a.Time || '').localeCompare(String(b.Time || ''));
     });
@@ -194,6 +207,7 @@ function renderMeetingsPage(area) {
       <div class="meetings-filters">
         <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">الكل</button>
         <button class="filter-btn ${currentFilter === 'active' ? 'active' : ''}" data-filter="active">نشط</button>
+        <button class="filter-btn ${currentFilter === 'inactive' ? 'active' : ''}" data-filter="inactive">غير نشط</button>
         <button class="filter-btn ${currentFilter === 'weekly' ? 'active' : ''}" data-filter="weekly">أسبوعي</button>
         <button class="filter-btn ${currentFilter === 'once' ? 'active' : ''}" data-filter="once">مرة واحدة</button>
         <button class="filter-btn ${currentFilter === 'archived' ? 'active' : ''}" data-filter="archived">مؤرشف</button>
@@ -302,6 +316,8 @@ function renderMeetingsGrid() {
       statusBadge = '<span class="status-badge archived">📦 مؤرشف</span>';
     } else if (status === 'cancelled') {
       statusBadge = '<span class="status-badge inactive">❌ ملغي</span>';
+    } else if (status === 'inactive') {
+      statusBadge = '<span class="status-badge inactive">⏸️ غير نشط</span>';
     } else {
       statusBadge = '<span class="status-badge active">✅ نشط</span>';
     }
@@ -317,6 +333,11 @@ function renderMeetingsGrid() {
     } else {
       dateInfo = formatDate(meeting.Date);
     }
+
+    // ⚡ عرض المدة (من - إلى)
+    const startTime = meeting.Time || '-';
+    const endTime = getMeetingEndTime(meeting);
+    const timeInfo = `${startTime} - ${endTime}`;
 
     const cancelInfo = canceledOccurrences.length > 0
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
@@ -364,7 +385,7 @@ function renderMeetingsGrid() {
 
             <div class="meeting-info-row">
               <span class="meeting-info-icon">🕐</span>
-              <span>${escapeHtml(meeting.Time || '-')}</span>
+              <span>${escapeHtml(timeInfo)}</span>
             </div>
 
             <div class="meeting-info-row">
@@ -442,6 +463,10 @@ function applyFilter() {
     filteredMeetings = baseData.filter(m =>
       String(m.Status || '').toLowerCase() === 'active'
     );
+  } else if (currentFilter === 'inactive') {
+    filteredMeetings = baseData.filter(m =>
+      String(m.Status || '').toLowerCase() === 'inactive'
+    );
   } else if (currentFilter === 'weekly') {
     filteredMeetings = baseData.filter(m =>
       String(m.Type || '').toLowerCase() === 'weekly'
@@ -487,8 +512,10 @@ function openMeetingModal(meetingId) {
 
   const noLocations = availableLocations.length === 0;
 
-  // ⚡ الحد الأدنى للتاريخ = النهاردة
   const todayISO = formatDateISO(new Date());
+
+  // ⚡ EndTime (مع Fallback)
+  const endTime = meeting ? getMeetingEndTime(meeting) : '21:00';
 
   modal.innerHTML = `
     <div class="modal-content modal-large">
@@ -530,11 +557,18 @@ function openMeetingModal(meetingId) {
           </div>
         </div>
 
-        <div class="form-row">
-          <label>الوقت *</label>
-          <input type="time" id="meetingTime" value="${meeting && meeting.Time ? meeting.Time : '19:00'}" />
-          <p class="hint">تأكد أن الوقت لم يفت بعد</p>
+        <!-- ⚡ الوقت: من - إلى -->
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>وقت البداية *</label>
+            <input type="time" id="meetingTime" value="${meeting && meeting.Time ? meeting.Time : '19:00'}" />
+          </div>
+          <div class="form-row">
+            <label>وقت النهاية *</label>
+            <input type="time" id="meetingEndTime" value="${endTime}" />
+          </div>
         </div>
+        <p class="hint">تأكد أن وقت النهاية بعد وقت البداية</p>
 
         <div class="form-row checkbox-row">
           <input type="checkbox" id="meetingActive" ${!meeting || String(meeting.Status || 'active').toLowerCase() === 'active' ? 'checked' : ''} />
@@ -648,7 +682,7 @@ function closeMeetingModal() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Save Meeting (مع التحقق من التاريخ والوقت)
+//   Save Meeting
 // ═══════════════════════════════════════════════════════
 
 async function saveMeeting() {
@@ -662,9 +696,9 @@ async function saveMeeting() {
   const date = document.getElementById('meetingDate')?.value || '';
   const dayOfWeek = document.getElementById('meetingDayOfWeek')?.value || '';
   const time = document.getElementById('meetingTime')?.value || '';
+  const endTime = document.getElementById('meetingEndTime')?.value || '';
   const isActive = document.getElementById('meetingActive')?.checked;
 
-  // ═══ Basic Validation ═══
   if (!title) {
     alert('اسم الاجتماع مطلوب');
     return;
@@ -681,7 +715,22 @@ async function saveMeeting() {
   }
 
   if (!time) {
-    alert('الوقت مطلوب');
+    alert('وقت البداية مطلوب');
+    return;
+  }
+
+  if (!endTime) {
+    alert('وقت النهاية مطلوب');
+    return;
+  }
+
+  // ⚡ Validation: EndTime > Time
+  if (!isEndTimeAfterStart(time, endTime)) {
+    alert(
+      `❌ وقت النهاية يجب أن يكون بعد وقت البداية.\n\n` +
+      `وقت البداية: ${time}\n` +
+      `وقت النهاية: ${endTime}`
+    );
     return;
   }
 
@@ -697,7 +746,6 @@ async function saveMeeting() {
       return;
     }
 
-    // ⚡ لو نفس اليوم، نتأكد إن الوقت لسه ما فات
     if (isTimeInPast(date, time)) {
       alert(
         `❌ الوقت المحدد قد فات.\n\n` +
@@ -709,7 +757,6 @@ async function saveMeeting() {
     }
   }
 
-  // ═══ ⚡ التحقق من الوقت (Weekly) ═══
   if (type === 'weekly') {
     if (isWeeklyTimeInPast(dayOfWeek, time)) {
       const dayLabel = getDayLabel(dayOfWeek);
@@ -760,6 +807,7 @@ async function saveMeeting() {
         Date: type === 'once' ? date : '',
         DayOfWeek: type === 'weekly' ? dayOfWeek : '',
         Time: time,
+        EndTime: endTime,   // ⚡ جديد
         Status: status,
         LocationMode: locationMode,
         LocationIds: locationIds,
@@ -777,6 +825,7 @@ async function saveMeeting() {
         Date: type === 'once' ? date : '',
         DayOfWeek: type === 'weekly' ? dayOfWeek : '',
         Time: time,
+        EndTime: endTime,   // ⚡ جديد
         Status: status,
         LocationMode: locationMode,
         LocationIds: locationIds,
@@ -878,6 +927,8 @@ function viewOccurrences(meetingId) {
   const isView = currentMode === 'view';
   const type = String(meeting.Type || 'once').toLowerCase();
   const canceledOccurrences = meeting.CanceledOccurrences || [];
+  const startTime = meeting.Time || '-';
+  const endTime = getMeetingEndTime(meeting);
 
   let occurrencesHtml = '';
 
@@ -886,6 +937,7 @@ function viewOccurrences(meetingId) {
     occurrencesHtml = `
       <div class="occurrence-item ${isCancelled ? 'cancelled' : ''}">
         <div class="occurrence-date">${formatDate(meeting.Date)}</div>
+        <div class="occurrence-time">🕐 ${startTime} - ${endTime}</div>
         <div class="occurrence-status">
           ${isCancelled
             ? '<span class="status-badge inactive">❌ ملغي</span>'
@@ -910,6 +962,7 @@ function viewOccurrences(meetingId) {
       return `
         <div class="occurrence-item ${isCancelled ? 'cancelled' : ''}">
           <div class="occurrence-date">${formatDate(dateStr)}</div>
+          <div class="occurrence-time">🕐 ${startTime} - ${endTime}</div>
           <div class="occurrence-actions">
             ${actionsHtml}
           </div>
@@ -1076,6 +1129,76 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Auto Deactivate Once Meetings
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ يحوّل الاجتماعات Once المنتهية إلى inactive
+ * - شرط: Type=once + Status=active
+ * - التاريخ + EndTime + CloseAfter < الآن
+ */
+async function autoDeactivateOnceMeetings() {
+  try {
+    const now = new Date();
+
+    // ⚡ اجلب الإعدادات
+    const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
+    const settings = settingsDoc.exists() ? settingsDoc.data() : {};
+
+    const closeAfter = Number(settings.CloseAfterMinutes || 15);
+
+    // ⚡ اجلب الاجتماعات
+    const snap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
+
+    const toDeactivate = [];
+
+    snap.docs.forEach(docSnap => {
+      const meeting = { id: docSnap.id, ...docSnap.data() };
+
+      // ⚡ Once + Active فقط
+      if (String(meeting.Type || '').toLowerCase() !== 'once') return;
+      if (String(meeting.Status || '').toLowerCase() !== 'active') return;
+      if (!meeting.Date) return;
+
+      const endTime = getMeetingEndTime(meeting);
+
+      // ⚡ احسب وقت النهاية
+      const [eh, em] = endTime.split(':').map(Number);
+      const [sh, sm] = String(meeting.Time || '00:00').split(':').map(Number);
+
+      const meetingEnd = new Date(meeting.Date + 'T00:00:00');
+      meetingEnd.setHours(eh || 0, em || 0, 0, 0);
+
+      const closeTime = new Date(meetingEnd.getTime() + closeAfter * 60 * 1000);
+
+      // ⚡ لو مر وقت الإغلاق
+      if (now > closeTime) {
+        toDeactivate.push(meeting.id);
+      }
+    });
+
+    // ⚡ حدّث كل واحد
+    for (const id of toDeactivate) {
+      await updateDoc(doc(db, COLLECTIONS.MEETINGS, id), {
+        Status: 'inactive',
+        DeactivatedAt: now.toISOString(),
+        AutoDeactivated: true
+      });
+    }
+
+    if (toDeactivate.length > 0) {
+      console.log(`⏸️ Auto-deactivated ${toDeactivate.length} meeting(s)`);
+    }
+
+    return { deactivated: toDeactivate.length };
+
+  } catch (err) {
+    console.error('❌ autoDeactivateOnceMeetings error:', err);
+    return { deactivated: 0, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //   Expose to window
 // ═══════════════════════════════════════════════════════
 
@@ -1090,3 +1213,4 @@ window.viewOccurrences = viewOccurrences;
 window.closeOccurrencesModal = closeOccurrencesModal;
 window.cancelOccurrence = cancelOccurrence;
 window.restoreOccurrence = restoreOccurrence;
+window.autoDeactivateOnceMeetings = autoDeactivateOnceMeetings;
