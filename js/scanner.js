@@ -27,14 +27,43 @@ let isScanning = false;
 let settings = {};
 let peopleCache = {};
 let lastScanTime = 0;
-const SCAN_COOLDOWN = 2000; // 2 ثانية بين كل مسحة
+const SCAN_COOLDOWN = 2000;
+
+// ═══════════════════════════════════════════════════════
+//   Helper: Get Person Full Name
+// ═══════════════════════════════════════════════════════
+
+function getPersonFullName(person) {
+  if (!person) return '';
+
+  // ⚡ الشكل الجديد (4 حقول)
+  if (person.FirstName || person.SecondName) {
+    return [
+      person.FirstName,
+      person.SecondName,
+      person.ThirdName,
+      person.FourthName
+    ].filter(Boolean).join(' ').trim();
+  }
+
+  // ⚡ Fallback للشكل القديم
+  if (person.Name) return String(person.Name).trim();
+
+  return '';
+}
+
+function getPersonInitial(person) {
+  if (!person) return '?';
+  if (person.FirstName) return String(person.FirstName).charAt(0);
+  if (person.Name) return String(person.Name).charAt(0);
+  return '?';
+}
 
 // ═══════════════════════════════════════════════════════
 //   Initialize
 // ═══════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // اقرأ بيانات المستخدم
   try {
     currentUser = JSON.parse(localStorage.getItem('currentUser'));
   } catch (e) {
@@ -46,7 +75,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // اقرأ الإعدادات
   try {
     const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
     settings = settingsDoc.exists() ? settingsDoc.data() : {};
@@ -55,7 +83,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     settings = {};
   }
 
-  // تحقق من حالة النظام
   const status = settings.SystemStatus || 'Active';
   const statusEl = document.getElementById('systemStatus');
   if (statusEl && status === 'Suspended') {
@@ -63,10 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusEl.title = 'النظام متوقف';
   }
 
-  // حمّل الاجتماعات
   await loadMeetings();
-
-  // اربط الأحداث
   setupEvents();
 });
 
@@ -82,7 +106,6 @@ async function loadMeetings() {
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(m => String(m.Status || '').toLowerCase() === 'active');
 
-    // ترتيب حسب الوقت
     meetings.sort((a, b) =>
       String(a.Time || '').localeCompare(String(b.Time || ''))
     );
@@ -210,7 +233,6 @@ async function startScanner() {
 
   showScreen('scannerScreen');
 
-  // اعرض اسم الاجتماع
   const infoEl = document.getElementById('scannerMeetingInfo');
   if (infoEl) {
     infoEl.textContent = '📅 ' + selectedMeeting.Title;
@@ -231,7 +253,7 @@ async function startScanner() {
     };
 
     await html5QrCode.start(
-      { facingMode: 'environment' }, // كاميرا خلفية
+      { facingMode: 'environment' },
       config,
       onScanSuccess,
       onScanError
@@ -247,26 +269,23 @@ async function startScanner() {
 }
 
 function onScanError(errorMessage) {
-  // نتجاهل أخطاء المسح العادية (لا يوجد QR في الإطار)
+  // نتجاهل أخطاء المسح العادية
 }
 
 async function onScanSuccess(decodedText, decodedResult) {
   const now = Date.now();
 
-  // Cooldown لتجنب المسح المكرر
   if (now - lastScanTime < SCAN_COOLDOWN) {
     return;
   }
   lastScanTime = now;
 
-  // أوقف المسح مؤقتًا
   if (isScanning && html5QrCode) {
     try {
       await html5QrCode.pause(true);
     } catch (e) {}
   }
 
-  // عالج المسحة
   await processScan(decodedText);
 }
 
@@ -283,7 +302,7 @@ async function stopScanner() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Process Scan (8 Checks)
+//   Process Scan
 // ═══════════════════════════════════════════════════════
 
 async function processScan(decodedText) {
@@ -321,13 +340,17 @@ async function processScan(decodedText) {
       peopleCache[personId] = person;
     }
 
+    // ⚡ اسم الشخص (من الحقول الجديدة أو القديمة)
+    const personName = getPersonFullName(person);
+    const personInitial = getPersonInitial(person);
+
     // ═══ Check 3: الشخص Active؟ ═══
     const personStatus = String(person.Status || '').toLowerCase();
     if (personStatus !== 'active') {
       await showResult({
         type: 'error',
         title: 'شخص معطّل',
-        message: `${person.Name} — الحساب معطّل`,
+        message: `${personName} — الحساب معطّل`,
         person: person,
         playSound: 'error'
       });
@@ -398,7 +421,7 @@ async function processScan(decodedText) {
         await showResult({
           type: 'error',
           title: 'مسجّل بالفعل',
-          message: `${person.Name} — سجّل الحضور مسبقاً`,
+          message: `${personName} — سجّل الحضور مسبقاً`,
           person: person,
           playSound: 'error'
         });
@@ -409,14 +432,16 @@ async function processScan(decodedText) {
     // ═══ كل الشروط صحيحة → سجّل الحضور ═══
     const attendanceData = {
       PersonID: personId,
-      PersonName: person.Name,
+      PersonName: personName || 'غير معروف',      // ⚡ الاسم الكامل من الحقول الجديدة
       MeetingID: selectedMeeting.id,
-      MeetingTitle: selectedMeeting.Title,
+      MeetingTitle: selectedMeeting.Title || '',
       OccurrenceDate: occurrenceDate,
       ScanTime: new Date().toISOString(),
       Status: 'present',
-      ScannerEmail: currentUser.email,
-      ScannerName: currentUser.name || currentUser.email,
+      ScannerEmail: currentUser.email || '',
+      ScannerName: currentUser.name || currentUser.email || '',
+      Method: 'scanner',                            // ⚡ جديد: تمييز نوع التسجيل
+      Location: null,                                // ⚡ جديد: Scanner مش محتاج موقع
       Notes: ''
     };
 
@@ -425,7 +450,7 @@ async function processScan(decodedText) {
     await showResult({
       type: 'success',
       title: 'تم تسجيل الحضور',
-      message: person.Name,
+      message: personName,
       person: person,
       playSound: 'success'
     });
@@ -448,13 +473,11 @@ async function processScan(decodedText) {
 function extractPersonId(text) {
   if (!text) return null;
 
-  // الصيغة: PERSON_{id}
   const match = String(text).match(/^PERSON_(.+)$/);
   if (match && match[1]) {
     return match[1];
   }
 
-  // في حالة QR قديم كان فيه ID مباشر
   if (/^[a-zA-Z0-9]{10,}$/.test(text)) {
     return text;
   }
@@ -487,11 +510,6 @@ function formatDateISO(date) {
   return `${y}-${m}-${d}`;
 }
 
-/**
- * هل يوجد موعد اليوم للاجتماع؟
- * لو Weekly → لازم يكون اليوم صح
- * لو Once → لازم يكون التاريخ = اليوم
- */
 function getTodayOccurrence(meeting) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -501,12 +519,11 @@ function getTodayOccurrence(meeting) {
   if (type === 'weekly') {
     const todayDay = getDayNameFromDate(today);
     if (todayDay !== meeting.DayOfWeek) {
-      return null; // اليوم غلط
+      return null;
     }
     return formatDateISO(today);
   }
 
-  // Once
   if (meeting.Date === formatDateISO(today)) {
     return formatDateISO(today);
   }
@@ -514,16 +531,12 @@ function getTodayOccurrence(meeting) {
   return null;
 }
 
-/**
- * هل الحضور مفتوح الآن؟
- */
 function isMeetingOpen(meeting) {
   const today = new Date();
   const occurrenceDate = getTodayOccurrence(meeting);
 
   if (!occurrenceDate) return false;
 
-  // احسب وقت الاجتماع
   const [hours, minutes] = String(meeting.Time || '00:00').split(':').map(Number);
   const meetingTime = new Date(today);
   meetingTime.setHours(hours || 0, minutes || 0, 0, 0);
@@ -537,9 +550,6 @@ function isMeetingOpen(meeting) {
   return today >= openTime && today <= closeTime;
 }
 
-/**
- * هل سجّل حضور بالفعل لهذا الموعد؟
- */
 async function checkAlreadyRegistered(personId, meetingId, occurrenceDate) {
   try {
     const q = query(
@@ -572,7 +582,10 @@ async function showResult({ type, title, message, person, playSound }) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  // الصورة
+  const personName = person ? getPersonFullName(person) : '';
+  const personInitial = person ? getPersonInitial(person) : '?';
+
+  // ⚡ الصورة
   let photoHtml = '';
   const showPhoto = settings.ShowPersonPhoto !== false;
 
@@ -580,8 +593,7 @@ async function showResult({ type, title, message, person, playSound }) {
     if (person.PhotoURL) {
       photoHtml = `<img src="${person.PhotoURL}" alt="" class="result-person-photo" />`;
     } else {
-      const initial = (person.Name || '?').charAt(0);
-      photoHtml = `<div class="result-person-photo-placeholder">${initial}</div>`;
+      photoHtml = `<div class="result-person-photo-placeholder">${escapeHtml(personInitial)}</div>`;
     }
   }
 
@@ -589,7 +601,7 @@ async function showResult({ type, title, message, person, playSound }) {
     <div class="result-icon ${isSuccess ? 'success' : 'error'}">${icon}</div>
     ${photoHtml}
     <div class="result-title ${isSuccess ? 'success' : 'error'}">${title}</div>
-    ${person ? `<div class="result-person-name">${escapeHtml(person.Name || '')}</div>` : ''}
+    ${person ? `<div class="result-person-name">${escapeHtml(personName)}</div>` : ''}
     <div class="result-message">${escapeHtml(message || '')}</div>
     <div class="result-time">${timeStr}</div>
     <div class="result-actions">
@@ -598,10 +610,8 @@ async function showResult({ type, title, message, person, playSound }) {
     </div>
   `;
 
-  // شغّل الصوت
   playResultSound(type);
 
-  // مدة العرض
   const duration = Number(settings.ResultDisplayDuration || 3);
   if (duration > 0) {
     setTimeout(() => {
@@ -644,11 +654,9 @@ function playResultSound(type) {
     gainNode.connect(audioContext.destination);
 
     if (type === 'success') {
-      // صوت صاعد
       oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
       oscillator.frequency.setValueAtTime(900, audioContext.currentTime + 0.1);
     } else {
-      // صوت هابط
       oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
       oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.15);
     }
