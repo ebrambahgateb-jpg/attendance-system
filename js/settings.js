@@ -15,6 +15,12 @@ import {
   DEFAULT_THEME
 } from './firebase-config.js';
 
+import {
+  EDITABLE_TABS,
+  OWNER_ONLY_TABS,
+  DEFAULT_TAB_PERMISSIONS
+} from './tabs-config.js';
+
 // ═══ State ═══
 let settingsData = {};
 let originalSettings = {};
@@ -25,33 +31,12 @@ let currentLocationId = null;
 const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
 const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeVxvcyHciVG2JH7gJlIzyxbOhmHM2HDafSLIIFuQUtbBqYLg/viewform';
 
-// ⚡ Tab Permissions Constants
-const AVAILABLE_TABS = [
-  { id: 'dashboard',      label: 'لوحة التحكم',          icon: '🏠' },
-  { id: 'profile',        label: 'حسابي',                 icon: '👤' },
-  { id: 'my-attendance',  label: 'سجل حضورك بنفسك',      icon: '📱', excludeRoles: ['User'] },
-  { id: 'scanner',        label: 'الماسح',                icon: '📷', excludeRoles: ['User'] },
-  { id: 'meetings',       label: 'الاجتماعات',           icon: '📅' },
-  { id: 'people',         label: 'الأشخاص',              icon: '👥', excludeRoles: ['Scanner', 'User'] },
-  { id: 'attendance',     label: 'الحضور',                icon: '✅', excludeRoles: ['Scanner', 'User'] },
-  { id: 'reports',        label: 'التقارير',              icon: '📈', excludeRoles: ['Scanner', 'User'] },
-  { id: 'logs',           label: 'السجلات',               icon: '📋', excludeRoles: ['Scanner', 'User'] },
-  { id: 'archive',        label: 'الأرشيف',               icon: '📦', excludeRoles: ['Scanner', 'User'] }
-];
-
-const OWNER_ONLY_TABS = ['accounts', 'settings'];
-
+// ═══ الأدوار القابلة للتعديل ═══
 const EDITABLE_ROLES = [
   { role: 'User',    label: '👤 User' },
   { role: 'Admin',   label: '🛠️ Admin' },
   { role: 'Scanner', label: '📷 Scanner' }
 ];
-
-const DEFAULT_TAB_PERMISSIONS = {
-  User:    ['dashboard', 'profile', 'meetings'],
-  Admin:   ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings', 'people', 'attendance', 'reports', 'logs', 'archive'],
-  Scanner: ['dashboard', 'profile', 'my-attendance', 'scanner', 'meetings']
-};
 
 // ═══════════════════════════════════════════════════════
 //   Load Settings Page
@@ -212,7 +197,6 @@ function renderSettingsPage(area) {
       <!-- الأشخاص -->
       <div class="settings-tab-content" id="tab-people" style="display:none;">
 
-        <!-- 🔄 مزامنة Google Form -->
         <div class="settings-group sync-group">
           <h3>🔄 مزامنة Google Form</h3>
           <p class="hint">
@@ -242,7 +226,6 @@ function renderSettingsPage(area) {
           <div class="sync-result" id="syncResultBox" style="display:none;"></div>
         </div>
 
-        <!-- الحقول الإلزامية -->
         <div class="settings-group">
           <h3>الحقول الإلزامية</h3>
           <p class="hint">اكتب أسماء الحقول مفصولة بفاصلة. مثال: Name,Phone</p>
@@ -252,7 +235,6 @@ function renderSettingsPage(area) {
           <p class="hint">الحقول المتاحة: Name, Phone, Email, PhotoURL</p>
         </div>
 
-        <!-- الحذف والتعطيل -->
         <div class="settings-group">
           <h3>الحذف والتعطيل</h3>
           <div class="form-row checkbox-row">
@@ -380,7 +362,7 @@ function setupSettingsEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Tab Permissions
+//   ⚡ Tab Permissions (ديناميكي)
 // ═══════════════════════════════════════════════════════
 
 function renderTabPermissions() {
@@ -399,9 +381,7 @@ function renderTabPermissions() {
       <div class="settings-group">
         <h3>${label}</h3>
         <div class="tab-permissions-grid">
-          ${AVAILABLE_TABS.map(tab => {
-            if (tab.excludeRoles && tab.excludeRoles.includes(role)) return '';
-
+          ${EDITABLE_TABS.map(tab => {
             const isChecked = allowedTabs.includes(tab.id);
 
             return `
@@ -426,27 +406,20 @@ function renderTabPermissions() {
       <h3>👑 Owner</h3>
       <p class="hint">Owner يمتلك كل التابات دائمًا (غير قابل للتعديل)</p>
       <div class="tab-permissions-grid">
-        ${AVAILABLE_TABS.map(tab => `
+        ${EDITABLE_TABS.map(tab => `
           <label class="tab-permission-item disabled">
             <input type="checkbox" checked disabled />
             <span class="tab-icon">${tab.icon}</span>
             <span class="tab-label">${tab.label}</span>
           </label>
         `).join('')}
-        ${OWNER_ONLY_TABS.map(tabId => {
-          const meta = {
-            'accounts': { icon: '🔑', label: 'الحسابات' },
-            'settings': { icon: '⚙️', label: 'الإعدادات' }
-          }[tabId];
-
-          return `
-            <label class="tab-permission-item disabled">
-              <input type="checkbox" checked disabled />
-              <span class="tab-icon">${meta.icon}</span>
-              <span class="tab-label">${meta.label}</span>
-            </label>
-          `;
-        }).join('')}
+        ${OWNER_ONLY_TABS.map(tab => `
+          <label class="tab-permission-item disabled">
+            <input type="checkbox" checked disabled />
+            <span class="tab-icon">${tab.icon}</span>
+            <span class="tab-label">${tab.label}</span>
+          </label>
+        `).join('')}
       </div>
     </div>
   `;
