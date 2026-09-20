@@ -23,7 +23,7 @@ let meetingsData = [];
 let filteredMeetings = [];
 let currentEditId = null;
 let currentFilter = 'all';
-let currentMode = 'manage';        // ⚡ manage | view
+let currentMode = 'manage';
 let settingsCache = null;
 let availableLocations = [];
 
@@ -38,7 +38,6 @@ const DAYS_OF_WEEK = [
   { value: 'Saturday',  label: 'السبت' }
 ];
 
-// ═══ أنماط تحديد الأماكن ═══
 const LOCATION_MODES = {
   SINGLE: 'single',
   ANY: 'any',
@@ -46,11 +45,93 @@ const LOCATION_MODES = {
 };
 
 // ═══════════════════════════════════════════════════════
+//   Date/Time Validation Helpers
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ التحقق من التاريخ: مش في الماضي
+ */
+function isDateInPast(dateStr) {
+  if (!dateStr) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return false;
+
+  d.setHours(0, 0, 0, 0);
+
+  return d < today;
+}
+
+/**
+ * ⚡ التحقق من الوقت في نفس اليوم
+ */
+function isTimeInPast(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return false;
+
+  const now = new Date();
+  const todayStr = formatDateISO(now);
+
+  // الوقت فات بس لو نفس اليوم
+  if (dateStr !== todayStr) return false;
+
+  const [h, m] = String(timeStr).split(':').map(Number);
+  const meetingTime = new Date(now);
+  meetingTime.setHours(h || 0, m || 0, 0, 0);
+
+  return meetingTime < now;
+}
+
+/**
+ * ⚡ التحقق من اجتماع Weekly: اليوم نفسه والوقت فات
+ */
+function isWeeklyTimeInPast(dayOfWeek, timeStr) {
+  if (!dayOfWeek || !timeStr) return false;
+
+  const now = new Date();
+  const todayDay = getDayNameFromDate(now);
+
+  if (todayDay !== dayOfWeek) return false;
+
+  const [h, m] = String(timeStr).split(':').map(Number);
+  const meetingTime = new Date(now);
+  meetingTime.setHours(h || 0, m || 0, 0, 0);
+
+  return meetingTime < now;
+}
+
+function getDayNameFromDate(date) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[date.getDay()];
+}
+
+function formatDateISO(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatTimeNow() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function formatDateArabic(date) {
+  const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+// ═══════════════════════════════════════════════════════
 //   Load Meetings Page
 // ═══════════════════════════════════════════════════════
 
 async function loadMeetingsPage(area, mode) {
-  // ⚡ الوضع الافتراضي: manage
   currentMode = (mode === 'view') ? 'view' : 'manage';
 
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
@@ -66,7 +147,6 @@ async function loadMeetingsPage(area, mode) {
 
     availableLocations = Array.isArray(settingsCache.Locations) ? settingsCache.Locations : [];
 
-    // ⚡ في View Mode: اظهر النشطة فقط (بدون المؤرشفة والملغية)
     let meetingsToShow = meetingsData;
     if (currentMode === 'view') {
       meetingsToShow = meetingsData.filter(m =>
@@ -74,7 +154,6 @@ async function loadMeetingsPage(area, mode) {
       );
     }
 
-    // ترتيب حسب الوقت
     meetingsToShow.sort((a, b) => {
       const statusOrder = { active: 0, cancelled: 1, archived: 2 };
       const aOrder = statusOrder[String(a.Status || '').toLowerCase()] ?? 3;
@@ -103,7 +182,6 @@ async function loadMeetingsPage(area, mode) {
 function renderMeetingsPage(area) {
   const isView = currentMode === 'view';
 
-  // ⚡ في View Mode: فلتر مبسط
   const filtersHtml = isView
     ? `
       <div class="meetings-filters">
@@ -126,7 +204,6 @@ function renderMeetingsPage(area) {
     ? ''
     : `<button class="btn-primary" onclick="openMeetingModal()">➕ إضافة اجتماع</button>`;
 
-  // ⚡ في View Mode: إحصائيات مختلفة
   const statsHtml = isView
     ? `
       <div class="meetings-stats">
@@ -165,7 +242,6 @@ function renderMeetingsPage(area) {
       </div>
     `;
 
-  // ⚡ Empty State
   const emptyBtnHtml = isView
     ? ''
     : `<button class="btn-primary" onclick="openMeetingModal()">➕ إضافة اجتماع</button>`;
@@ -248,7 +324,6 @@ function renderMeetingsGrid() {
 
     const locationsInfo = getLocationsInfoText(meeting);
 
-    // ⚡ أزرار الكارت: في View Mode بس زر المواعيد
     const footerHtml = isView
       ? `
         <div class="meeting-card-footer">
@@ -312,7 +387,6 @@ function renderMeetingsGrid() {
   }).join('');
 }
 
-// ═══ معلومات الأماكن في الكارت ═══
 function getLocationsInfoText(meeting) {
   const mode = String(meeting.LocationMode || 'any').toLowerCase();
 
@@ -358,7 +432,6 @@ function setupMeetingsEvents() {
 function applyFilter() {
   const isView = currentMode === 'view';
 
-  // ⚡ في View Mode: ابدأ بالنشطة فقط
   const baseData = isView
     ? meetingsData.filter(m => String(m.Status || '').toLowerCase() === 'active')
     : meetingsData;
@@ -387,11 +460,10 @@ function applyFilter() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Meeting Modal (للـManager فقط)
+//   Meeting Modal
 // ═══════════════════════════════════════════════════════
 
 function openMeetingModal(meetingId) {
-  // ⚡ حماية إضافية: منع الفتح في View Mode
   if (currentMode === 'view') {
     alert('غير مصرح لك بإضافة أو تعديل الاجتماعات');
     return;
@@ -414,6 +486,9 @@ function openMeetingModal(meetingId) {
   const locationIds = meeting && Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
 
   const noLocations = availableLocations.length === 0;
+
+  // ⚡ الحد الأدنى للتاريخ = النهاردة
+  const todayISO = formatDateISO(new Date());
 
   modal.innerHTML = `
     <div class="modal-content modal-large">
@@ -439,7 +514,8 @@ function openMeetingModal(meetingId) {
         <div id="onceFields" style="${type === 'once' ? '' : 'display:none;'}">
           <div class="form-row">
             <label>التاريخ *</label>
-            <input type="date" id="meetingDate" value="${meeting && meeting.Date ? meeting.Date : ''}" />
+            <input type="date" id="meetingDate" value="${meeting && meeting.Date ? meeting.Date : ''}" min="${todayISO}" />
+            <p class="hint">لا يمكن اختيار تاريخ في الماضي</p>
           </div>
         </div>
 
@@ -457,6 +533,7 @@ function openMeetingModal(meetingId) {
         <div class="form-row">
           <label>الوقت *</label>
           <input type="time" id="meetingTime" value="${meeting && meeting.Time ? meeting.Time : '19:00'}" />
+          <p class="hint">تأكد أن الوقت لم يفت بعد</p>
         </div>
 
         <div class="form-row checkbox-row">
@@ -571,11 +648,10 @@ function closeMeetingModal() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Save Meeting
+//   Save Meeting (مع التحقق من التاريخ والوقت)
 // ═══════════════════════════════════════════════════════
 
 async function saveMeeting() {
-  // ⚡ حماية
   if (currentMode === 'view') {
     alert('غير مصرح لك بحفظ الاجتماعات');
     return;
@@ -588,6 +664,7 @@ async function saveMeeting() {
   const time = document.getElementById('meetingTime')?.value || '';
   const isActive = document.getElementById('meetingActive')?.checked;
 
+  // ═══ Basic Validation ═══
   if (!title) {
     alert('اسم الاجتماع مطلوب');
     return;
@@ -608,6 +685,45 @@ async function saveMeeting() {
     return;
   }
 
+  // ═══ ⚡ التحقق من التاريخ (Once) ═══
+  if (type === 'once') {
+    if (isDateInPast(date)) {
+      alert(
+        `❌ لا يمكن إضافة اجتماع بتاريخ قديم.\n\n` +
+        `التاريخ المحدد: ${date}\n` +
+        `التاريخ الحالي: ${formatDateISO(new Date())}\n\n` +
+        `اختر تاريخ اليوم أو تاريخ مستقبلي.`
+      );
+      return;
+    }
+
+    // ⚡ لو نفس اليوم، نتأكد إن الوقت لسه ما فات
+    if (isTimeInPast(date, time)) {
+      alert(
+        `❌ الوقت المحدد قد فات.\n\n` +
+        `الوقت الحالي: ${formatTimeNow()}\n` +
+        `الوقت المحدد: ${time}\n\n` +
+        `اختر وقتاً لاحقاً.`
+      );
+      return;
+    }
+  }
+
+  // ═══ ⚡ التحقق من الوقت (Weekly) ═══
+  if (type === 'weekly') {
+    if (isWeeklyTimeInPast(dayOfWeek, time)) {
+      const dayLabel = getDayLabel(dayOfWeek);
+      alert(
+        `❌ اجتماع "${dayLabel}" الساعة ${time} قد فات.\n\n` +
+        `اليوم: ${dayLabel}\n` +
+        `الوقت الحالي: ${formatTimeNow()}\n\n` +
+        `اختر يوماً آخر، أو وقتاً لاحقاً.`
+      );
+      return;
+    }
+  }
+
+  // ═══ Location Mode ═══
   let locationMode = 'any';
   let locationIds = [];
 
@@ -684,7 +800,7 @@ async function saveMeeting() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Edit
+//   Edit / Archive / Delete
 // ═══════════════════════════════════════════════════════
 
 function editMeeting(meetingId) {
@@ -694,10 +810,6 @@ function editMeeting(meetingId) {
   }
   openMeetingModal(meetingId);
 }
-
-// ═══════════════════════════════════════════════════════
-//   Archive
-// ═══════════════════════════════════════════════════════
 
 async function archiveMeeting(meetingId) {
   if (currentMode === 'view') {
@@ -728,10 +840,6 @@ async function archiveMeeting(meetingId) {
     alert('خطأ: ' + err.message);
   }
 }
-
-// ═══════════════════════════════════════════════════════
-//   Delete
-// ═══════════════════════════════════════════════════════
 
 async function confirmDeleteMeeting(meetingId) {
   if (currentMode === 'view') {
@@ -792,7 +900,6 @@ function viewOccurrences(meetingId) {
     occurrencesHtml = upcomingDates.map(dateStr => {
       const isCancelled = canceledOccurrences.includes(dateStr);
 
-      // ⚡ في View Mode: بدون أزرار إلغاء/استعادة
       const actionsHtml = isView
         ? (isCancelled ? '<span class="status-badge inactive">❌ ملغي</span>' : '<span class="status-badge active">✅ نشط</span>')
         : (isCancelled
@@ -927,10 +1034,7 @@ function formatDate(dateStr) {
     const date = new Date(dateStr + 'T00:00:00');
     if (isNaN(date.getTime())) return dateStr;
 
-    const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-    const months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-
-    return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    return formatDateArabic(date);
   } catch (e) {
     return dateStr;
   }
@@ -959,13 +1063,6 @@ function getUpcomingOccurrences(dayOfWeek, count) {
   }
 
   return dates;
-}
-
-function formatDateISO(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }
 
 function escapeHtml(str) {
