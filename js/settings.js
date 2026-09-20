@@ -21,6 +21,10 @@ let originalSettings = {};
 let locationsData = [];
 let currentLocationId = null;
 
+// ═══ Constants ═══
+const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
+const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeVxvcyHciVG2JH7gJlIzyxbOhmHM2HDafSLIIFuQUtbBqYLg/viewform';
+
 // ═══════════════════════════════════════════════════════
 //   Load Settings Page
 // ═══════════════════════════════════════════════════════
@@ -178,6 +182,38 @@ function renderSettingsPage(area) {
 
       <!-- الأشخاص -->
       <div class="settings-tab-content" id="tab-people" style="display:none;">
+
+        <!-- 🔄 مزامنة Google Form -->
+        <div class="settings-group sync-group">
+          <h3>🔄 مزامنة Google Form</h3>
+          <p class="hint">
+            استخدم النموذج لإضافة أعضاء جدد. يمكنك المزامنة الآن أو انتظار المزامنة التلقائية (كل ساعة).
+          </p>
+
+          <div class="sync-info-box" id="syncInfoBox">
+            <div class="sync-info-row">
+              <span class="sync-info-icon">📊</span>
+              <span>آخر مزامنة: <strong id="lastSyncTime">—</strong></span>
+            </div>
+            <div class="sync-info-row">
+              <span class="sync-info-icon">📈</span>
+              <span>آخر نتيجة: <strong id="lastSyncResult">—</strong></span>
+            </div>
+          </div>
+
+          <div class="sync-actions">
+            <button class="btn-primary" id="syncNowBtn" onclick="syncGoogleFormNow()">
+              🔄 مزامنة الآن
+            </button>
+            <button class="btn-secondary" onclick="openGoogleForm()">
+              🔗 فتح الـ Form
+            </button>
+          </div>
+
+          <div class="sync-result" id="syncResultBox" style="display:none;"></div>
+        </div>
+
+        <!-- الحقول الإلزامية -->
         <div class="settings-group">
           <h3>الحقول الإلزامية</h3>
           <p class="hint">اكتب أسماء الحقول مفصولة بفاصلة. مثال: Name,Phone</p>
@@ -187,6 +223,7 @@ function renderSettingsPage(area) {
           <p class="hint">الحقول المتاحة: Name, Phone, Email, PhotoURL</p>
         </div>
 
+        <!-- الحذف والتعطيل -->
         <div class="settings-group">
           <h3>الحذف والتعطيل</h3>
           <div class="form-row checkbox-row">
@@ -243,6 +280,7 @@ function renderSettingsPage(area) {
   fillSettingsForm();
   setupSettingsEvents();
   renderLocationsList();
+  loadSyncInfo();
 }
 
 // ═══ Fill Form ═══
@@ -299,6 +337,140 @@ function setupSettingsEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
+//   Google Form Sync
+// ═══════════════════════════════════════════════════════
+
+async function loadSyncInfo() {
+  try {
+    const lastSync = localStorage.getItem('lastSyncTime');
+    const lastResult = localStorage.getItem('lastSyncResult');
+
+    const timeEl = document.getElementById('lastSyncTime');
+    const resultEl = document.getElementById('lastSyncResult');
+
+    if (timeEl && lastSync) {
+      timeEl.textContent = formatSyncTime(lastSync);
+    }
+
+    if (resultEl && lastResult) {
+      const r = JSON.parse(lastResult);
+      resultEl.textContent = `+${r.added} مضاف / ${r.updated} محدّث / ${r.skipped} متجاهل`;
+    }
+  } catch (e) {
+    console.warn('Load sync info error:', e);
+  }
+}
+
+function formatSyncTime(isoStr) {
+  try {
+    const d = new Date(isoStr);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy} - ${h}:${m}`;
+  } catch (e) {
+    return isoStr;
+  }
+}
+
+window.syncGoogleFormNow = async function() {
+  const btn = document.getElementById('syncNowBtn');
+  const resultBox = document.getElementById('syncResultBox');
+
+  if (!btn) return;
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري المزامنة...';
+
+  if (resultBox) {
+    resultBox.style.display = 'none';
+    resultBox.innerHTML = '';
+  }
+
+  try {
+    const url = SYNC_WEBAPP_URL + '?action=sync';
+    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status);
+    }
+
+    const text = await response.text();
+
+    // ⚡ تأكد إنه JSON
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error('رد غير صالح من السيرفر');
+    }
+
+    if (!data.ok) {
+      throw new Error(data.message || 'فشلت المزامنة');
+    }
+
+    // ⚡ احفظ النتيجة
+    const now = new Date().toISOString();
+    localStorage.setItem('lastSyncTime', now);
+    localStorage.setItem('lastSyncResult', JSON.stringify({
+      added: data.added || 0,
+      updated: data.updated || 0,
+      skipped: data.skipped || 0
+    }));
+
+    // ⚡ حدّث الواجهة
+    await loadSyncInfo();
+
+    // ⚡ عرض النتيجة
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.className = 'sync-result success';
+      resultBox.innerHTML = `
+        <div class="sync-result-title">✅ تمت المزامنة بنجاح</div>
+        <div class="sync-result-details">
+          <div class="sync-result-item">
+            <span class="sync-result-icon">➕</span>
+            <span>مضاف: <strong>${data.added || 0}</strong></span>
+          </div>
+          <div class="sync-result-item">
+            <span class="sync-result-icon">✏️</span>
+            <span>محدّث: <strong>${data.updated || 0}</strong></span>
+          </div>
+          <div class="sync-result-item">
+            <span class="sync-result-icon">⏭️</span>
+            <span>متجاهل: <strong>${data.skipped || 0}</strong></span>
+          </div>
+        </div>
+      `;
+    }
+
+  } catch (err) {
+    console.error('❌ Sync error:', err);
+
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.className = 'sync-result error';
+      resultBox.innerHTML = `
+        <div class="sync-result-title">❌ فشلت المزامنة</div>
+        <div class="sync-result-details">
+          <p>${escapeHtml(err.message)}</p>
+        </div>
+      `;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+};
+
+window.openGoogleForm = function() {
+  window.open(FORM_URL, '_blank');
+};
+
+// ═══════════════════════════════════════════════════════
 //   Locations
 // ═══════════════════════════════════════════════════════
 
@@ -352,7 +524,6 @@ function renderLocationsList() {
     </div>
   `).join('');
 
-  // ارسم QR لكل مكان
   setTimeout(() => {
     locationsData.forEach(loc => {
       const container = document.getElementById('qr-preview-' + loc.id);
@@ -371,7 +542,6 @@ function renderLocationsList() {
   }, 50);
 }
 
-// ═══ Open Location Modal ═══
 window.openLocationModal = function(locationId) {
   currentLocationId = locationId || null;
   const loc = locationId ? locationsData.find(l => l.id === locationId) : null;
@@ -452,7 +622,6 @@ window.closeLocationModal = function() {
   currentLocationId = null;
 };
 
-// ═══ Detect Location ═══
 window.detectLocationCurrent = function() {
   if (!navigator.geolocation) {
     alert('المتصفح لا يدعم تحديد الموقع');
@@ -499,7 +668,6 @@ window.previewLocationOnMap = function() {
   window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
 };
 
-// ═══ Save Location ═══
 window.saveLocation = async function() {
   const name = document.getElementById('loc_name')?.value.trim();
   const lat = parseFloat(document.getElementById('loc_lat')?.value);
@@ -512,7 +680,6 @@ window.saveLocation = async function() {
 
   try {
     if (currentLocationId) {
-      // تعديل
       const idx = locationsData.findIndex(l => l.id === currentLocationId);
       if (idx !== -1) {
         locationsData[idx] = {
@@ -521,7 +688,6 @@ window.saveLocation = async function() {
         };
       }
     } else {
-      // إضافة جديدة - ولّد QR
       const newId = 'loc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
       const qrCode = generateLocationQR(newId);
 
@@ -533,7 +699,6 @@ window.saveLocation = async function() {
       });
     }
 
-    // احفظ في Firestore
     await setDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
       Locations: locationsData
     }, { merge: true });
@@ -550,12 +715,10 @@ window.saveLocation = async function() {
   }
 };
 
-// ═══ Edit Location ═══
 window.editLocation = function(locationId) {
   openLocationModal(locationId);
 };
 
-// ═══ Delete Location ═══
 window.deleteLocation = async function(locationId) {
   const loc = locationsData.find(l => l.id === locationId);
   if (!loc) return;
@@ -579,14 +742,12 @@ window.deleteLocation = async function(locationId) {
   }
 };
 
-// ═══ QR Generation ═══
 function generateLocationQR(locationId) {
   const randomPart = Math.random().toString(36).substring(2, 12);
   const timestamp = Date.now().toString(36);
   return `ATTENDANCE_LOC_${locationId}_${randomPart}${timestamp}`;
 }
 
-// ═══ Regenerate QR ═══
 window.regenerateLocationQR = async function(locationId) {
   const loc = locationsData.find(l => l.id === locationId);
   if (!loc) return;
@@ -618,7 +779,6 @@ window.regenerateLocationQR = async function(locationId) {
   }
 };
 
-// ═══ Copy QR ═══
 window.copyLocationQR = function(locationId) {
   const loc = locationsData.find(l => l.id === locationId);
   if (!loc || !loc.qrCode) return;
@@ -630,7 +790,6 @@ window.copyLocationQR = function(locationId) {
   });
 };
 
-// ═══ Print QR ═══
 window.printLocationQR = function(locationId) {
   const loc = locationsData.find(l => l.id === locationId);
   if (!loc) return;
@@ -709,7 +868,6 @@ window.saveAllSettings = async function(event) {
     if (el) payload[key] = el.checked;
   });
 
-  // الأماكن
   payload.Locations = locationsData;
 
   const btn = event ? event.target : null;
