@@ -438,3 +438,203 @@
     flex-direction: column;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Event Attendees Modal
+   ═══════════════════════════════════════════ */
+
+.sch-event-stats {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+
+.sch-stat-committed,
+.sch-stat-confirmed {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.sch-stat-committed {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.sch-stat-confirmed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+/* ═══ Event Info (Modal) ═══ */
+.att-event-info {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.att-event-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 3px 0;
+}
+
+/* ═══ Stats Box ═══ */
+.att-stats-box {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.att-stat-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.att-stat-item.confirmed { border-color: #86efac; background: #f0fdf4; }
+.att-stat-item.pending { border-color: #fcd34d; background: #fffbeb; }
+.att-stat-item.cancel-req { border-color: #fdba74; background: #fff7ed; }
+.att-stat-item.cancelled { border-color: #fca5a5; background: #fef2f2; }
+
+.att-stat-number {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.att-stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* ═══ Attendees Groups ═══ */
+.att-group {
+  margin-bottom: 16px;
+}
+
+.att-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.att-group-title.confirmed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.att-group-title.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.att-group-title.cancel-requested {
+  background: #fed7aa;
+  color: #9a3412;
+}
+
+.att-group-title.cancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.att-group-count {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.att-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.att-person-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.att-mini-photo {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.att-mini-photo-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.att-person-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.att-person-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.att-person-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.att-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+
+.att-empty-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+@media (max-width: 500px) {
+  .att-stats-box {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
