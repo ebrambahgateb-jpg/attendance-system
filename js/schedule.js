@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — 5 تابات داخلية
+//   ⚡ محدّث: عرض الملتزمين + Popup التفاصيل
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -31,7 +32,8 @@ let schLocations = [];
 let schTemplates = [];
 let schRequests = [];
 let schMyRequests = [];
-let schPeople = {};
+let schRegistrations = {};     // { eventId: [registrations] }
+let schPeople = {};            // { personId: person }
 let schSettings = {};
 
 // ═══ أيام الأسبوع ═══
@@ -67,6 +69,7 @@ async function loadSchedulePage(area) {
       locationsSnap,
       templatesSnap,
       peopleSnap,
+      registrationsSnap,
       requestsSnap,
       myRequestsSnap,
       settingsDoc
@@ -76,6 +79,7 @@ async function loadSchedulePage(area) {
       getDocs(collection(db, 'locations')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'massTemplates')).catch(() => ({ docs: [] })),
       getDocs(collection(db, COLLECTIONS.PEOPLE)).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'eventRegistrations')).catch(() => ({ docs: [] })),
       getDocs(query(
         collection(db, 'massChangeRequests'),
         where('Status', '==', 'pending')
@@ -95,9 +99,19 @@ async function loadSchedulePage(area) {
     schMyRequests = myRequestsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     schSettings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
+    // ⚡ خزّن الناس
     schPeople = {};
     peopleSnap.docs.forEach(d => {
       schPeople[d.id] = { id: d.id, ...d.data() };
+    });
+
+    // ⚡ خزّن التسجيلات بـeventId
+    schRegistrations = {};
+    registrationsSnap.docs.forEach(d => {
+      const reg = { id: d.id, ...d.data() };
+      if (!reg.EventID) return;
+      if (!schRegistrations[reg.EventID]) schRegistrations[reg.EventID] = [];
+      schRegistrations[reg.EventID].push(reg);
     });
 
     renderSchedulePage(area);
@@ -120,7 +134,6 @@ function renderSchedulePage(area) {
   const isOwner = schWorkspace === 'Owner';
   const isUser = ['User', 'Scanner'].includes(schWorkspace);
 
-  // ⚡ قائمة التابات حسب الصلاحيات
   const tabs = [
     { id: 'grid', label: '📊 الجدول', show: true },
     { id: 'locations', label: '⛪ الأماكن', show: isAdmin },
@@ -185,31 +198,23 @@ function renderActiveTab() {
 // ═══════════════════════════════════════════════════════
 
 function renderGridView(container) {
-  const activeEvents = schEvents.filter(e =>
-    String(e.Status || '').toLowerCase() === 'active'
+  // ⚡ نعرض الأحداث الأسبوعية النشطة بس
+  const activeWeeklyEvents = schEvents.filter(e =>
+    String(e.Status || '').toLowerCase() === 'active' &&
+    String(e.Type || '').toLowerCase() === 'weekly'
   );
 
-  // ⚡ توزيع الأحداث على الأيام
+  // ⚡ توزيع على الأيام
   const eventsByDay = {};
   DAYS_OF_WEEK.forEach(d => eventsByDay[d.value] = []);
 
-  activeEvents.forEach(event => {
-    const type = String(event.Type || 'once').toLowerCase();
-    if (type === 'weekly' && event.DayOfWeek) {
-      if (eventsByDay[event.DayOfWeek]) {
-        eventsByDay[event.DayOfWeek].push(event);
-      }
-    } else if (type === 'once' && event.Date) {
-      const date = new Date(event.Date + 'T00:00:00');
-      if (isNaN(date.getTime())) return;
-      const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
-      if (eventsByDay[dayName]) {
-        eventsByDay[dayName].push(event);
-      }
+  activeWeeklyEvents.forEach(event => {
+    if (event.DayOfWeek && eventsByDay[event.DayOfWeek]) {
+      eventsByDay[event.DayOfWeek].push(event);
     }
   });
 
-  // ⚡ رتب كل يوم حسب الوقت
+  // ⚡ رتب حسب الوقت
   Object.values(eventsByDay).forEach(list => {
     list.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
   });
@@ -238,46 +243,253 @@ function renderGridView(container) {
 }
 
 function renderGridEventCard(event) {
-  const type = String(event.Type || 'once').toLowerCase();
   const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
   const eventTypeIcon = eventType ? (eventType.Icon || '📅') : '📅';
   const endTime = getEventEndTime(event);
   const locInfo = getEventLocationText(event);
 
-  let dateInfo = '';
-  if (type === 'once' && event.Date) {
-    dateInfo = formatDateShort(event.Date);
-  }
+  // ⚡ احسب إحصائيات الملتزمين
+  const stats = getEventAttendeesStats(event);
 
   return `
-    <div class="sch-event-card">
+    <div class="sch-event-card" onclick="openEventAttendeesModal('${event.id}')" style="cursor:pointer;">
       <div class="sch-event-header">
         <span class="sch-event-icon">${eventTypeIcon}</span>
         <span class="sch-event-title">${escapeHtml(event.Title || '')}</span>
       </div>
       <div class="sch-event-info">
         <span class="sch-event-time">🕐 ${event.Time || '-'} - ${endTime}</span>
-        ${dateInfo ? `<span class="sch-event-date">📅 ${dateInfo}</span>` : ''}
         <span class="sch-event-loc">📍 ${escapeHtml(locInfo)}</span>
+      </div>
+      <div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.committed} ملتزم</span>
+        <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
       </div>
     </div>
   `;
 }
 
-function getEventLocationText(event) {
-  const mode = String(event.LocationMode || 'any').toLowerCase();
-  if (mode === 'any') return 'أي مكان';
+/**
+ * ⚡ احسب إحصائيات الملتزمين لحدث
+ */
+function getEventAttendeesStats(event) {
+  const attendees = getEventAttendees(event);
 
-  const ids = Array.isArray(event.LocationIds) ? event.LocationIds : [];
-  if (ids.length === 0) return 'لم يحدد';
+  let committed = attendees.length;
+  let confirmed = 0;
+  let pending = 0;
+  let cancelRequested = 0;
+  let cancelled = 0;
 
-  const names = ids.map(id => {
-    const loc = schLocations.find(l => l.id === id);
-    return loc ? loc.Name : null;
-  }).filter(Boolean);
+  for (const att of attendees) {
+    if (att.rsvpStatus === 'confirmed') confirmed++;
+    else if (att.rsvpStatus === 'cancel_requested') cancelRequested++;
+    else if (att.rsvpStatus === 'cancelled') cancelled++;
+    else pending++;
+  }
 
-  return names.length > 0 ? names.join(' • ') : 'مكان محذوف';
+  return { committed, confirmed, pending, cancelRequested, cancelled };
 }
+
+/**
+ * ⚡ اجلب قائمة الملتزمين لحدث معين
+ * - كل الناس النشطين (لو all)
+ * - قائمة محددة (لو specific)
+ * ⚡ كل عنصر فيه: { person, rsvpStatus, registration }
+ */
+function getEventAttendees(event) {
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+  const registrations = schRegistrations[event.id] || [];
+
+  // ⚡ 1. جهّز الـregistrations map
+  const regByPerson = {};
+  registrations.forEach(r => {
+    if (r.PersonID) regByPerson[r.PersonID] = r;
+  });
+
+  // ⚡ 2. حدد الـpersonIds الملتزمين
+  let personIds = [];
+
+  if (scope === 'specific') {
+    const ids = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
+    personIds = ids.filter(id => schPeople[id]);
+  } else {
+    // ⚡ all → كل الناس النشطين
+    personIds = Object.keys(schPeople).filter(id => {
+      const p = schPeople[id];
+      return String(p.Status || 'active').toLowerCase() === 'active';
+    });
+  }
+
+  // ⚡ 3. اجمع المعلومات
+  const attendees = personIds.map(personId => {
+    const person = schPeople[personId];
+    const reg = regByPerson[personId];
+    const rsvpStatus = reg?.Status || 'pending';
+
+    return { person, rsvpStatus, registration: reg };
+  });
+
+  // ⚡ 4. رتب: confirmed → pending → cancel_requested → cancelled
+  const order = { confirmed: 0, pending: 1, cancel_requested: 2, cancelled: 3 };
+  attendees.sort((a, b) => {
+    const oa = order[a.rsvpStatus] ?? 4;
+    const ob = order[b.rsvpStatus] ?? 4;
+    if (oa !== ob) return oa - ob;
+    return getPersonFullName(a.person).localeCompare(getPersonFullName(b.person), 'ar');
+  });
+
+  return attendees;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Event Attendees Modal (Popup التفاصيل)
+// ═══════════════════════════════════════════════════════
+
+window.openEventAttendeesModal = function(eventId) {
+  const event = schEvents.find(e => e.id === eventId);
+  if (!event) {
+    alert('الحدث غير موجود');
+    return;
+  }
+
+  const attendees = getEventAttendees(event);
+  const stats = getEventAttendeesStats(event);
+
+  // ⚡ المجموعات
+  const confirmedList = attendees.filter(a => a.rsvpStatus === 'confirmed');
+  const pendingList = attendees.filter(a => a.rsvpStatus === 'pending');
+  const cancelRequestedList = attendees.filter(a => a.rsvpStatus === 'cancel_requested');
+  const cancelledList = attendees.filter(a => a.rsvpStatus === 'cancelled');
+
+  const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
+  const eventTypeIcon = eventType ? (eventType.Icon || '📅') : '📅';
+  const eventTypeName = eventType ? eventType.Name : '';
+  const endTime = getEventEndTime(event);
+  const locInfo = getEventLocationText(event);
+  const dayLabel = DAYS_OF_WEEK.find(d => d.value === event.DayOfWeek)?.label || '';
+
+  let modal = document.getElementById('attendeesModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'attendeesModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>${eventTypeIcon} ${escapeHtml(event.Title || '')}</h2>
+        <button class="modal-close" onclick="closeAttendeesModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <!-- ═══ معلومات الحدث ═══ -->
+        <div class="att-event-info">
+          ${eventTypeName ? `<div class="att-event-line"><span>📋</span><span>${escapeHtml(eventTypeName)}</span></div>` : ''}
+          ${dayLabel ? `<div class="att-event-line"><span>🔄</span><span>كل ${dayLabel}</span></div>` : ''}
+          <div class="att-event-line"><span>🕐</span><span>${event.Time || '-'} - ${endTime}</span></div>
+          <div class="att-event-line"><span>📍</span><span>${escapeHtml(locInfo)}</span></div>
+        </div>
+
+        <!-- ═══ إحصائيات ═══ -->
+        <div class="att-stats-box">
+          <div class="att-stat-item">
+            <span class="att-stat-number">${stats.committed}</span>
+            <span class="att-stat-label">👥 ملتزم</span>
+          </div>
+          <div class="att-stat-item confirmed">
+            <span class="att-stat-number">${stats.confirmed}</span>
+            <span class="att-stat-label">✅ مؤكد</span>
+          </div>
+          <div class="att-stat-item pending">
+            <span class="att-stat-number">${stats.pending}</span>
+            <span class="att-stat-label">⏳ انتظار</span>
+          </div>
+          <div class="att-stat-item cancel-req">
+            <span class="att-stat-number">${stats.cancelRequested}</span>
+            <span class="att-stat-label">🔄 طلب إلغاء</span>
+          </div>
+          <div class="att-stat-item cancelled">
+            <span class="att-stat-number">${stats.cancelled}</span>
+            <span class="att-stat-label">❌ ملغي</span>
+          </div>
+        </div>
+
+        <!-- ═══ قائمة الملتزمين ═══ -->
+        ${renderAttendeesGroup('✅ المؤكدين', confirmedList, 'confirmed')}
+        ${renderAttendeesGroup('⏳ في انتظار التأكيد', pendingList, 'pending')}
+        ${renderAttendeesGroup('🔄 طلبات إلغاء (بانتظار موافقة)', cancelRequestedList, 'cancel-requested')}
+        ${renderAttendeesGroup('❌ الملغيين', cancelledList, 'cancelled')}
+
+        ${attendees.length === 0 ? `
+          <div class="att-empty">
+            <div class="att-empty-icon">👥</div>
+            <p>لا يوجد ملتزمين بهذا الحدث</p>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAttendeesModal()">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+function renderAttendeesGroup(title, list, variant) {
+  if (list.length === 0) return '';
+
+  const itemsHtml = list.map(att => {
+    const person = att.person;
+    const name = getPersonFullName(person);
+    const initial = (person.FirstName || name || '?').charAt(0);
+
+    const photoHtml = person.PhotoURL
+      ? `<img src="${person.PhotoURL}" alt="" class="att-mini-photo" />`
+      : `<div class="att-mini-photo-placeholder">${escapeHtml(initial)}</div>`;
+
+    let subText = '';
+    if (variant === 'confirmed' && att.registration?.ConfirmedAt) {
+      const d = parseDate(att.registration.ConfirmedAt);
+      if (d) subText = `أكّد ${formatRelativeTime(d)}`;
+    } else if (variant === 'cancel-requested' && att.registration?.CancelRequestedAt) {
+      const d = parseDate(att.registration.CancelRequestedAt);
+      if (d) subText = `طلب ${formatRelativeTime(d)}`;
+    }
+
+    return `
+      <div class="att-person-row">
+        ${photoHtml}
+        <div class="att-person-info">
+          <div class="att-person-name">${escapeHtml(name)}</div>
+          ${subText ? `<div class="att-person-sub">${escapeHtml(subText)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="att-group">
+      <div class="att-group-title ${variant}">
+        ${title}
+        <span class="att-group-count">${list.length}</span>
+      </div>
+      <div class="att-group-list">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+window.closeAttendeesModal = function() {
+  const modal = document.getElementById('attendeesModal');
+  if (modal) modal.style.display = 'none';
+};
 
 // ═══════════════════════════════════════════════════════
 //   2. Locations View
@@ -349,7 +561,7 @@ function renderLocationCard(loc, isAdmin) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   3. Requests View (للـAdmin)
+//   3. Requests View
 // ═══════════════════════════════════════════════════════
 
 function renderRequestsView(container) {
@@ -441,7 +653,7 @@ function renderRequestCard(req, showActions) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   4. Templates View (الأنماط)
+//   4. Templates View
 // ═══════════════════════════════════════════════════════
 
 function renderTemplatesView(container) {
@@ -783,15 +995,30 @@ function formatRelativeTime(date) {
   const diff = (now - date) / 1000;
 
   if (diff < 60) return 'الآن';
-  if (diff < 3600) return `${Math.floor(diff / 60)} دقيقة`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ساعة`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} يوم`;
+  if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
+  if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
+  if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
   return date.toLocaleDateString('ar-EG');
 }
 
 function getPersonFullName(p) {
   if (!p) return '';
   return [p.FirstName, p.SecondName, p.ThirdName, p.FourthName].filter(Boolean).join(' ');
+}
+
+function getEventLocationText(event) {
+  const mode = String(event.LocationMode || 'any').toLowerCase();
+  if (mode === 'any') return 'أي مكان';
+
+  const ids = Array.isArray(event.LocationIds) ? event.LocationIds : [];
+  if (ids.length === 0) return 'لم يحدد';
+
+  const names = ids.map(id => {
+    const loc = schLocations.find(l => l.id === id);
+    return loc ? loc.Name : null;
+  }).filter(Boolean);
+
+  return names.length > 0 ? names.join(' • ') : 'مكان محذوف';
 }
 
 function escapeHtml(str) {
