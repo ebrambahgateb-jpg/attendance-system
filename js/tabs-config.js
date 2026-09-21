@@ -42,12 +42,12 @@ export const TABS_REGISTRY = [
     pageUrl: 'scanner.html'
   },
   {
-    id: 'meetings',
-    label: 'الاجتماعات',
-    icon: '📅',
+    id: 'events',
+    label: 'الأحداث',
+    icon: '🎯',
     ownerOnly: false,
     defaultRoles: ['Owner', 'Admin', 'Scanner', 'User'],
-    handler: 'loadMeetingsLazy',
+    handler: 'loadEventsLazy',
     isPage: false
   },
   {
