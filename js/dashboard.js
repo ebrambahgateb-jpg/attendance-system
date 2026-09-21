@@ -719,6 +719,11 @@ function loadMyEventsLazy(area) {
   else showLoadError(area, 'حضوري');
 }
 
+function loadScheduleLazy(area) {
+  if (typeof window.loadSchedulePage === 'function') window.loadSchedulePage(area);
+  else showLoadError(area, 'الجدول');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -873,6 +878,7 @@ window.loadPeopleLazy = loadPeopleLazy;
 window.loadEventsLazy = loadEventsLazy;
 window.loadProfileLazy = loadProfileLazy;
 window.loadMyEventsLazy = loadMyEventsLazy;
+window.loadScheduleLazy = loadScheduleLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
