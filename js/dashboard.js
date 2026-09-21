@@ -25,16 +25,17 @@ import {
 
 import {
   TABS_REGISTRY,
-  OWNER_ONLY_TAB_IDS,
-  DEFAULT_TAB_PERMISSIONS,
-  getTabById
+  WORKSPACES,
+  getTabById,
+  getTabsForWorkspace,
+  getWorkspaceById
 } from './tabs-config.js';
 
 // ═══ Global State ═══
 let dashboardUser = null;
+let currentWorkspace = null;
 let currentPage = 'dashboard';
 let dashInitCache = null;
-let tabPermissions = null;
 
 // ═══ Initialize on Load ═══
 document.addEventListener('DOMContentLoaded', async () => {
@@ -44,20 +45,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     dashboardUser = null;
   }
 
-  if (!dashboardUser || !dashboardUser.selectedRole) {
+  if (!dashboardUser || !dashboardUser.currentWorkspace) {
     window.location.href = '../index.html';
     return;
   }
 
+  currentWorkspace = dashboardUser.currentWorkspace;
+
   ensureSidebarOverlay();
 
   loadThemeFromStorage();
-  await loadTabPermissions();
 
-  // ⚡ Auto Deactivate Once Events (في الخلفية)
+  // ⚡ Auto Deactivate Once Events
   autoDeactivateOnceEventsSafe();
 
   renderUserInfo();
+  renderWorkspaceSwitcher();
   renderSidebar();
   await loadDashboardInit(true);
 
@@ -66,36 +69,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-// ═══════════════════════════════════════════════════════
-//   Load Tab Permissions
-// ═══════════════════════════════════════════════════════
-
-async function loadTabPermissions() {
-  try {
-    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
-    const snap = await getDoc(settingsRef);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      tabPermissions = data.TabPermissions || null;
-    }
-  } catch (e) {
-    console.warn('Load tab permissions error:', e);
-  }
-}
-
-function getTabsForRole(role) {
-  if (role === 'Owner') {
-    return TABS_REGISTRY.map(item => item.id);
-  }
-
-  if (tabPermissions && Array.isArray(tabPermissions[role])) {
-    return tabPermissions[role];
-  }
-
-  return DEFAULT_TAB_PERMISSIONS[role] || ['dashboard'];
-}
-
 // ═══ User Info ═══
 function renderUserInfo() {
   const nameEl = document.getElementById('userName');
@@ -103,7 +76,10 @@ function renderUserInfo() {
   const avatar = document.getElementById('userAvatar');
 
   if (nameEl) nameEl.textContent = dashboardUser.name || dashboardUser.email;
-  if (roleEl) roleEl.textContent = dashboardUser.selectedRole;
+  if (roleEl) {
+    const ws = getWorkspaceById(currentWorkspace);
+    roleEl.textContent = ws ? ws.label : currentWorkspace;
+  }
   if (avatar) {
     if (dashboardUser.photoURL) {
       avatar.innerHTML = `<img src="${dashboardUser.photoURL}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
@@ -113,18 +89,110 @@ function renderUserInfo() {
   }
 }
 
+// ═══════════════════════════════════════════════════════
+//   Workspace Switcher
+// ═══════════════════════════════════════════════════════
+
+function renderWorkspaceSwitcher() {
+  const container = document.getElementById('workspaceSwitcher');
+  if (!container) return;
+
+  // ⚡ لو الشخص عنده دور واحد بس → مفيش زرار
+  const roles = dashboardUser.roles || [];
+  if (roles.length <= 1) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <button class="ws-btn" id="wsBtn" title="تبديل الواجهة" aria-label="تبديل الواجهة">
+      <span class="ws-icon">🔄</span>
+      <span class="ws-text">تبديل الواجهة</span>
+      <span class="ws-arrow">▾</span>
+    </button>
+    <div class="ws-dropdown" id="wsDropdown" style="display:none;"></div>
+  `;
+
+  const btn = document.getElementById('wsBtn');
+  const dropdown = document.getElementById('wsDropdown');
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = dropdown.style.display === 'block';
+    if (isOpen) {
+      dropdown.style.display = 'none';
+    } else {
+      renderWorkspaceDropdown(dropdown);
+      dropdown.style.display = 'block';
+    }
+  };
+
+  // ⚡ اقفل الـ dropdown عند الضغط خارجها
+  document.addEventListener('click', (e) => {
+    if (!container.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+}
+
+function renderWorkspaceDropdown(dropdown) {
+  const roles = dashboardUser.roles || [];
+
+  dropdown.innerHTML = roles.map(roleId => {
+    const ws = getWorkspaceById(roleId) || { id: roleId, label: roleId, icon: '👤', description: '' };
+    const isCurrent = roleId === currentWorkspace;
+
+    return `
+      <button class="ws-item ${isCurrent ? 'active' : ''}" data-ws="${roleId}" ${isCurrent ? 'disabled' : ''}>
+        <span class="ws-item-icon">${ws.icon}</span>
+        <div class="ws-item-content">
+          <div class="ws-item-label">${ws.label}</div>
+          <div class="ws-item-desc">${ws.description || ''}</div>
+        </div>
+        ${isCurrent ? '<span class="ws-item-check">✓</span>' : ''}
+      </button>
+    `;
+  }).join('');
+
+  // ⚡ اربط الأزرار
+  dropdown.querySelectorAll('.ws-item').forEach(item => {
+    if (item.disabled) return;
+    item.onclick = () => {
+      const newWs = item.dataset.ws;
+      switchWorkspace(newWs);
+    };
+  });
+}
+
+function switchWorkspace(newWorkspace) {
+  if (!dashboardUser) return;
+  if (newWorkspace === currentWorkspace) return;
+
+  const ws = getWorkspaceById(newWorkspace);
+  const confirmMsg = `هل تريد التبديل إلى "${ws ? ws.label : newWorkspace}"؟`;
+  if (!confirm(confirmMsg)) return;
+
+  // ⚡ احفظ
+  dashboardUser.currentWorkspace = newWorkspace;
+  localStorage.setItem('currentUser', JSON.stringify(dashboardUser));
+  localStorage.setItem('currentWorkspace', newWorkspace);
+
+  // ⚡ أعد تحميل الصفحة
+  window.location.reload();
+}
+
 // ═══ Sidebar ═══
 function renderSidebar() {
   const nav = document.getElementById('sidebarNav');
   if (!nav) return;
   nav.innerHTML = '';
 
-  const role = dashboardUser.selectedRole;
-  const allowedTabs = getTabsForRole(role);
+  // ⚡ اجلب تابات الواجهة الحالية
+  const allowedTabs = getTabsForWorkspace(currentWorkspace);
 
-  TABS_REGISTRY.forEach(item => {
-    if (allowedTabs.indexOf(item.id) === -1) return;
-
+  allowedTabs.forEach(item => {
     const btn = document.createElement('button');
     btn.className = 'nav-item';
     btn.dataset.page = item.id;
@@ -142,7 +210,7 @@ function renderSidebar() {
   });
 }
 
-// ═══ Navigation (ديناميكية) ═══
+// ═══ Navigation ═══
 function navigateTo(pageId) {
   currentPage = pageId;
 
@@ -185,7 +253,7 @@ function navigateTo(pageId) {
   closeSidebar();
 }
 
-// ═══ Load Dashboard Init (حسب الدور) ═══
+// ═══ Load Dashboard Init (حسب الواجهة) ═══
 async function loadDashboardInit(useCache) {
   const area = document.getElementById('contentArea');
   if (!area) return;
@@ -197,17 +265,18 @@ async function loadDashboardInit(useCache) {
 
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  const role = dashboardUser.selectedRole;
+  // ⚡ استخدم currentWorkspace بدل selectedRole
+  const ws = currentWorkspace;
 
   try {
-    if (role === 'Owner' || role === 'Admin') {
+    if (ws === 'Owner' || ws === 'Admin') {
       await renderAdminDashboard(area);
-    } else if (role === 'Scanner') {
+    } else if (ws === 'Scanner') {
       await renderScannerDashboard(area);
-    } else if (role === 'User') {
+    } else if (ws === 'User') {
       await renderUserDashboard(area);
     } else {
-      area.innerHTML = '<div class="placeholder-page"><h2>دور غير معروف</h2></div>';
+      area.innerHTML = '<div class="placeholder-page"><h2>واجهة غير معروفة</h2></div>';
     }
   } catch (err) {
     console.error('❌ Dashboard error:', err);
@@ -645,6 +714,11 @@ function loadProfileLazy(area) {
   else showLoadError(area, 'حسابي');
 }
 
+function loadMyEventsLazy(area) {
+  if (typeof window.loadMyEventsPage === 'function') window.loadMyEventsPage(area);
+  else showLoadError(area, 'حضوري');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -671,8 +745,7 @@ function showLoadError(area, name) {
 
 // ═══ Helpers ═══
 function getEventsMode() {
-  const role = dashboardUser.selectedRole;
-  if (role === 'Owner' || role === 'Admin') return 'manage';
+  if (currentWorkspace === 'Owner' || currentWorkspace === 'Admin') return 'manage';
   return 'view';
 }
 
@@ -746,7 +819,7 @@ function closeSidebar() {
 
 // ═══ ⚡ Auto Deactivate Once Events ═══
 async function autoDeactivateOnceEventsSafe() {
-  if (!['Owner', 'Admin'].includes(dashboardUser.selectedRole)) return;
+  if (!['Owner', 'Admin'].includes(currentWorkspace)) return;
 
   if (typeof window.autoDeactivateOnceEvents === 'function') {
     try {
@@ -761,6 +834,7 @@ async function autoDeactivateOnceEventsSafe() {
 async function handleLogout() {
   try {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentWorkspace');
   } catch (e) {}
 
   try {
@@ -793,10 +867,12 @@ document.addEventListener('DOMContentLoaded', () => {
 window.toggleSidebar = toggleSidebar;
 window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
+window.switchWorkspace = switchWorkspace;
 window.loadSettingsLazy = loadSettingsLazy;
 window.loadPeopleLazy = loadPeopleLazy;
 window.loadEventsLazy = loadEventsLazy;
 window.loadProfileLazy = loadProfileLazy;
+window.loadMyEventsLazy = loadMyEventsLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
