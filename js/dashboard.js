@@ -54,8 +54,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadThemeFromStorage();
   await loadTabPermissions();
 
-  // ⚡ Auto Deactivate Once Meetings (في الخلفية)
-  autoDeactivateOnceMeetingsSafe();
+  // ⚡ Auto Deactivate Once Events (في الخلفية)
+  autoDeactivateOnceEventsSafe();
 
   renderUserInfo();
   renderSidebar();
@@ -167,8 +167,8 @@ function navigateTo(pageId) {
     const handlerFn = window[item.handler];
 
     if (typeof handlerFn === 'function') {
-      if (pageId === 'meetings') {
-        handlerFn(area, getMeetingsMode());
+      if (pageId === 'events') {
+        handlerFn(area, getEventsMode());
       } else {
         handlerFn(area);
       }
@@ -221,15 +221,15 @@ async function loadDashboardInit(useCache) {
 
 // ═══ Admin Dashboard ═══
 async function renderAdminDashboard(area) {
-  const [peopleSnap, meetingsSnap, attendanceSnap, settingsDoc] = await Promise.all([
+  const [peopleSnap, eventsSnap, attendanceSnap, settingsDoc] = await Promise.all([
     getDocs(collection(db, COLLECTIONS.PEOPLE)),
-    getDocs(collection(db, COLLECTIONS.MEETINGS)),
+    getDocs(collection(db, 'events')),
     getDocs(collection(db, COLLECTIONS.ATTENDANCE)),
     getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC))
   ]);
 
   const people = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  const meetings = meetingsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const events = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const attendance = attendanceSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const settings = settingsDoc.exists() ? settingsDoc.data() : {};
 
@@ -240,8 +240,8 @@ async function renderAdminDashboard(area) {
     String(p.Status || '').toLowerCase() === 'active'
   ).length;
 
-  const totalMeetings = meetings.filter(m =>
-    String(m.Status || '').toLowerCase() !== 'archived'
+  const totalEvents = events.filter(e =>
+    String(e.Status || '').toLowerCase() !== 'archived'
   ).length;
 
   const todayAttendance = attendance.filter(a => {
@@ -261,7 +261,7 @@ async function renderAdminDashboard(area) {
     stats: {
       totalPeople: people.length,
       activePeople: activePeople,
-      totalMeetings: totalMeetings,
+      totalEvents: totalEvents,
       todayAttendance: todayAttendance,
       attendanceRate: attendanceRate,
       systemStatus: settings.SystemStatus || 'Active'
@@ -291,10 +291,10 @@ async function renderScannerDashboard(area) {
     return d.getTime() === today.getTime();
   });
 
-  const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
-  const meetings = meetingsSnap.docs
+  const eventsSnap = await getDocs(collection(db, 'events'));
+  const events = eventsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(m => String(m.Status || '').toLowerCase() === 'active');
+    .filter(e => String(e.Status || '').toLowerCase() === 'active');
 
   const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
   const settings = settingsDoc.exists() ? settingsDoc.data() : {};
@@ -302,7 +302,7 @@ async function renderScannerDashboard(area) {
   const result = {
     role: 'scanner',
     stats: { myScansToday: myScans.length },
-    meetings: meetings,
+    events: events,
     settings: settings
   };
 
@@ -330,15 +330,15 @@ async function renderUserDashboard(area) {
     myAttendance = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
-  const meetings = meetingsSnap.docs
+  const eventsSnap = await getDocs(collection(db, 'events'));
+  const events = eventsSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(m => String(m.Status || '').toLowerCase() === 'active');
+    .filter(e => String(e.Status || '').toLowerCase() === 'active');
 
-  const totalMeetings = meetings.length;
+  const totalEvents = events.length;
   const attended = myAttendance.length;
-  const absenceRate = totalMeetings > 0
-    ? Math.round((attended / totalMeetings) * 100)
+  const attendanceRate = totalEvents > 0
+    ? Math.round((attended / totalEvents) * 100)
     : 0;
 
   const result = {
@@ -346,11 +346,11 @@ async function renderUserDashboard(area) {
     person: person,
     myAttendance: myAttendance,
     stats: {
-      totalMeetings: totalMeetings,
+      totalEvents: totalEvents,
       attended: attended,
-      attendanceRate: absenceRate
+      attendanceRate: attendanceRate
     },
-    meetings: meetings,
+    events: events,
     settings: settings
   };
 
@@ -410,10 +410,10 @@ function renderAdminStats(area, stats) {
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon">📅</div>
+        <div class="stat-icon">🎯</div>
         <div class="stat-info">
-          <div class="stat-label">إجمالي الاجتماعات</div>
-          <div class="stat-value">${stats.totalMeetings}</div>
+          <div class="stat-label">إجمالي الأحداث</div>
+          <div class="stat-value">${stats.totalEvents}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -436,12 +436,12 @@ function renderAdminStats(area, stats) {
 
 // ═══ Scanner Stats ═══
 function renderScannerStats(area, data) {
-  const meetingsHtml = (data.meetings || []).slice(0, 5).map(m => `
+  const eventsHtml = (data.events || []).slice(0, 5).map(e => `
     <div class="dashboard-list-item">
-      <div class="dashboard-list-icon">📅</div>
+      <div class="dashboard-list-icon">🎯</div>
       <div class="dashboard-list-content">
-        <div class="dashboard-list-title">${escapeHtml(m.Title || '')}</div>
-        <div class="dashboard-list-subtitle">${formatMeetingDate(m)} — ${m.Time || ''}</div>
+        <div class="dashboard-list-title">${escapeHtml(e.Title || '')}</div>
+        <div class="dashboard-list-subtitle">${formatEventDate(e)} — ${e.Time || ''}</div>
       </div>
     </div>
   `).join('');
@@ -456,18 +456,18 @@ function renderScannerStats(area, data) {
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon">📅</div>
+        <div class="stat-icon">🎯</div>
         <div class="stat-info">
-          <div class="stat-label">الاجتماعات النشطة</div>
-          <div class="stat-value">${(data.meetings || []).length}</div>
+          <div class="stat-label">الأحداث النشطة</div>
+          <div class="stat-value">${(data.events || []).length}</div>
         </div>
       </div>
     </div>
 
     <div class="dashboard-section">
-      <h3>📅 الاجتماعات القادمة</h3>
+      <h3>🎯 الأحداث القادمة</h3>
       <div class="dashboard-list">
-        ${meetingsHtml || '<p style="text-align:center;color:#64748b;">لا يوجد اجتماعات</p>'}
+        ${eventsHtml || '<p style="text-align:center;color:#64748b;">لا يوجد أحداث</p>'}
       </div>
     </div>
   `;
@@ -491,11 +491,12 @@ function renderUserStats(area, data) {
   const attendanceHtml = lastAttendance.map(a => {
     const scanDate = parseDate(a.ScanTime);
     const dateStr = scanDate ? scanDate.toLocaleDateString('ar-EG') : '';
+    const title = a.EventTitle || a.MeetingTitle || 'حدث';
     return `
       <div class="dashboard-list-item">
         <div class="dashboard-list-icon">✅</div>
         <div class="dashboard-list-content">
-          <div class="dashboard-list-title">${escapeHtml(a.MeetingTitle || 'اجتماع')}</div>
+          <div class="dashboard-list-title">${escapeHtml(title)}</div>
           <div class="dashboard-list-subtitle">${dateStr}</div>
         </div>
       </div>
@@ -520,10 +521,10 @@ function renderUserStats(area, data) {
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon">📅</div>
+        <div class="stat-icon">🎯</div>
         <div class="stat-info">
-          <div class="stat-label">إجمالي الاجتماعات</div>
-          <div class="stat-value">${data.stats.totalMeetings}</div>
+          <div class="stat-label">إجمالي الأحداث</div>
+          <div class="stat-value">${data.stats.totalEvents}</div>
         </div>
       </div>
       <div class="stat-card">
@@ -633,10 +634,10 @@ function loadPeopleLazy(area) {
   else showLoadError(area, 'الأشخاص');
 }
 
-function loadMeetingsLazy(area, mode) {
-  if (typeof window.loadMeetingsPage === 'function') {
-    window.loadMeetingsPage(area, mode || getMeetingsMode());
-  } else showLoadError(area, 'الاجتماعات');
+function loadEventsLazy(area, mode) {
+  if (typeof window.loadEventsPage === 'function') {
+    window.loadEventsPage(area, mode || getEventsMode());
+  } else showLoadError(area, 'الأحداث');
 }
 
 function loadProfileLazy(area) {
@@ -669,7 +670,7 @@ function showLoadError(area, name) {
 }
 
 // ═══ Helpers ═══
-function getMeetingsMode() {
+function getEventsMode() {
   const role = dashboardUser.selectedRole;
   if (role === 'Owner' || role === 'Admin') return 'manage';
   return 'view';
@@ -688,13 +689,13 @@ function getPersonFullName(p) {
     .filter(Boolean).join(' ');
 }
 
-function formatMeetingDate(meeting) {
-  const type = String(meeting.Type || 'once').toLowerCase();
+function formatEventDate(event) {
+  const type = String(event.Type || 'once').toLowerCase();
   if (type === 'weekly') {
     const days = {Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
-    return 'كل ' + (days[meeting.DayOfWeek] || '');
+    return 'كل ' + (days[event.DayOfWeek] || '');
   }
-  return meeting.Date || '';
+  return event.Date || '';
 }
 
 function escapeHtml(str) {
@@ -743,13 +744,13 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
-// ═══ ⚡ Auto Deactivate Once Meetings ═══
-async function autoDeactivateOnceMeetingsSafe() {
+// ═══ ⚡ Auto Deactivate Once Events ═══
+async function autoDeactivateOnceEventsSafe() {
   if (!['Owner', 'Admin'].includes(dashboardUser.selectedRole)) return;
 
-  if (typeof window.autoDeactivateOnceMeetings === 'function') {
+  if (typeof window.autoDeactivateOnceEvents === 'function') {
     try {
-      await window.autoDeactivateOnceMeetings();
+      await window.autoDeactivateOnceEvents();
     } catch (e) {
       console.warn('autoDeactivate error:', e);
     }
@@ -794,7 +795,7 @@ window.closeSidebar = closeSidebar;
 window.loadDashboardInit = loadDashboardInit;
 window.loadSettingsLazy = loadSettingsLazy;
 window.loadPeopleLazy = loadPeopleLazy;
-window.loadMeetingsLazy = loadMeetingsLazy;
+window.loadEventsLazy = loadEventsLazy;
 window.loadProfileLazy = loadProfileLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
