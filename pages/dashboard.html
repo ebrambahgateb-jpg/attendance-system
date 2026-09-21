@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="../css/profile.css" />
   <link rel="stylesheet" href="../css/my-attendance.css" />
   <link rel="stylesheet" href="../css/attendance.css" />
+  <link rel="stylesheet" href="../css/notifications.css" />
 </head>
 <body class="dashboard-body">
 
@@ -52,6 +53,10 @@
       <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
       <h1 id="pageTitle">لوحة التحكم</h1>
       <div class="topbar-right">
+        <button class="notif-bell-btn" id="notificationsBtn" title="الإشعارات" aria-label="الإشعارات">
+          🔔
+          <span class="notif-badge" id="notificationsBadge" style="display:none;">0</span>
+        </button>
         <span class="system-status" id="systemStatus">●</span>
       </div>
     </header>
@@ -62,7 +67,7 @@
   <!-- QRCode Library -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
-  <!-- html5-qrcode Library (للـ "سجل حضورك بنفسك") -->
+  <!-- html5-qrcode Library -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <!-- Firebase SDK + Modules -->
@@ -75,6 +80,7 @@
   <script type="module" src="../js/my-attendance.js"></script>
   <script type="module" src="../js/attendance.js"></script>
   <script type="module" src="../js/accounts.js"></script>
+  <script type="module" src="../js/notifications.js"></script>
   <script type="module" src="../js/dashboard.js"></script>
 </body>
 </html>
