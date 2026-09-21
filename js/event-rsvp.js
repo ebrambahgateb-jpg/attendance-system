@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   Event RSVP + Cancel
-//   ⚡ تسجيل الحضور (تأكيد/إلغاء) + الإشعارات التلقائية
+//   Event RSVP + Cancel (with Admin Approval)
+//   ⚡ تأكيد الحضور + طلب الإلغاء (محتاج موافقة المسؤول)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -11,8 +11,7 @@ import {
   addDoc,
   updateDoc,
   query,
-  where,
-  serverTimestamp
+  where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -38,13 +37,11 @@ async function initRsvp() {
 
   if (!rsvpUser) return;
 
-  // ⚡ اجلب بيانات الشخص
   if (rsvpUser.personId) {
     const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, rsvpUser.personId));
     if (pDoc.exists()) rsvpPerson = { id: pDoc.id, ...pDoc.data() };
   }
 
-  // ⚡ لو مفيش personId، دوّر بالبريد
   if (!rsvpPerson && rsvpUser.email) {
     try {
       const q = query(
@@ -58,7 +55,6 @@ async function initRsvp() {
     } catch (e) {}
   }
 
-  // ⚡ اجلب الإعدادات
   try {
     const sDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, 'main'));
     rsvpSettings = sDoc.exists() ? sDoc.data() : {};
@@ -90,6 +86,16 @@ async function getRegistration(eventId) {
   }
 }
 
+/**
+ * ⚡ حالة التسجيل في حدث معين (للأزرار)
+ * Return: { status, registration } | null لو مفيش تسجيل
+ */
+async function getRegistrationStatus(eventId) {
+  const reg = await getRegistration(eventId);
+  if (!reg) return { status: 'pending', registration: null };
+  return { status: reg.Status || 'pending', registration: reg };
+}
+
 // ═══════════════════════════════════════════════════════
 //   RSVP: Confirm Attendance
 // ═══════════════════════════════════════════════════════
@@ -97,30 +103,63 @@ async function getRegistration(eventId) {
 async function confirmRsvp(eventId) {
   if (!rsvpPerson) {
     alert('❌ لا يوجد ملف شخصي مرتبط بحسابك');
-    return;
+    return false;
   }
 
   const eventDoc = await getDoc(doc(db, 'events', eventId));
   if (!eventDoc.exists()) {
     alert('❌ الحدث غير موجود');
-    return;
+    return false;
   }
   const event = { id: eventDoc.id, ...eventDoc.data() };
 
-  // ⚡ تحقق من الوقت
   if (!isEventUpcoming(event)) {
     alert('❌ لا يمكن التسجيل — الحدث قد بدأ أو انتهى');
-    return;
+    return false;
   }
 
-  if (!confirm(`هل تريد تأكيد حضورك في:\n"${event.Title}"؟\n\nسيتم إشعار المسؤول بتأكيدك.`)) return;
+  const existing = await getRegistration(eventId);
+
+  // ⚡ لو عنده طلب إلغاء — نرجّعه عن طلبه
+  if (existing && existing.Status === 'cancel_requested') {
+    if (!confirm(`هل تريد التراجع عن طلب إلغاء الحضور في:\n"${event.Title}"؟\n\nسيبقى حضورك مؤكدًا.`)) return false;
+
+    try {
+      await updateDoc(doc(db, 'eventRegistrations', existing.id), {
+        Status: 'confirmed',
+        CancelRequestedAt: null,
+        CancelReason: null,
+        ReconfirmedAt: new Date().toISOString(),
+        UpdatedAt: new Date().toISOString()
+      });
+
+      // ⚡ إشعار للـAdmin
+      await createAdminReconfirmNotification(event, rsvpPerson);
+
+      alert('✅ تم التراجع — حضورك مؤكد');
+      return true;
+    } catch (err) {
+      alert('خطأ: ' + err.message);
+      return false;
+    }
+  }
+
+  // ⚡ لو ملغي — ممنوع
+  if (existing && existing.Status === 'cancelled') {
+    alert('❌ لا يمكن تأكيد الحضور — تم إلغاء تسجيلك بالفعل');
+    return false;
+  }
+
+  // ⚡ لو ملغي + RejectedBefore → ممنوع
+  if (existing && existing.RejectedBefore === true && existing.Status !== 'confirmed') {
+    alert('❌ لا يمكن التسجيل — تم رفض طلبك سابقًا. تواصل مع المسؤول.');
+    return false;
+  }
+
+  if (!confirm(`هل تريد تأكيد حضورك في:\n"${event.Title}"؟\n\nسيتم إشعار المسؤول بتأكيدك.`)) return false;
 
   try {
-    // ⚡ ابحث عن registration موجود
-    const existing = await getRegistration(eventId);
-
     if (existing) {
-      // ⚡ حدّث
       await updateDoc(doc(db, 'eventRegistrations', existing.id), {
         Status: 'confirmed',
         ConfirmedAt: new Date().toISOString(),
@@ -128,7 +167,6 @@ async function confirmRsvp(eventId) {
         UpdatedAt: new Date().toISOString()
       });
     } else {
-      // ⚡ أنشئ جديد
       await addDoc(collection(db, 'eventRegistrations'), {
         EventID: eventId,
         PersonID: rsvpPerson.id,
@@ -139,11 +177,11 @@ async function confirmRsvp(eventId) {
         ConfirmedVia: 'user',
         RegisteredBy: rsvpUser.email,
         RegisteredAt: new Date().toISOString(),
+        RejectedBefore: false,
         CreatedAt: new Date().toISOString()
       });
     }
 
-    // ⚡ إشعار للـ Admin
     await createAdminNotification(event, rsvpPerson);
 
     alert('✅ تم تسجيل حضورك بنجاح\n\nسيتم إشعار المسؤول.');
@@ -156,7 +194,7 @@ async function confirmRsvp(eventId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Cancel Attendance (إعلان عدم الحضور)
+//   Cancel Request (طلب إلغاء — محتاج موافقة)
 // ═══════════════════════════════════════════════════════
 
 function openCancelModal(eventId, eventTitle, occurrenceDate) {
@@ -171,7 +209,7 @@ function openCancelModal(eventId, eventTitle, occurrenceDate) {
   modal.innerHTML = `
     <div class="modal-content" style="max-width:520px;">
       <div class="modal-header">
-        <h2>📢 إعلان عدم الحضور</h2>
+        <h2>📢 طلب إلغاء الحضور</h2>
         <button class="modal-close" onclick="closeCancelModal()">✕</button>
       </div>
 
@@ -193,29 +231,28 @@ function openCancelModal(eventId, eventTitle, occurrenceDate) {
         </div>
 
         <div class="cancel-warning">
-          <p class="cancel-warning-title">🔒 السبب سيظهر للمسؤولين فقط</p>
+          <p class="cancel-warning-title">⚠️ مهم: هذا طلب محتاج موافقة</p>
           <div class="cancel-warning-list">
-            <p>⚠️ سيتم إرسال إشعارات تلقائية إلى:</p>
+            <p>سيتم إرسال طلبك للمسؤول (Admin/Owner) للمراجعة.</p>
             <ul>
-              <li>• المسؤول (Admin/Owner) — مع السبب</li>
-              <li>• الزملاء في نفس الحدث — بدون سبب</li>
-              <li>• باقي المستخدمين (قد يكون مكان متاح)</li>
+              <li>• <strong>لو وافق</strong> → يتم إلغاء حضورك + إشعار للزملاء</li>
+              <li>• <strong>لو رفض</strong> → ترجع مؤكدًا + إشعار لك</li>
+              <li>• <strong>لو ما ردش</strong> → تفترض حضورك مؤكدًا</li>
             </ul>
+            <p style="margin-top:8px;">🔒 السبب سيظهر للمسؤولين فقط.</p>
           </div>
-          <p class="cancel-warning-note">⚠️ بعد الإعلان، لن تقدر على التراجع</p>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeCancelModal()">إلغاء</button>
-        <button class="btn-danger" id="confirmCancelBtn">📢 إعلان عدم الحضور</button>
+        <button class="btn-secondary" onclick="closeCancelModal()">تراجع</button>
+        <button class="btn-danger" id="confirmCancelBtn">📢 إرسال طلب الإلغاء</button>
       </div>
     </div>
   `;
 
   modal.style.display = 'flex';
 
-  // ⚡ اربط الزرار
   document.getElementById('confirmCancelBtn').onclick = async () => {
     const reason = document.getElementById('cancelReason')?.value.trim() || '';
     await performCancel(eventId, eventTitle, occurrenceDate, reason);
@@ -232,26 +269,36 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
   const originalText = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ جاري الإعلان...';
+    btn.textContent = '⏳ جاري إرسال الطلب...';
   }
 
   try {
-    // ⚡ ابحث عن registration
     const existing = await getRegistration(eventId);
 
     if (!existing) {
       alert('❌ لم يتم العثور على تسجيلك في هذا الحدث');
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = originalText;
-      }
-      return;
+      if (btn) { btn.disabled = false; btn.textContent = originalText; }
+      return false;
     }
 
-    // ⚡ حدّث الـ status
+    // ⚡ لو مرفوض قبل كده — ممنوع
+    if (existing.RejectedBefore === true) {
+      alert('❌ لا يمكن تقديم طلب إلغاء جديد — تم رفض طلبك سابقًا. تواصل مع المسؤول مباشرة.');
+      closeCancelModal();
+      return false;
+    }
+
+    // ⚡ لو مش confirmed — مفيش حاجة نلغيها
+    if (existing.Status !== 'confirmed') {
+      alert('❌ لا يمكن تقديم طلب إلغاء — يجب أن يكون حضورك مؤكدًا أولاً');
+      closeCancelModal();
+      return false;
+    }
+
+    // ⚡ حدّث الـ status لـ cancel_requested (طلب مش إلغاء)
     await updateDoc(doc(db, 'eventRegistrations', existing.id), {
-      Status: 'cancelled',
-      CancelledAt: new Date().toISOString(),
+      Status: 'cancel_requested',
+      CancelRequestedAt: new Date().toISOString(),
       CancelReason: reason,
       CancelledBy: rsvpUser.email,
       UpdatedAt: new Date().toISOString()
@@ -261,20 +308,143 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
     const eventDoc = await getDoc(doc(db, 'events', eventId));
     const event = eventDoc.exists() ? { id: eventId, ...eventDoc.data() } : { id: eventId, Title: eventTitle };
 
-    // ⚡ أنشئ 3 إشعارات
-    await createCancelNotifications(event, rsvpPerson, occurrenceDate, reason);
+    // ⚡ إشعار واحد للـAdmin بطلب الإلغاء
+    await createCancelRequestNotification(event, rsvpPerson, occurrenceDate, reason);
 
-    alert('✅ تم إعلان عدم حضورك بنجاح\n\nسيتم إشعار الزملاء والمسؤولين.');
+    alert('✅ تم إرسال طلب الإلغاء\n\nسيقوم المسؤول بمراجعة طلبك.');
     closeCancelModal();
     return true;
 
   } catch (err) {
     console.error('❌ performCancel error:', err);
     alert('خطأ: ' + err.message);
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalText;
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Admin Approval Functions (تُستدعى من تاب الحضور)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ موافقة الـAdmin على طلب الإلغاء
+ * - يغيّر Status لـ cancelled
+ * - يبعت الإشعارات التلاتة (Admin + Members + Public)
+ */
+async function approveCancel(registrationId) {
+  try {
+    const regDoc = await getDoc(doc(db, 'eventRegistrations', registrationId));
+    if (!regDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return false;
     }
+    const reg = { id: regDoc.id, ...regDoc.data() };
+
+    if (reg.Status !== 'cancel_requested') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار الموافقة');
+      return false;
+    }
+
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+
+    // ⚡ 1. حدّث الحالة
+    await updateDoc(doc(db, 'eventRegistrations', registrationId), {
+      Status: 'cancelled',
+      CancelApprovedAt: new Date().toISOString(),
+      CancelApprovedBy: user?.email || '',
+      CancelledAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ 2. اجلب الحدث + الشخص
+    const eventDoc = await getDoc(doc(db, 'events', reg.EventID));
+    const event = eventDoc.exists() ? { id: eventDoc.id, ...eventDoc.data() } : { id: reg.EventID, Title: '' };
+
+    const personDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, reg.PersonID));
+    const person = personDoc.exists() ? { id: personDoc.id, ...personDoc.data() } : { id: reg.PersonID };
+
+    // ⚡ 3. ابعت الإشعارات التلاتة
+    await createCancelNotifications(event, person, event.Date || '', reg.CancelReason || '');
+
+    // ⚡ 4. إشعار للشخص نفسه
+    await addDoc(collection(db, 'notifications'), {
+      Type: 'cancel_approved',
+      Title: '✅ تمت الموافقة على طلب الإلغاء',
+      Body: `تمت الموافقة على طلب إلغاء حضورك في:\n"${event.Title || ''}"`,
+      RelatedEventID: event.id,
+      RelatedPersonID: person.id,
+      TargetType: 'person',
+      TargetPersonID: person.id,
+      SentBy: 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    });
+
+    return true;
+  } catch (err) {
+    console.error('❌ approveCancel error:', err);
+    alert('خطأ: ' + err.message);
+    return false;
+  }
+}
+
+/**
+ * ⚡ رفض الـAdmin على طلب الإلغاء
+ * - يرجّع Status لـ confirmed
+ * - RejectedBefore = true (منع تكرار الطلبات)
+ */
+async function rejectCancel(registrationId) {
+  try {
+    const regDoc = await getDoc(doc(db, 'eventRegistrations', registrationId));
+    if (!regDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return false;
+    }
+    const reg = { id: regDoc.id, ...regDoc.data() };
+
+    if (reg.Status !== 'cancel_requested') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار الموافقة');
+      return false;
+    }
+
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+
+    // ⚡ 1. رجّع الحالة لـ confirmed + علّم RejectedBefore
+    await updateDoc(doc(db, 'eventRegistrations', registrationId), {
+      Status: 'confirmed',
+      CancelRejectedAt: new Date().toISOString(),
+      CancelRejectedBy: user?.email || '',
+      CancelRequestedAt: null,
+      CancelReason: null,
+      RejectedBefore: true,
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ 2. اجلب الحدث
+    const eventDoc = await getDoc(doc(db, 'events', reg.EventID));
+    const event = eventDoc.exists() ? { id: eventDoc.id, ...eventDoc.data() } : { id: reg.EventID, Title: '' };
+
+    // ⚡ 3. إشعار للشخص
+    await addDoc(collection(db, 'notifications'), {
+      Type: 'cancel_rejected',
+      Title: '❌ تم رفض طلب الإلغاء',
+      Body: `تم رفض طلب إلغاء حضورك في:\n"${event.Title || ''}"\n\nحضورك مؤكد — تواصل مع المسؤول لو عندك ظرف خاص.`,
+      RelatedEventID: event.id,
+      RelatedPersonID: reg.PersonID,
+      TargetType: 'person',
+      TargetPersonID: reg.PersonID,
+      SentBy: 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    });
+
+    return true;
+  } catch (err) {
+    console.error('❌ rejectCancel error:', err);
+    alert('خطأ: ' + err.message);
     return false;
   }
 }
@@ -284,7 +454,7 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
 // ═══════════════════════════════════════════════════════
 
 /**
- * ⚡ إشعار للـ Admin عند تأكيد حضور
+ * ⚡ إشعار للـAdmin عند تأكيد حضور
  */
 async function createAdminNotification(event, person) {
   const personName = getPersonFullName(person);
@@ -310,7 +480,60 @@ async function createAdminNotification(event, person) {
 }
 
 /**
- * ⚡ 3 إشعارات عند إعلان عدم الحضور
+ * ⚡ إشعار للـAdmin عند التراجع عن طلب الإلغاء
+ */
+async function createAdminReconfirmNotification(event, person) {
+  const personName = getPersonFullName(person);
+
+  try {
+    await addDoc(collection(db, 'notifications'), {
+      Type: 'person_reconfirmed',
+      Title: `🔄 ${personName} تراجع عن طلب الإلغاء`,
+      Body: `${personName} تراجع عن طلب إلغاء حضوره في:\n"${event.Title}"\n\nحضوره مؤكد الآن.`,
+      RelatedEventID: event.id,
+      RelatedPersonID: person.id,
+      TargetType: 'admins',
+      SentBy: 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn('createAdminReconfirmNotification error:', err.message);
+  }
+}
+
+/**
+ * ⚡ إشعار للـAdmin بطلب إلغاء (مش إلغاء فعلي)
+ */
+async function createCancelRequestNotification(event, person, occurrenceDate, reason) {
+  const personName = getPersonFullName(person);
+  const eventDate = formatDate(occurrenceDate);
+
+  const notification = {
+    Type: 'cancel_request',
+    Title: `📢 طلب إلغاء حضور`,
+    Body: `${personName} طلب إلغاء حضوره في:\n"${event.Title}" — ${eventDate}\n\nالسبب: ${reason || 'لم يُذكر'}\n\nالطلب محتاج موافقتك.`,
+    RelatedEventID: event.id,
+    RelatedPersonID: person.id,
+    CancelReason: reason || '',
+    OccurrenceDate: occurrenceDate || '',
+    TargetType: 'admins',
+    SentBy: 'system',
+    SentAt: new Date().toISOString(),
+    ReadBy: [],
+    CreatedAt: new Date().toISOString()
+  };
+
+  try {
+    await addDoc(collection(db, 'notifications'), notification);
+  } catch (err) {
+    console.warn('createCancelRequestNotification error:', err.message);
+  }
+}
+
+/**
+ * ⚡ 3 إشعارات عند الموافقة على الإلغاء
  */
 async function createCancelNotifications(event, person, occurrenceDate, reason) {
   const personName = getPersonFullName(person);
@@ -319,8 +542,8 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
   // ═══ 1. للـ Admin (مع السبب) ═══
   const adminNotif = {
     Type: 'person_cancelled_admin',
-    Title: `📢 إعلان عدم حضور`,
-    Body: `${personName} أعلن عدم حضوره في:\n"${event.Title}" — ${eventDate}\n\nالسبب: ${reason || 'لم يُذكر'}`,
+    Title: `📢 تم إلغاء حضور`,
+    Body: `${personName} تم إلغاء حضوره في:\n"${event.Title}" — ${eventDate}\n\nالسبب: ${reason || 'لم يُذكر'}`,
     RelatedEventID: event.id,
     RelatedPersonID: person.id,
     CancelReason: reason || '',
@@ -339,7 +562,6 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
 
   // ═══ 2. للزملاء في نفس الحدث (بدون سبب) ═══
   try {
-    // ⚡ اجلب المسجلين في نفس الحدث
     const regsSnap = await getDocs(query(
       collection(db, 'eventRegistrations'),
       where('EventID', '==', event.id)
@@ -354,7 +576,7 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
       const memberNotif = {
         Type: 'person_cancelled_member',
         Title: `⚠️ تنبيه: زميلك مش هيحضر`,
-        Body: `${personName} (المسجّل معك في "${event.Title}") أعلن عدم حضوره.`,
+        Body: `${personName} (المسجّل معك في "${event.Title}") ألغى حضوره.`,
         RelatedEventID: event.id,
         RelatedPersonID: person.id,
         TargetType: 'specific',
@@ -411,7 +633,7 @@ function isEventUpcoming(event) {
     return now <= end;
   }
 
-  return true; // للـ weekly نفترض دائمًا upcoming
+  return true;
 }
 
 function getPersonFullName(p) {
@@ -451,8 +673,11 @@ window.confirmRsvp = confirmRsvp;
 window.openCancelModal = openCancelModal;
 window.closeCancelModal = closeCancelModal;
 window.performCancel = performCancel;
+window.approveCancel = approveCancel;
+window.rejectCancel = rejectCancel;
 window.getRsvpPerson = () => rsvpPerson;
 window.getRegistration = getRegistration;
+window.getRegistrationStatus = getRegistrationStatus;
 
 // ═══ Auto-init ═══
 document.addEventListener('DOMContentLoaded', () => {
