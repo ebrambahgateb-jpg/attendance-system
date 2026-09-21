@@ -217,9 +217,6 @@ function renderEventsGrid() {
   if (emptyState) emptyState.style.display = 'none';
   const isView = currentMode === 'view';
 
-  const u = (JSON.parse(localStorage.getItem('currentUser')) || {});
-  const ws = u.currentWorkspace || u.selectedRole || '';
-
   grid.innerHTML = filteredEvents.map(event => {
     const status = String(event.Status || 'active').toLowerCase();
     const type = String(event.Type || 'once').toLowerCase();
@@ -281,14 +278,6 @@ function renderEventsGrid() {
           <button class="btn-icon danger" onclick="confirmDeleteEvent('${event.id}')" title="حذف">🗑️</button>
         </div>`;
 
-    const showRsvp = ['User', 'Scanner'].includes(ws) && status === 'active';
-    const rsvpHtml = showRsvp
-      ? `<div class="rsvp-actions" data-event-id="${event.id}" data-occurrence="${event.Type === 'once' ? event.Date : ''}">
-          <button class="rsvp-btn rsvp-btn-confirm" onclick="handleRsvpConfirm('${event.id}', '${event.Type === 'once' ? event.Date : ''}')">✅ سجّل حضورك</button>
-          <button class="rsvp-btn rsvp-btn-cancel" onclick="handleRsvpCancel('${event.id}', '${event.Title.replace(/'/g, '')}', '${event.Type === 'once' ? event.Date : ''}')">📢 إعلان عدم الحضور</button>
-        </div>`
-      : '';
-
     return `
       <div class="event-card" data-id="${event.id}">
         <div class="event-card-header">
@@ -324,7 +313,6 @@ function renderEventsGrid() {
           </div>
         </div>
         ${footerHtml}
-        ${rsvpHtml}
       </div>
     `;
   }).join('');
@@ -655,13 +643,11 @@ function openEventModal(eventId) {
     };
   });
 
-  // ⚡ ملء قائمة الأشخاص الملتزمين (regPeopleList)
   const regPeopleList = document.getElementById('regPeopleList');
   if (regPeopleList) {
     fillPeopleList(regPeopleList, regPersonIds);
   }
 
-  // ⚡ ملء قائمة الأشخاص للإشعار (فقط عند الإضافة)
   const notifPeopleList = document.getElementById('notifPeopleList');
   if (notifPeopleList) {
     fillPeopleList(notifPeopleList, []);
@@ -673,11 +659,6 @@ function openEventModal(eventId) {
   }, 100);
 }
 
-/**
- * ⚡ Helper: ملء قائمة أشخاص (checkboxes) في أي container
- * @param {HTMLElement} container - الـ div اللي هيتعبى
- * @param {string[]} selectedIds - IDs الأشخاص المحددين مسبقًا
- */
 function fillPeopleList(container, selectedIds) {
   if (!container) return;
 
@@ -751,7 +732,6 @@ async function saveEvent() {
     }
   }
 
-  // ⚡ قواعد التسجيل
   let regScope = 'all';
   let regPersonIds = [];
   const regRadio = document.querySelector('input[name="regScope"]:checked');
@@ -782,7 +762,6 @@ async function saveEvent() {
     if (locationIds.length === 0) { alert('اختر مكان واحد على الأقل'); return; }
   }
 
-  // ⚡ نوع الإشعار
   let notifType = 'none';
   let notifPersonIds = [];
   const notifRadio = document.querySelector('input[name="notifType"]:checked');
@@ -845,7 +824,6 @@ async function saveEvent() {
         CanceledOccurrences: []
       });
 
-      // ⚡ بعت الإشعار (بس لو الحدث نشط ومطلوب إشعار)
       if (status === 'active' && notifType !== 'none') {
         await sendEventNotification(docRef.id, title, notifType, notifPersonIds);
       }
@@ -876,9 +854,9 @@ async function sendEventNotification(eventId, eventTitle, targetType, personIds)
       Body: `تم إضافة حدث جديد: ${eventTitle}\nلتسجيل حضورك اضغط هنا`,
       RelatedEventID: eventId,
       RelatedEventTitle: eventTitle,
-      TargetType: targetType,           // all | specific
+      TargetType: targetType,
       TargetPersonIDs: personIds || [],
-      ActionURL: `my-attendance.html?event=${eventId}`,
+      ActionURL: `my-events.html?event=${eventId}`,
       SentBy: user?.email || 'system',
       SentAt: new Date().toISOString(),
       ReadBy: [],
@@ -1210,7 +1188,8 @@ async function autoDeactivateOnceEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   RSVP Actions (Handlers)
+//   RSVP Actions (Handlers) — Backwards compatibility
+//   ⚡ الكود ده مش بيتستخدم دلوقتي — الـRSVP في my-events.js
 // ═══════════════════════════════════════════════════════
 
 window.handleRsvpConfirm = async function(eventId, occurrenceDate) {
@@ -1220,16 +1199,12 @@ window.handleRsvpConfirm = async function(eventId, occurrenceDate) {
       const area = document.getElementById('contentArea');
       await loadEventsPage(area, currentMode);
     }
-  } else {
-    alert('⚠️ RSVP غير جاهز، حاول من جديد');
   }
 };
 
 window.handleRsvpCancel = function(eventId, eventTitle, occurrenceDate) {
   if (typeof window.openCancelModal === 'function') {
     window.openCancelModal(eventId, eventTitle, occurrenceDate);
-  } else {
-    alert('⚠️ RSVP غير جاهز، حاول من جديد');
   }
 };
 
