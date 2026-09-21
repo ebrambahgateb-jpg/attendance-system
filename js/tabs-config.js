@@ -60,7 +60,7 @@ export const TABS_REGISTRY = [
     id: 'my-events',
     label: 'حضوري',
     icon: '🎯',
-    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
+    workspaces: ['User', 'Scanner'],
     ownerOnly: false,
     handler: 'loadMyEventsLazy',
     isPage: false
@@ -162,35 +162,27 @@ export const TABS_REGISTRY = [
 //   Helpers
 // ═══════════════════════════════════════════════════════
 
-// ⚡ التابات المتاحة للتعديل (بدون owner-only)
 export const EDITABLE_TABS = TABS_REGISTRY.filter(t => !t.ownerOnly);
-
-// ⚡ التابات الخاصة بالـOwner فقط
 export const OWNER_ONLY_TABS = TABS_REGISTRY.filter(t => t.ownerOnly);
 
-// ⚡ قائمة الـIDs
 export const OWNER_ONLY_TAB_IDS = OWNER_ONLY_TABS.map(t => t.id);
 export const EDITABLE_TAB_IDS = EDITABLE_TABS.map(t => t.id);
 export const ALL_TAB_IDS = TABS_REGISTRY.map(t => t.id);
 
-// ⚡ جلب تابات واجهة معينة
 export function getTabsForWorkspace(workspaceId) {
   return TABS_REGISTRY.filter(tab =>
     tab.workspaces && tab.workspaces.includes(workspaceId)
   );
 }
 
-// ⚡ جلب تاب بالـ ID
 export function getTabById(id) {
   return TABS_REGISTRY.find(t => t.id === id);
 }
 
-// ⚡ جلب workspace بالـ ID
 export function getWorkspaceById(id) {
   return Object.values(WORKSPACES).find(w => w.id === id);
 }
 
-// ⚡ كل الـ IDs المتاحة للـ workspace
 export function getWorkspaceTabIds(workspaceId) {
   return getTabsForWorkspace(workspaceId).map(t => t.id);
 }
