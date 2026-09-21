@@ -217,7 +217,6 @@ function renderEventsGrid() {
   if (emptyState) emptyState.style.display = 'none';
   const isView = currentMode === 'view';
 
-  // ⚡ اقرأ الواجهة الحالية
   const u = (JSON.parse(localStorage.getItem('currentUser')) || {});
   const ws = u.currentWorkspace || u.selectedRole || '';
 
@@ -226,7 +225,6 @@ function renderEventsGrid() {
     const type = String(event.Type || 'once').toLowerCase();
     const canceledOccurrences = event.CanceledOccurrences || [];
 
-    // ⚡ الحالة
     let statusBadge = '';
     if (status === 'archived') {
       statusBadge = '<span class="status-badge archived">📦 مؤرشف</span>';
@@ -238,18 +236,15 @@ function renderEventsGrid() {
       statusBadge = '<span class="status-badge active">✅ نشط</span>';
     }
 
-    // ⚡ نوع الحدث
     const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
     const eventTypeBadge = eventType
       ? `<span class="event-type-badge">${eventType.Icon || '📅'} ${escapeHtml(eventType.Name)}</span>`
       : '';
 
-    // ⚡ التكرار
     const typeBadge = type === 'weekly'
       ? '<span class="type-badge weekly">🔄 أسبوعي</span>'
       : '<span class="type-badge once">1️⃣ مرة واحدة</span>';
 
-    // ⚡ التاريخ
     let dateInfo = '';
     if (type === 'weekly') {
       const dayLabel = getDayLabel(event.DayOfWeek);
@@ -258,26 +253,21 @@ function renderEventsGrid() {
       dateInfo = formatDate(event.Date);
     }
 
-    // ⚡ الوقت
     const startTime = event.Time || '-';
     const endTime = getEventEndTime(event);
     const timeInfo = `${startTime} - ${endTime}`;
 
-    // ⚡ المكان
     const locationsInfo = getLocationsInfoText(event);
 
-    // ⚡ الإلغاءات
     const cancelInfo = canceledOccurrences.length > 0
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
-    // ⚡ التسجيل
     const regScope = String(event.RegistrationScope || 'all').toLowerCase();
     const regInfo = regScope === 'all'
       ? '<span class="reg-badge reg-all">🌍 إلزامي للكل</span>'
       : '<span class="reg-badge reg-specific">👥 إلزامي لقائمة</span>';
 
-    // ⚡ Footer (Admin/Owner فقط)
     const footerHtml = isView
       ? `<div class="event-card-footer">
           <button class="btn-icon" onclick="viewOccurrences('${event.id}')" title="المواعيد">📋 المواعيد</button>
@@ -289,7 +279,6 @@ function renderEventsGrid() {
           <button class="btn-icon danger" onclick="confirmDeleteEvent('${event.id}')" title="حذف">🗑️</button>
         </div>`;
 
-    // ⚡ زراير RSVP (لواجهة User/Scanner بس)
     const showRsvp = ['User', 'Scanner'].includes(ws) && status === 'active';
     const rsvpHtml = showRsvp
       ? `<div class="rsvp-actions" data-event-id="${event.id}" data-occurrence="${event.Type === 'once' ? event.Date : ''}">
@@ -568,6 +557,37 @@ function openEventModal(eventId) {
             </div>
           `}
         </div>
+
+        <!-- ═══ 🔔 إشعار ═══ -->
+        ${!isEdit ? `
+          <div class="modal-section">
+            <h4 class="modal-section-title">🔔 إشعار</h4>
+
+            <div class="location-mode-options">
+              <label class="location-mode-option">
+                <input type="radio" name="notifType" value="none" checked />
+                <span>🔕 بدون إشعار</span>
+                <small>لن يتم إرسال أي إشعار</small>
+              </label>
+              <label class="location-mode-option">
+                <input type="radio" name="notifType" value="all" />
+                <span>🌍 للكل</span>
+                <small>سيتم إرسال الإشعار لكل المستخدمين</small>
+              </label>
+              <label class="location-mode-option">
+                <input type="radio" name="notifType" value="specific" />
+                <span>👥 لمجموعة محددة</span>
+                <small>اختر أشخاص معينين</small>
+              </label>
+            </div>
+
+            <div id="notifPeopleBox" class="location-picker-box" style="display:none;">
+              <label>اختر الأشخاص</label>
+              <div class="locations-checkbox-list" id="notifPeopleList"></div>
+            </div>
+          </div>
+        ` : ''}
+
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeEventModal()">إلغاء</button>
@@ -620,6 +640,37 @@ function openEventModal(eventId) {
       }
     };
   });
+
+  // ⚡ إشعار: تبويب قسم الأشخاص
+  document.querySelectorAll('input[name="notifType"]').forEach(radio => {
+    radio.onchange = (e) => {
+      const box = document.getElementById('notifPeopleBox');
+      if (e.target.value === 'specific') {
+        if (box) box.style.display = 'block';
+      } else {
+        if (box) box.style.display = 'none';
+      }
+    };
+  });
+
+  // ⚡ ملء قائمة الأشخاص (فقط عند الإضافة)
+  const notifPeopleList = document.getElementById('notifPeopleList');
+  if (notifPeopleList) {
+    const activePeople = availablePeople
+      .filter(p => String(p.Status || '').toLowerCase() === 'active')
+      .sort((a, b) => getPersonFullName(a).localeCompare(getPersonFullName(b), 'ar'));
+
+    if (activePeople.length === 0) {
+      notifPeopleList.innerHTML = '<p class="hint" style="padding:8px;color:#94a3b8;">لا يوجد أشخاص نشطين</p>';
+    } else {
+      notifPeopleList.innerHTML = activePeople.map(p => `
+        <label class="location-checkbox-item">
+          <input type="checkbox" value="${p.id}" />
+          <span>${escapeHtml(getPersonFullName(p))}</span>
+        </label>
+      `).join('');
+    }
+  }
 
   setTimeout(() => {
     const titleInput = document.getElementById('eventTitle');
@@ -694,6 +745,22 @@ async function saveEvent() {
     if (locationIds.length === 0) { alert('اختر مكان واحد على الأقل'); return; }
   }
 
+  // ⚡ نوع الإشعار
+  let notifType = 'none';
+  let notifPersonIds = [];
+  const notifRadio = document.querySelector('input[name="notifType"]:checked');
+  if (notifRadio) {
+    notifType = notifRadio.value;
+    if (notifType === 'specific') {
+      const checked = document.querySelectorAll('#notifPeopleList input[type="checkbox"]:checked');
+      notifPersonIds = Array.from(checked).map(c => c.value);
+      if (notifPersonIds.length === 0) {
+        alert('⚠️ اختر شخص واحد على الأقل للإشعار، أو اختر "بدون إشعار"');
+        return;
+      }
+    }
+  }
+
   const status = isActive ? 'active' : 'cancelled';
 
   try {
@@ -716,7 +783,7 @@ async function saveEvent() {
       alert('✅ تم التعديل بنجاح');
     } else {
       const user = JSON.parse(localStorage.getItem('currentUser'));
-      await addDoc(collection(db, 'events'), {
+      const docRef = await addDoc(collection(db, 'events'), {
         Title: title,
         EventTypeID: eventTypeID,
         Type: type,
@@ -738,7 +805,13 @@ async function saveEvent() {
         CreatedBy: user?.email || '',
         CanceledOccurrences: []
       });
-      alert('✅ تمت الإضافة بنجاح');
+
+      // ⚡ بعت الإشعار (بس لو الحدث نشط ومطلوب إشعار)
+      if (status === 'active' && notifType !== 'none') {
+        await sendEventNotification(docRef.id, title, notifType, notifPersonIds);
+      }
+
+      alert('✅ تمت الإضافة بنجاح' + (notifType !== 'none' ? '\n\n🔔 تم إرسال الإشعارات' : ''));
     }
 
     closeEventModal();
@@ -747,6 +820,37 @@ async function saveEvent() {
   } catch (err) {
     console.error('❌ Save event error:', err);
     alert('خطأ: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   Send Event Notification
+// ═══════════════════════════════════════════════════════
+
+async function sendEventNotification(eventId, eventTitle, targetType, personIds) {
+  try {
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+
+    const notif = {
+      Type: 'event_added',
+      Title: `حدث جديد: ${eventTitle}`,
+      Body: `تم إضافة حدث جديد: ${eventTitle}\nلتسجيل حضورك اضغط هنا`,
+      RelatedEventID: eventId,
+      RelatedEventTitle: eventTitle,
+      TargetType: targetType,           // all | specific
+      TargetPersonIDs: personIds || [],
+      ActionURL: `my-attendance.html?event=${eventId}`,
+      SentBy: user?.email || 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    };
+
+    await addDoc(collection(db, 'notifications'), notif);
+    console.log('✅ Notification sent:', targetType);
+  } catch (err) {
+    console.error('❌ sendEventNotification error:', err);
+    alert('⚠️ لم يتم إرسال الإشعارات: ' + err.message);
   }
 }
 
@@ -1005,6 +1109,12 @@ function getUpcomingOccurrences(dayOfWeek, count) {
   return dates;
 }
 
+function getPersonFullName(p) {
+  if (!p) return '';
+  return [p.FirstName, p.SecondName, p.ThirdName, p.FourthName]
+    .filter(Boolean).join(' ');
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -1100,3 +1210,4 @@ window.closeOccurrencesModal = closeOccurrencesModal;
 window.cancelOccurrence = cancelOccurrence;
 window.restoreOccurrence = restoreOccurrence;
 window.autoDeactivateOnceEvents = autoDeactivateOnceEvents;
+window.sendEventNotification = sendEventNotification;
