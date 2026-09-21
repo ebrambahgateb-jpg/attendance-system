@@ -17,26 +17,30 @@ import {
 
 import {
   EDITABLE_TABS,
-  OWNER_ONLY_TABS,
-  DEFAULT_TAB_PERMISSIONS
+  OWNER_ONLY_TABS
 } from './tabs-config.js';
 
 // ═══ State ═══
 let settingsData = {};
 let originalSettings = {};
-let locationsData = [];
-let currentLocationId = null;
 
 // ═══ Constants ═══
 const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
 const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeVxvcyHciVG2JH7gJlIzyxbOhmHM2HDafSLIIFuQUtbBqYLg/viewform';
 
-// ═══ الأدوار القابلة للتعديل ═══
+// ⚡ الأدوار القابلة للتعديل
 const EDITABLE_ROLES = [
   { role: 'User',    label: '👤 User' },
   { role: 'Admin',   label: '🛠️ Admin' },
   { role: 'Scanner', label: '📷 Scanner' }
 ];
+
+// ⚡ حساب الافتراضي محليًا (لأنه مش موجود في tabs-config الجديد)
+const DEFAULT_TAB_PERMISSIONS = {
+  User:    EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('User')).map(t => t.id),
+  Admin:   EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Admin')).map(t => t.id),
+  Scanner: EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Scanner')).map(t => t.id)
+};
 
 // ═══════════════════════════════════════════════════════
 //   Load Settings Page
@@ -52,11 +56,9 @@ async function loadSettingsPage(area) {
     if (!snap.exists()) {
       settingsData = {};
       originalSettings = {};
-      locationsData = [];
     } else {
       settingsData = snap.data();
       originalSettings = { ...settingsData };
-      locationsData = Array.isArray(settingsData.Locations) ? [...settingsData.Locations] : [];
     }
 
     renderSettingsPage(area);
@@ -80,7 +82,6 @@ function renderSettingsPage(area) {
         <button class="settings-tab" data-tab="attendance">الحضور</button>
         <button class="settings-tab" data-tab="people">الأشخاص</button>
         <button class="settings-tab" data-tab="photo">الصور</button>
-        <button class="settings-tab" data-tab="locations">📍 الأماكن و QR</button>
         <button class="settings-tab" data-tab="tabs">🎛️ التابات والصلاحيات</button>
       </div>
 
@@ -263,28 +264,12 @@ function renderSettingsPage(area) {
         </div>
       </div>
 
-      <!-- الأماكن و QR -->
-      <div class="settings-tab-content" id="tab-locations" style="display:none;">
-
-        <div class="settings-group">
-          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span>📍 الأماكن المسجلة</span>
-            <button class="btn-primary" onclick="openLocationModal()">➕ إضافة مكان</button>
-          </h3>
-
-          <p class="hint">كل مكان له QR خاص به. اطبعه وعلّقه في المكان.</p>
-
-          <div id="locationsList" class="locations-list"></div>
-        </div>
-
-      </div>
-
       <!-- 🎛️ التابات والصلاحيات -->
       <div class="settings-tab-content" id="tab-tabs" style="display:none;">
         <div class="settings-group">
           <h3>🎛️ التحكم في تابات الـSidebar</h3>
           <p class="hint">
-            اختر التابات التي تظهر لكل دور. <strong>Owner</strong> يمتلك كل التابات دائمًا (غير قابل للتعديل).
+            اختر التابات التي تظهر لكل واجهة. <strong>Owner</strong> يمتلك كل التابات دائمًا (غير قابل للتعديل).
             التابات <strong>الحسابات</strong> و <strong>الإعدادات</strong> محصورة للـOwner فقط.
           </p>
         </div>
@@ -303,7 +288,6 @@ function renderSettingsPage(area) {
 
   fillSettingsForm();
   setupSettingsEvents();
-  renderLocationsList();
   loadSyncInfo();
   renderTabPermissions();
 }
@@ -362,7 +346,7 @@ function setupSettingsEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Tab Permissions (ديناميكي)
+//   ⚡ Tab Permissions
 // ═══════════════════════════════════════════════════════
 
 function renderTabPermissions() {
@@ -373,7 +357,7 @@ function renderTabPermissions() {
 
   let html = '';
 
-  // ═══ الأدوار القابلة للتعديل ═══
+  // ═══ الواجهات القابلة للتعديل ═══
   EDITABLE_ROLES.forEach(({ role, label }) => {
     const allowedTabs = perms[role] || DEFAULT_TAB_PERMISSIONS[role] || [];
 
@@ -456,7 +440,7 @@ window.saveTabPermissions = async function(event) {
       }
     });
 
-    // ⚡ Validation: كل دور لازم يكون عنده dashboard على الأقل
+    // ⚡ Validation
     EDITABLE_ROLES.forEach(({ role }) => {
       if (!newPerms[role] || !newPerms[role].includes('dashboard')) {
         newPerms[role] = ['dashboard', ...(newPerms[role] || [])];
@@ -643,358 +627,6 @@ window.openGoogleForm = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Locations
-// ═══════════════════════════════════════════════════════
-
-function renderLocationsList() {
-  const container = document.getElementById('locationsList');
-  if (!container) return;
-
-  if (locationsData.length === 0) {
-    container.innerHTML = `
-      <div class="location-empty">
-        <div class="location-empty-icon">📍</div>
-        <p>لا توجد أماكن مسجلة بعد</p>
-        <button class="btn-primary" onclick="openLocationModal()">➕ إضافة أول مكان</button>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = locationsData.map(loc => `
-    <div class="location-card">
-      <div class="location-card-header">
-        <div class="location-card-title">
-          <span class="location-icon">🏛️</span>
-          <span>${escapeHtml(loc.name || 'بدون اسم')}</span>
-        </div>
-        <div class="location-card-actions">
-          <button class="btn-icon" onclick="editLocation('${loc.id}')" title="تعديل">✏️</button>
-          <button class="btn-icon danger" onclick="deleteLocation('${loc.id}')" title="حذف">🗑️</button>
-        </div>
-      </div>
-
-      <div class="location-card-info">
-        <div class="location-info-row">
-          <span class="info-icon">📌</span>
-          <span class="ltr">${(loc.lat || 0).toFixed(6)}, ${(loc.lng || 0).toFixed(6)}</span>
-        </div>
-        <div class="location-info-row">
-          <span class="info-icon">🎯</span>
-          <span>نطاق: ${loc.radius || 0}م | هامش: ${loc.tolerance || 0}م</span>
-        </div>
-      </div>
-
-      <div class="location-card-qr">
-        <div class="location-qr-preview" id="qr-preview-${loc.id}"></div>
-        <div class="location-qr-actions">
-          <button class="btn-secondary btn-small" onclick="copyLocationQR('${loc.id}')">📋 نسخ</button>
-          <button class="btn-secondary btn-small" onclick="printLocationQR('${loc.id}')">🖨️ طباعة</button>
-          <button class="btn-danger btn-small" onclick="regenerateLocationQR('${loc.id}')">🔄 تجديد</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
-
-  setTimeout(() => {
-    locationsData.forEach(loc => {
-      const container = document.getElementById('qr-preview-' + loc.id);
-      if (container && loc.qrCode && typeof QRCode !== 'undefined') {
-        container.innerHTML = '';
-        new QRCode(container, {
-          text: loc.qrCode,
-          width: 120,
-          height: 120,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.H
-        });
-      }
-    });
-  }, 50);
-}
-
-window.openLocationModal = function(locationId) {
-  currentLocationId = locationId || null;
-  const loc = locationId ? locationsData.find(l => l.id === locationId) : null;
-  const isEdit = !!loc;
-  const data = loc || {};
-
-  let modal = document.getElementById('locationModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'locationModal';
-    modal.className = 'modal-overlay';
-    document.body.appendChild(modal);
-  }
-
-  modal.innerHTML = `
-    <div class="modal-content modal-large">
-      <div class="modal-header">
-        <h2>${isEdit ? '✏️ تعديل مكان' : '➕ إضافة مكان جديد'}</h2>
-        <button class="modal-close" onclick="closeLocationModal()">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="form-row">
-          <label>اسم المكان *</label>
-          <input type="text" id="loc_name" value="${escapeHtml(data.name || '')}" placeholder="مثال: الكنيسة الرئيسية" />
-        </div>
-
-        <div class="form-grid-2">
-          <div class="form-row">
-            <label>Latitude *</label>
-            <input type="number" step="0.000001" id="loc_lat" value="${data.lat || ''}" placeholder="27.180144" dir="ltr" />
-          </div>
-          <div class="form-row">
-            <label>Longitude *</label>
-            <input type="number" step="0.000001" id="loc_lng" value="${data.lng || ''}" placeholder="31.183618" dir="ltr" />
-          </div>
-        </div>
-
-        <div class="form-grid-2">
-          <div class="form-row">
-            <label>Radius (متر) *</label>
-            <input type="number" id="loc_radius" value="${data.radius || 4}" min="1" max="1000" />
-          </div>
-          <div class="form-row">
-            <label>Accuracy Tolerance (متر) *</label>
-            <input type="number" id="loc_tolerance" value="${data.tolerance || 15}" min="0" max="200" />
-          </div>
-        </div>
-
-        <div class="settings-inline-actions">
-          <button class="btn-primary" onclick="detectLocationCurrent()">📍 حدّد موقعي الحالي</button>
-          <button class="btn-secondary" onclick="previewLocationOnMap()">🗺️ معاينة على الخريطة</button>
-        </div>
-
-        <p class="hint" style="margin-top:12px;">
-          💡 نصيحة: انسخ الإحداثيات من Google Maps (اضغط مطوّلاً على الموقع → انسخ الأرقام).
-        </p>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeLocationModal()">إلغاء</button>
-        <button class="btn-primary" onclick="saveLocation()">💾 حفظ</button>
-      </div>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
-
-  setTimeout(() => {
-    const el = document.getElementById('loc_name');
-    if (el) el.focus();
-  }, 100);
-};
-
-window.closeLocationModal = function() {
-  const modal = document.getElementById('locationModal');
-  if (modal) modal.style.display = 'none';
-  currentLocationId = null;
-};
-
-window.detectLocationCurrent = function() {
-  if (!navigator.geolocation) {
-    alert('المتصفح لا يدعم تحديد الموقع');
-    return;
-  }
-
-  const btn = event.target;
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '⏳ جاري تحديد الموقع...';
-
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      document.getElementById('loc_lat').value = lat.toFixed(6);
-      document.getElementById('loc_lng').value = lng.toFixed(6);
-
-      btn.disabled = false;
-      btn.textContent = originalText;
-
-      alert(`✅ تم تحديد الموقع:\n\nLatitude: ${lat.toFixed(6)}\nLongitude: ${lng.toFixed(6)}\n\nدقة القياس: ${Math.round(acc)} متر`);
-    },
-    (err) => {
-      btn.disabled = false;
-      btn.textContent = originalText;
-      alert('❌ فشل تحديد الموقع: ' + err.message);
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
-};
-
-window.previewLocationOnMap = function() {
-  const lat = parseFloat(document.getElementById('loc_lat')?.value);
-  const lng = parseFloat(document.getElementById('loc_lng')?.value);
-
-  if (isNaN(lat) || isNaN(lng)) {
-    alert('حدد الإحداثيات أولاً');
-    return;
-  }
-
-  window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
-};
-
-window.saveLocation = async function() {
-  const name = document.getElementById('loc_name')?.value.trim();
-  const lat = parseFloat(document.getElementById('loc_lat')?.value);
-  const lng = parseFloat(document.getElementById('loc_lng')?.value);
-  const radius = parseInt(document.getElementById('loc_radius')?.value) || 4;
-  const tolerance = parseInt(document.getElementById('loc_tolerance')?.value) || 15;
-
-  if (!name) { alert('اسم المكان مطلوب'); return; }
-  if (isNaN(lat) || isNaN(lng)) { alert('الإحداثيات مطلوبة'); return; }
-
-  try {
-    if (currentLocationId) {
-      const idx = locationsData.findIndex(l => l.id === currentLocationId);
-      if (idx !== -1) {
-        locationsData[idx] = {
-          ...locationsData[idx],
-          name, lat, lng, radius, tolerance
-        };
-      }
-    } else {
-      const newId = 'loc_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-      const qrCode = generateLocationQR(newId);
-
-      locationsData.push({
-        id: newId,
-        name, lat, lng, radius, tolerance,
-        qrCode,
-        createdAt: new Date().toISOString()
-      });
-    }
-
-    await setDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
-      Locations: locationsData
-    }, { merge: true });
-
-    settingsData.Locations = locationsData;
-
-    closeLocationModal();
-    renderLocationsList();
-
-    alert('✅ تم الحفظ بنجاح');
-  } catch (err) {
-    console.error('❌ Save location error:', err);
-    alert('خطأ: ' + err.message);
-  }
-};
-
-window.editLocation = function(locationId) {
-  openLocationModal(locationId);
-};
-
-window.deleteLocation = async function(locationId) {
-  const loc = locationsData.find(l => l.id === locationId);
-  if (!loc) return;
-
-  if (!confirm(`⚠️ هل أنت متأكد من حذف "${loc.name}"؟\n\nسيتوقف QR الخاص به عن العمل.`)) return;
-
-  try {
-    locationsData = locationsData.filter(l => l.id !== locationId);
-
-    await setDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
-      Locations: locationsData
-    }, { merge: true });
-
-    settingsData.Locations = locationsData;
-
-    renderLocationsList();
-    alert('✅ تم الحذف');
-  } catch (err) {
-    console.error('❌ Delete location error:', err);
-    alert('خطأ: ' + err.message);
-  }
-};
-
-function generateLocationQR(locationId) {
-  const randomPart = Math.random().toString(36).substring(2, 12);
-  const timestamp = Date.now().toString(36);
-  return `ATTENDANCE_LOC_${locationId}_${randomPart}${timestamp}`;
-}
-
-window.regenerateLocationQR = async function(locationId) {
-  const loc = locationsData.find(l => l.id === locationId);
-  if (!loc) return;
-
-  if (!confirm(`⚠️ تحذير: تجديد QR لمكان "${loc.name}"\n\nسيتم إلغاء الـQR القديم نهائيًا، ولن يعمل.\n\nيجب استبدال الـQR المطبوع/المعلّق في المكان بالـQR الجديد بعد التجديد.\n\nهل أنت متأكد؟`)) {
-    return;
-  }
-
-  try {
-    const newQR = generateLocationQR(locationId);
-
-    const idx = locationsData.findIndex(l => l.id === locationId);
-    if (idx !== -1) {
-      locationsData[idx].qrCode = newQR;
-      locationsData[idx].regeneratedAt = new Date().toISOString();
-    }
-
-    await setDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
-      Locations: locationsData
-    }, { merge: true });
-
-    settingsData.Locations = locationsData;
-
-    renderLocationsList();
-    alert('✅ تم تجديد QR بنجاح');
-  } catch (err) {
-    console.error('❌ Regenerate QR error:', err);
-    alert('خطأ: ' + err.message);
-  }
-};
-
-window.copyLocationQR = function(locationId) {
-  const loc = locationsData.find(l => l.id === locationId);
-  if (!loc || !loc.qrCode) return;
-
-  navigator.clipboard.writeText(loc.qrCode).then(() => {
-    alert('✅ تم نسخ رمز QR');
-  }).catch(() => {
-    alert('الرمز:\n\n' + loc.qrCode);
-  });
-};
-
-window.printLocationQR = function(locationId) {
-  const loc = locationsData.find(l => l.id === locationId);
-  if (!loc) return;
-
-  const qrContainer = document.getElementById('qr-preview-' + locationId);
-  if (!qrContainer) return;
-
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html dir="rtl">
-      <head>
-        <title>QR - ${escapeHtml(loc.name)}</title>
-        <style>
-          body { font-family: Arial; text-align: center; padding: 60px; }
-          h1 { font-size: 32px; margin-bottom: 10px; }
-          h2 { font-size: 20px; color: #666; margin-bottom: 40px; }
-          .qr-box { display: inline-block; padding: 30px; border: 3px solid #000; border-radius: 16px; }
-          .hint { margin-top: 40px; font-size: 16px; color: #333; }
-        </style>
-      </head>
-      <body>
-        <h1>${escapeHtml(settingsData.SystemName || 'سجل حضورك')}</h1>
-        <h2>${escapeHtml(loc.name)}</h2>
-        <div class="qr-box">${qrContainer.innerHTML}</div>
-        <p class="hint">امسح الـQR لتسجيل حضورك</p>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
-  setTimeout(() => printWindow.print(), 500);
-};
-
-// ═══════════════════════════════════════════════════════
 //   Clear Logo/Bg
 // ═══════════════════════════════════════════════════════
 
@@ -1039,8 +671,6 @@ window.saveAllSettings = async function(event) {
     const el = document.getElementById('set_' + key);
     if (el) payload[key] = el.checked;
   });
-
-  payload.Locations = locationsData;
 
   const btn = event ? event.target : null;
   const originalText = btn ? btn.textContent : '';
