@@ -93,7 +93,6 @@ async function checkUserInFirestore(firebaseUser) {
     // ═══ الحالة 1: الحساب غير موجود → دوّر بالبريد ═══
     if (!accountSnap.exists()) {
       console.log('⚠️ Account not found for UID:', firebaseUser.uid);
-      console.log('📧 Email:', firebaseUser.email);
 
       const found = await findAccountByEmail(firebaseUser.email);
 
@@ -110,7 +109,7 @@ async function checkUserInFirestore(firebaseUser) {
       return;
     }
 
-    // ═══ الحالة 2: الحساب موجود لكن معطل ═══
+    // ═══ الحالة 2: الحساب معطل ═══
     let account = accountSnap.data();
     if (account.Status && String(account.Status).toLowerCase() === 'disabled') {
       showScreen('disabledScreen');
@@ -118,10 +117,9 @@ async function checkUserInFirestore(firebaseUser) {
       return;
     }
 
-    // ═══ الحالة 3: اربط بـPersonID (لو مش مربوط) ═══
+    // ═══ الحالة 3: اربط بـPersonID ═══
     const personId = await ensurePersonLink(firebaseUser, account);
 
-    // احفظ PersonID في account إذا اتربط
     if (personId && !account.PersonID) {
       try {
         await updateDoc(accountRef, { PersonID: personId });
@@ -144,7 +142,7 @@ async function checkUserInFirestore(firebaseUser) {
       return;
     }
 
-    // احفظ بيانات المستخدم
+    // ═══ احفظ بيانات المستخدم ═══
     currentUser = {
       uid: firebaseUser.uid,
       email: firebaseUser.email,
@@ -153,17 +151,22 @@ async function checkUserInFirestore(firebaseUser) {
       account: account,
       roles: roles,
       personId: personId || account.PersonID || null,
-      selectedRole: null
+      currentWorkspace: null
     };
 
-    // لو عنده دور واحد → ادخل مباشرة
+    // ═══ الحالة 5: التحقق من workspace محفوظ ═══
+    const savedWorkspace = localStorage.getItem('currentWorkspace');
+
+    // ═══ دور واحد → ادخل مباشرة ═══
     if (roles.length === 1) {
       goToDashboard(roles[0]);
       return;
     }
 
-    // لو أكثر من دور → اختار
-    showRoleSelection(roles);
+    // ═══ أكثر من دور → اعرض اختيار الواجهة ═══
+    // ⚡ لو المستخدم عنده workspace محفوظ وما زال متاح، اقترح عليه الاختيار
+    // (لأنه ممكن يكون عايز يغيّر الواجهة)
+    showWorkspaceSelection(roles);
 
   } catch (error) {
     console.error('❌ Firestore check error:', error);
@@ -174,7 +177,6 @@ async function checkUserInFirestore(firebaseUser) {
 
 // ═══ Ensure Person Link ═══
 async function ensurePersonLink(firebaseUser, account) {
-  // 1. لو account.PersonID موجود → تأكد إنه لسه في people
   if (account.PersonID) {
     try {
       const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, account.PersonID));
@@ -182,7 +184,6 @@ async function ensurePersonLink(firebaseUser, account) {
     } catch (e) {}
   }
 
-  // 2. دوّر بالبريد
   if (firebaseUser.email) {
     try {
       const q = query(
@@ -232,7 +233,6 @@ async function linkAccountToUid(oldDocId, newUid, firebaseUser) {
 
     const data = oldSnap.data();
 
-    // أنشئ document جديد بالـ UID
     const newRef = doc(db, COLLECTIONS.ACCOUNTS, newUid);
     await setDoc(newRef, {
       ...data,
@@ -240,14 +240,12 @@ async function linkAccountToUid(oldDocId, newUid, firebaseUser) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // امسح الـ document القديم (لو الـ ID مختلف)
     if (oldDocId !== newUid) {
       await deleteDoc(oldRef);
     }
 
     console.log('✅ Account linked to UID:', newUid);
 
-    // أعد الفحص
     await checkUserInFirestore(firebaseUser);
 
   } catch (error) {
@@ -265,22 +263,39 @@ function getRolesFromAccount(account) {
     .filter(r => ['Owner', 'Admin', 'Scanner', 'User'].includes(r));
 }
 
-// ═══ Show Role Selection ═══
-function showRoleSelection(roles) {
+// ═══ Show Workspace Selection ═══
+function showWorkspaceSelection(roles) {
   if (!rolesList) return;
 
   rolesList.innerHTML = '';
-  const icons = {
-    'Owner': '👑',
-    'Admin': '🛠️',
-    'Scanner': '📷',
-    'User': '👤'
+
+  // ⚡ خريطة الواجهات
+  const workspaceMap = {
+    'Owner':   { label: 'واجهة المالك',  icon: '👑', desc: 'إدارة كاملة للنظام' },
+    'Admin':   { label: 'واجهة المدير',  icon: '⚙️', desc: 'إدارة كاملة ما عدا الحسابات والإعدادات' },
+    'Scanner': { label: 'واجهة الماسح',  icon: '📷', desc: 'المسح وتسجيل الحضور' },
+    'User':    { label: 'واجهة المستخدم', icon: '🎭', desc: 'حسابي، حضوري، الأحداث' }
   };
 
+  // ⚡ اضبط عنوان الشاشة
+  const titleEl = document.querySelector('#roleScreen h2');
+  if (titleEl) titleEl.textContent = 'اختر الواجهة';
+
+  const subtitleEl = document.querySelector('#roleScreen .subtitle');
+  if (subtitleEl) subtitleEl.textContent = 'حسابك له أكثر من واجهة، اختر الواجهة التي تريد الدخول بها';
+
   roles.forEach(role => {
+    const info = workspaceMap[role] || { label: role, icon: '👤', desc: '' };
+
     const btn = document.createElement('button');
     btn.className = 'role-btn';
-    btn.innerHTML = `<span class="role-icon">${icons[role] || '👤'}</span> ${role}`;
+    btn.innerHTML = `
+      <span class="role-icon">${info.icon}</span>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;flex:1;text-align:right;">
+        <strong style="font-size:15px;">${info.label}</strong>
+        <small style="font-size:12px;opacity:0.7;font-weight:400;">${info.desc}</small>
+      </div>
+    `;
     btn.onclick = () => goToDashboard(role);
     rolesList.appendChild(btn);
   });
@@ -289,11 +304,12 @@ function showRoleSelection(roles) {
 }
 
 // ═══ Go to Dashboard ═══
-function goToDashboard(role) {
+function goToDashboard(workspaceId) {
   if (!currentUser) return;
 
-  currentUser.selectedRole = role;
+  currentUser.currentWorkspace = workspaceId;
   localStorage.setItem('currentUser', JSON.stringify(currentUser));
+  localStorage.setItem('currentWorkspace', workspaceId);
 
   window.location.href = 'pages/dashboard.html';
 }
@@ -302,6 +318,7 @@ function goToDashboard(role) {
 async function logout() {
   try {
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentWorkspace');
     try { sessionStorage.clear(); } catch (e) {}
     await signOut(auth);
   } catch (error) {
@@ -315,19 +332,18 @@ onAuthStateChanged(auth, async (firebaseUser) => {
   if (firebaseUser) {
     console.log('👤 Already signed in:', firebaseUser.email);
 
-    // تحقق لو المستخدم عنده بيانات محفوظة
+    // ⚡ تحقق لو المستخدم عنده بيانات محفوظة + workspace
     const saved = localStorage.getItem('currentUser');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.uid === firebaseUser.uid && parsed.selectedRole) {
+        if (parsed.uid === firebaseUser.uid && parsed.currentWorkspace) {
           window.location.href = 'pages/dashboard.html';
           return;
         }
       } catch (e) {}
     }
 
-    // افحص الحساب
     await checkUserInFirestore(firebaseUser);
   } else {
     console.log('👤 No user signed in');
