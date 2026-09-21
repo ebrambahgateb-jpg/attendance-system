@@ -217,8 +217,6 @@ function renderGridView(container) {
     ${headerHtml}
     ${bodyHtml}
   `;
-
-  setupGridEvents();
 }
 
 function renderGridHeader() {
