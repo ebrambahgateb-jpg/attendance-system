@@ -106,12 +106,15 @@ function isNotificationForMe(notif) {
 
   const targetType = String(notif.TargetType || '').toLowerCase();
 
+  // ⚡ الواجهة الحالية (currentWorkspace أو selectedRole كـ fallback)
+  const ws = currentUser.currentWorkspace || currentUser.selectedRole || '';
+
   // ⚡ للكل
   if (targetType === 'all') return true;
 
   // ⚡ للـ Admins بس
   if (targetType === 'admins') {
-    return ['Owner', 'Admin'].includes(currentUser.selectedRole);
+    return ['Owner', 'Admin'].includes(ws);
   }
 
   // ⚡ لأشخاص محددين
