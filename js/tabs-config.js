@@ -3,13 +3,47 @@
 //   ⚡ أضف أي تاب جديد هنا وسيظهر تلقائيًا في كل مكان
 // ═══════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════
+//   ⚡ الواجهات (Workspaces)
+// ═══════════════════════════════════════════════════════
+export const WORKSPACES = {
+  OWNER: {
+    id: 'Owner',
+    label: 'واجهة المالك',
+    icon: '👑',
+    description: 'إدارة كاملة للنظام'
+  },
+  ADMIN: {
+    id: 'Admin',
+    label: 'واجهة المدير',
+    icon: '⚙️',
+    description: 'إدارة كاملة ما عدا الحسابات والإعدادات'
+  },
+  SCANNER: {
+    id: 'Scanner',
+    label: 'واجهة الماسح',
+    icon: '📷',
+    description: 'المسح وتسجيل الحضور'
+  },
+  USER: {
+    id: 'User',
+    label: 'واجهة المستخدم',
+    icon: '🎭',
+    description: 'حسابي، حضوري، الأحداث'
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ التابات (Tabs Registry)
+//   workspace: الواجهة اللي التاب بيظهر فيها
+// ═══════════════════════════════════════════════════════
 export const TABS_REGISTRY = [
   {
     id: 'dashboard',
     label: 'لوحة التحكم',
     icon: '🏠',
+    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin', 'Scanner', 'User'],
     handler: 'loadDashboardInit',
     isPage: false
   },
@@ -17,17 +51,26 @@ export const TABS_REGISTRY = [
     id: 'profile',
     label: 'حسابي',
     icon: '👤',
+    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin', 'Scanner', 'User'],
     handler: 'loadProfileLazy',
+    isPage: false
+  },
+  {
+    id: 'my-events',
+    label: 'حضوري',
+    icon: '🎯',
+    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
+    ownerOnly: false,
+    handler: 'loadMyEventsLazy',
     isPage: false
   },
   {
     id: 'my-attendance',
     label: 'سجل حضورك بنفسك',
     icon: '📱',
+    workspaces: ['Owner', 'Admin', 'Scanner'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin', 'Scanner'],
     handler: 'loadMyAttendanceLazy',
     isPage: false
   },
@@ -35,18 +78,18 @@ export const TABS_REGISTRY = [
     id: 'scanner',
     label: 'الماسح',
     icon: '📷',
+    workspaces: ['Owner', 'Admin', 'Scanner'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin', 'Scanner'],
-    handler: null,          // ⚡ صفحة منفصلة
+    handler: null,
     isPage: true,
     pageUrl: 'scanner.html'
   },
   {
     id: 'events',
     label: 'الأحداث',
-    icon: '🎯',
+    icon: '📅',
+    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin', 'Scanner', 'User'],
     handler: 'loadEventsLazy',
     isPage: false
   },
@@ -54,8 +97,8 @@ export const TABS_REGISTRY = [
     id: 'people',
     label: 'الأشخاص',
     icon: '👥',
+    workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin'],
     handler: 'loadPeopleLazy',
     isPage: false
   },
@@ -63,8 +106,8 @@ export const TABS_REGISTRY = [
     id: 'attendance',
     label: 'الحضور',
     icon: '✅',
+    workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin'],
     handler: 'loadAttendanceLazy',
     isPage: false
   },
@@ -72,8 +115,8 @@ export const TABS_REGISTRY = [
     id: 'reports',
     label: 'التقارير',
     icon: '📈',
+    workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin'],
     handler: null,
     isPage: false
   },
@@ -81,8 +124,8 @@ export const TABS_REGISTRY = [
     id: 'logs',
     label: 'السجلات',
     icon: '📋',
+    workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin'],
     handler: null,
     isPage: false
   },
@@ -90,8 +133,8 @@ export const TABS_REGISTRY = [
     id: 'archive',
     label: 'الأرشيف',
     icon: '📦',
+    workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    defaultRoles: ['Owner', 'Admin'],
     handler: null,
     isPage: false
   },
@@ -99,8 +142,8 @@ export const TABS_REGISTRY = [
     id: 'accounts',
     label: 'الحسابات',
     icon: '🔑',
-    ownerOnly: true,       // ⚡ Owner فقط
-    defaultRoles: ['Owner'],
+    workspaces: ['Owner'],
+    ownerOnly: true,
     handler: 'loadAccountsLazy',
     isPage: false
   },
@@ -108,12 +151,16 @@ export const TABS_REGISTRY = [
     id: 'settings',
     label: 'الإعدادات',
     icon: '⚙️',
-    ownerOnly: true,       // ⚡ Owner فقط
-    defaultRoles: ['Owner'],
+    workspaces: ['Owner'],
+    ownerOnly: true,
     handler: 'loadSettingsLazy',
     isPage: false
   }
 ];
+
+// ═══════════════════════════════════════════════════════
+//   Helpers
+// ═══════════════════════════════════════════════════════
 
 // ⚡ التابات المتاحة للتعديل (بدون owner-only)
 export const EDITABLE_TABS = TABS_REGISTRY.filter(t => !t.ownerOnly);
@@ -126,20 +173,24 @@ export const OWNER_ONLY_TAB_IDS = OWNER_ONLY_TABS.map(t => t.id);
 export const EDITABLE_TAB_IDS = EDITABLE_TABS.map(t => t.id);
 export const ALL_TAB_IDS = TABS_REGISTRY.map(t => t.id);
 
-// ⚡ default permissions محسوبة تلقائيًا
-export const DEFAULT_TAB_PERMISSIONS = {
-  User: TABS_REGISTRY
-    .filter(t => t.defaultRoles.includes('User'))
-    .map(t => t.id),
-  Admin: TABS_REGISTRY
-    .filter(t => t.defaultRoles.includes('Admin'))
-    .map(t => t.id),
-  Scanner: TABS_REGISTRY
-    .filter(t => t.defaultRoles.includes('Scanner'))
-    .map(t => t.id)
-};
+// ⚡ جلب تابات واجهة معينة
+export function getTabsForWorkspace(workspaceId) {
+  return TABS_REGISTRY.filter(tab =>
+    tab.workspaces && tab.workspaces.includes(workspaceId)
+  );
+}
 
-// ⚡ Helper: جلب تاب بالـ ID
+// ⚡ جلب تاب بالـ ID
 export function getTabById(id) {
   return TABS_REGISTRY.find(t => t.id === id);
+}
+
+// ⚡ جلب workspace بالـ ID
+export function getWorkspaceById(id) {
+  return Object.values(WORKSPACES).find(w => w.id === id);
+}
+
+// ⚡ كل الـ IDs المتاحة للـ workspace
+export function getWorkspaceTabIds(workspaceId) {
+  return getTabsForWorkspace(workspaceId).map(t => t.id);
 }
