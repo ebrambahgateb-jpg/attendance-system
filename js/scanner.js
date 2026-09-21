@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   Scanner (QR Attendance)
+//   Scanner (QR Attendance) — Events
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -20,8 +20,9 @@ import {
 
 // ═══ State ═══
 let currentUser = null;
-let meetings = [];
-let selectedMeeting = null;
+let events = [];
+let availableEventTypes = [];
+let selectedEvent = null;
 let html5QrCode = null;
 let isScanning = false;
 let settings = {};
@@ -68,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser = null;
   }
 
-  if (!currentUser || !currentUser.selectedRole) {
+  if (!currentUser || !currentUser.currentWorkspace) {
     window.location.href = '../index.html';
     return;
   }
@@ -88,61 +89,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusEl.title = 'النظام متوقف';
   }
 
-  await loadMeetings();
+  // ⚡ اجلب أنواع الأحداث
+  try {
+    const eventTypesSnap = await getDocs(collection(db, 'eventTypes'));
+    availableEventTypes = eventTypesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    availableEventTypes = [];
+  }
+
+  await loadEvents();
   setupEvents();
 });
 
 // ═══════════════════════════════════════════════════════
-//   Load Meetings (⚡ اجتماعات النهاردة فقط)
+//   Load Events (⚡ الأحداث النهاردة فقط)
 // ═══════════════════════════════════════════════════════
 
-async function loadMeetings() {
+async function loadEvents() {
   try {
-    const snap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
+    const snap = await getDocs(collection(db, 'events'));
 
     // ⚡ فلتر: Active + عنده موعد النهاردة
-    meetings = snap.docs
+    events = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(m => String(m.Status || '').toLowerCase() === 'active')
-      .filter(m => getTodayOccurrence(m) !== null);
+      .filter(e => String(e.Status || '').toLowerCase() === 'active')
+      .filter(e => getTodayOccurrence(e) !== null);
 
-    meetings.sort((a, b) =>
+    events.sort((a, b) =>
       String(a.Time || '').localeCompare(String(b.Time || ''))
     );
 
-    renderMeetingOptions();
+    renderEventOptions();
   } catch (err) {
-    console.error('❌ Load meetings error:', err);
-    alert('خطأ في تحميل الاجتماعات: ' + err.message);
+    console.error('❌ Load events error:', err);
+    alert('خطأ في تحميل الأحداث: ' + err.message);
   }
 }
 
-function renderMeetingOptions() {
+function renderEventOptions() {
   const select = document.getElementById('meetingSelect');
   if (!select) return;
 
-  select.innerHTML = '<option value="">-- اختر الاجتماع --</option>';
+  select.innerHTML = '<option value="">-- اختر الحدث --</option>';
 
-  if (meetings.length === 0) {
-    select.innerHTML = '<option value="">لا يوجد اجتماعات مجدولة اليوم</option>';
+  if (events.length === 0) {
+    select.innerHTML = '<option value="">لا يوجد أحداث مجدولة اليوم</option>';
     return;
   }
 
-  meetings.forEach(meeting => {
+  events.forEach(event => {
     const opt = document.createElement('option');
-    opt.value = meeting.id;
+    opt.value = event.id;
 
-    const type = String(meeting.Type || 'once').toLowerCase();
-    const endTime = getMeetingEndTime(meeting);
+    const type = String(event.Type || 'once').toLowerCase();
+    const endTime = getEventEndTime(event);
+
+    // ⚡ نوع الحدث
+    const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
+    const typeIcon = eventType ? (eventType.Icon || '📅') : '📅';
 
     let dayInfo = '';
     if (type === 'weekly') {
-      dayInfo = getDayLabel(meeting.DayOfWeek);
+      dayInfo = getDayLabel(event.DayOfWeek);
     } else {
       dayInfo = 'اليوم';
     }
 
-    opt.textContent = `${meeting.Title} — ${dayInfo} — ${meeting.Time} - ${endTime}`;
+    opt.textContent = `${typeIcon} ${event.Title} — ${dayInfo} — ${event.Time} - ${endTime}`;
     select.appendChild(opt);
   });
 }
@@ -157,19 +170,19 @@ function setupEvents() {
 
   if (select) {
     select.onchange = () => {
-      const meetingId = select.value;
+      const eventId = select.value;
 
-      if (!meetingId) {
-        selectedMeeting = null;
+      if (!eventId) {
+        selectedEvent = null;
         if (startBtn) startBtn.disabled = true;
         const info = document.getElementById('meetingInfo');
         if (info) info.style.display = 'none';
         return;
       }
 
-      selectedMeeting = meetings.find(m => m.id === meetingId);
-      if (selectedMeeting) {
-        renderMeetingInfo(selectedMeeting);
+      selectedEvent = events.find(e => e.id === eventId);
+      if (selectedEvent) {
+        renderEventInfo(selectedEvent);
         const info = document.getElementById('meetingInfo');
         if (info) info.style.display = 'block';
         if (startBtn) startBtn.disabled = false;
@@ -183,32 +196,42 @@ function setupEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Render Meeting Info
+//   Render Event Info
 // ═══════════════════════════════════════════════════════
 
-function renderMeetingInfo(meeting) {
+function renderEventInfo(event) {
   const info = document.getElementById('meetingInfo');
   if (!info) return;
 
-  const type = String(meeting.Type || 'once').toLowerCase();
-  const isOpen = isMeetingOpen(meeting);
-  const endTime = getMeetingEndTime(meeting);
+  const type = String(event.Type || 'once').toLowerCase();
+  const isOpen = isEventOpen(event);
+  const endTime = getEventEndTime(event);
+
+  // ⚡ نوع الحدث
+  const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
+  const eventTypeText = eventType ? `${eventType.Icon || '📅'} ${eventType.Name}` : '';
 
   let dateInfo = '';
   if (type === 'weekly') {
-    dateInfo = 'كل ' + getDayLabel(meeting.DayOfWeek);
+    dateInfo = 'كل ' + getDayLabel(event.DayOfWeek);
   } else {
-    dateInfo = formatDateShort(meeting.Date);
+    dateInfo = formatDateShort(event.Date);
   }
 
   info.innerHTML = `
+    ${eventTypeText ? `
+      <div class="info-line">
+        <span class="icon">📋</span>
+        <span>${escapeHtml(eventTypeText)}</span>
+      </div>
+    ` : ''}
     <div class="info-line">
       <span class="icon">${type === 'weekly' ? '🔄' : '📅'}</span>
       <span>${dateInfo}</span>
     </div>
     <div class="info-line">
       <span class="icon">🕐</span>
-      <span>${meeting.Time || '-'} - ${endTime}</span>
+      <span>${event.Time || '-'} - ${endTime}</span>
     </div>
     <div class="info-line">
       <span class="icon">${isOpen ? '🟢' : '🔴'}</span>
@@ -224,8 +247,8 @@ function renderMeetingInfo(meeting) {
 // ═══════════════════════════════════════════════════════
 
 async function startScanner() {
-  if (!selectedMeeting) {
-    alert('اختر الاجتماع أولاً');
+  if (!selectedEvent) {
+    alert('اختر الحدث أولاً');
     return;
   }
 
@@ -238,7 +261,7 @@ async function startScanner() {
 
   const infoEl = document.getElementById('scannerMeetingInfo');
   if (infoEl) {
-    infoEl.textContent = '📅 ' + selectedMeeting.Title;
+    infoEl.textContent = '🎯 ' + selectedEvent.Title;
   }
 
   try {
@@ -359,25 +382,25 @@ async function processScan(decodedText) {
       return;
     }
 
-    // ═══ Check 4: الاجتماع موجود؟ ═══
-    if (!selectedMeeting) {
+    // ═══ Check 4: الحدث موجود؟ ═══
+    if (!selectedEvent) {
       await showResult({
         type: 'error',
-        title: 'لا يوجد اجتماع',
-        message: 'لم يتم اختيار اجتماع',
+        title: 'لا يوجد حدث',
+        message: 'لم يتم اختيار حدث',
         playSound: 'error'
       });
       return;
     }
 
-    // ═══ Check 5: الاجتماع مفتوح في الوقت الحالي؟ ═══
-    const occurrenceDate = getTodayOccurrence(selectedMeeting);
+    // ═══ Check 5: الحدث مفتوح في الوقت الحالي؟ ═══
+    const occurrenceDate = getTodayOccurrence(selectedEvent);
 
     if (!occurrenceDate) {
       await showResult({
         type: 'error',
         title: 'لا يوجد موعد اليوم',
-        message: 'لا يوجد اجتماع مجدول اليوم',
+        message: 'لا يوجد حدث مجدول اليوم',
         person: person,
         playSound: 'error'
       });
@@ -385,7 +408,7 @@ async function processScan(decodedText) {
     }
 
     // ═══ Check 6: هل الموعد ملغي؟ ═══
-    const cancelled = selectedMeeting.CanceledOccurrences || [];
+    const cancelled = selectedEvent.CanceledOccurrences || [];
     if (cancelled.includes(occurrenceDate)) {
       await showResult({
         type: 'error',
@@ -398,7 +421,7 @@ async function processScan(decodedText) {
     }
 
     // ═══ Check 7: هل الحضور مفتوح؟ ═══
-    if (!isMeetingOpen(selectedMeeting)) {
+    if (!isEventOpen(selectedEvent)) {
       await showResult({
         type: 'error',
         title: 'الحضور مغلق',
@@ -412,7 +435,7 @@ async function processScan(decodedText) {
     // ═══ Check 8: هل سجّل حضور بالفعل؟ ═══
     const alreadyRegistered = await checkAlreadyRegistered(
       personId,
-      selectedMeeting.id,
+      selectedEvent.id,
       occurrenceDate
     );
 
@@ -435,8 +458,9 @@ async function processScan(decodedText) {
     const attendanceData = {
       PersonID: personId,
       PersonName: personName || 'غير معروف',
-      MeetingID: selectedMeeting.id,
-      MeetingTitle: selectedMeeting.Title || '',
+      EventID: selectedEvent.id,
+      EventTitle: selectedEvent.Title || '',
+      EventTypeID: selectedEvent.EventTypeID || '',
       OccurrenceDate: occurrenceDate,
       ScanTime: new Date().toISOString(),
       Status: 'present',
@@ -523,15 +547,12 @@ function formatDateShort(dateStr) {
   }
 }
 
-/**
- * ⚡ EndTime مع Fallback (+2 ساعات)
- */
-function getMeetingEndTime(meeting) {
-  if (!meeting) return '';
+function getEventEndTime(event) {
+  if (!event) return '';
 
-  if (meeting.EndTime) return String(meeting.EndTime);
+  if (event.EndTime) return String(event.EndTime);
 
-  const time = String(meeting.Time || '00:00');
+  const time = String(event.Time || '00:00');
   const [h, m] = time.split(':').map(Number);
 
   const totalMinutes = (h || 0) * 60 + (m || 0) + 120;
@@ -541,62 +562,57 @@ function getMeetingEndTime(meeting) {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
-function getTodayOccurrence(meeting) {
+function getTodayOccurrence(event) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const type = String(meeting.Type || 'once').toLowerCase();
+  const type = String(event.Type || 'once').toLowerCase();
 
   if (type === 'weekly') {
     const todayDay = getDayNameFromDate(today);
-    if (todayDay !== meeting.DayOfWeek) {
+    if (todayDay !== event.DayOfWeek) {
       return null;
     }
     return formatDateISO(today);
   }
 
-  if (meeting.Date === formatDateISO(today)) {
+  if (event.Date === formatDateISO(today)) {
     return formatDateISO(today);
   }
 
   return null;
 }
 
-/**
- * ⚡ هل الحضور مفتوح الآن؟ (يستخدم EndTime)
- */
-function isMeetingOpen(meeting) {
+function isEventOpen(event) {
   const today = new Date();
-  const occurrenceDate = getTodayOccurrence(meeting);
+  const occurrenceDate = getTodayOccurrence(event);
 
   if (!occurrenceDate) return false;
 
-  // وقت البداية
-  const [sh, sm] = String(meeting.Time || '00:00').split(':').map(Number);
-  const meetingStart = new Date(today);
-  meetingStart.setHours(sh || 0, sm || 0, 0, 0);
+  const [sh, sm] = String(event.Time || '00:00').split(':').map(Number);
+  const eventStart = new Date(today);
+  eventStart.setHours(sh || 0, sm || 0, 0, 0);
 
-  // وقت النهاية (مع Fallback)
-  const endTime = getMeetingEndTime(meeting);
+  const endTime = getEventEndTime(event);
   const [eh, em] = String(endTime).split(':').map(Number);
-  const meetingEnd = new Date(today);
-  meetingEnd.setHours(eh || 0, em || 0, 0, 0);
+  const eventEnd = new Date(today);
+  eventEnd.setHours(eh || 0, em || 0, 0, 0);
 
   const openBefore = Number(settings.OpenBeforeMinutes || 30);
   const closeAfter = Number(settings.CloseAfterMinutes || 15);
 
-  const openTime = new Date(meetingStart.getTime() - openBefore * 60 * 1000);
-  const closeTime = new Date(meetingEnd.getTime() + closeAfter * 60 * 1000);
+  const openTime = new Date(eventStart.getTime() - openBefore * 60 * 1000);
+  const closeTime = new Date(eventEnd.getTime() + closeAfter * 60 * 1000);
 
   return today >= openTime && today <= closeTime;
 }
 
-async function checkAlreadyRegistered(personId, meetingId, occurrenceDate) {
+async function checkAlreadyRegistered(personId, eventId, occurrenceDate) {
   try {
     const q = query(
       collection(db, COLLECTIONS.ATTENDANCE),
       where('PersonID', '==', personId),
-      where('MeetingID', '==', meetingId),
+      where('EventID', '==', eventId),
       where('OccurrenceDate', '==', occurrenceDate)
     );
 
