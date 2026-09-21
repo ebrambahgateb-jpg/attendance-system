@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════
 //   Events Management (Firestore)
-//   ⚡ بديل meetings.js — يدعم RegistrationScope + EventTypeID
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -10,9 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
-  getDoc,
-  query,
-  where
+  getDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -52,7 +49,6 @@ async function loadEventsPage(area, mode) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    // ⚡ اجلب كل البيانات بشكل متوازي
     const [
       eventsSnap,
       settingsDoc,
@@ -221,6 +217,10 @@ function renderEventsGrid() {
   if (emptyState) emptyState.style.display = 'none';
   const isView = currentMode === 'view';
 
+  // ⚡ اقرأ الواجهة الحالية
+  const u = (JSON.parse(localStorage.getItem('currentUser')) || {});
+  const ws = u.currentWorkspace || u.selectedRole || '';
+
   grid.innerHTML = filteredEvents.map(event => {
     const status = String(event.Status || 'active').toLowerCase();
     const type = String(event.Type || 'once').toLowerCase();
@@ -238,7 +238,7 @@ function renderEventsGrid() {
       statusBadge = '<span class="status-badge active">✅ نشط</span>';
     }
 
-    // ⚡ نوع الحدث (قداس / تسبحة / اجتماع / مخصص)
+    // ⚡ نوع الحدث
     const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
     const eventTypeBadge = eventType
       ? `<span class="event-type-badge">${eventType.Icon || '📅'} ${escapeHtml(eventType.Name)}</span>`
@@ -258,7 +258,7 @@ function renderEventsGrid() {
       dateInfo = formatDate(event.Date);
     }
 
-    // ⚡ الوقت (من - إلى)
+    // ⚡ الوقت
     const startTime = event.Time || '-';
     const endTime = getEventEndTime(event);
     const timeInfo = `${startTime} - ${endTime}`;
@@ -277,8 +277,8 @@ function renderEventsGrid() {
       ? '<span class="reg-badge reg-all">🌍 إلزامي للكل</span>'
       : '<span class="reg-badge reg-specific">👥 إلزامي لقائمة</span>';
 
-    // ⚡ Footer
-        const footerHtml = isView
+    // ⚡ Footer (Admin/Owner فقط)
+    const footerHtml = isView
       ? `<div class="event-card-footer">
           <button class="btn-icon" onclick="viewOccurrences('${event.id}')" title="المواعيد">📋 المواعيد</button>
         </div>`
@@ -289,9 +289,8 @@ function renderEventsGrid() {
           <button class="btn-icon danger" onclick="confirmDeleteEvent('${event.id}')" title="حذف">🗑️</button>
         </div>`;
 
-    // ⚡ زر RSVP (للمستخدم العادي، مش Admin/Owner)
-    const role = (JSON.parse(localStorage.getItem('currentUser')) || {}).selectedRole || '';
-    const showRsvp = ['User', 'Scanner'].includes(role) && status === 'active';
+    // ⚡ زراير RSVP (لواجهة User/Scanner بس)
+    const showRsvp = ['User', 'Scanner'].includes(ws) && status === 'active';
     const rsvpHtml = showRsvp
       ? `<div class="rsvp-actions" data-event-id="${event.id}" data-occurrence="${event.Type === 'once' ? event.Date : ''}">
           <button class="rsvp-btn rsvp-btn-confirm" onclick="handleRsvpConfirm('${event.id}', '${event.Type === 'once' ? event.Date : ''}')">✅ سجّل حضورك</button>
@@ -333,7 +332,7 @@ function renderEventsGrid() {
             ${cancelInfo ? `<div class="event-info-row"><span class="event-info-icon">⚠️</span>${cancelInfo}</div>` : ''}
           </div>
         </div>
-                ${footerHtml}
+        ${footerHtml}
         ${rsvpHtml}
       </div>
     `;
@@ -427,11 +426,7 @@ function openEventModal(eventId) {
   const noEventTypes = availableEventTypes.length === 0;
   const todayISO = formatDateISO(new Date());
   const endTime = event ? getEventEndTime(event) : '21:00';
-
-  // ⚡ RegistrationScope
   const regScope = event ? String(event.RegistrationScope || 'all').toLowerCase() : 'all';
-
-  // ⚡ EventTypeID
   const selectedTypeId = event ? String(event.EventTypeID || '') : (availableEventTypes[0]?.id || '');
 
   modal.innerHTML = `
@@ -680,12 +675,10 @@ async function saveEvent() {
     }
   }
 
-  // ⚡ RegistrationScope
   let regScope = 'all';
   const regRadio = document.querySelector('input[name="regScope"]:checked');
   if (regRadio) regScope = regRadio.value;
 
-  // ⚡ Location
   let locationMode = 'any';
   let locationIds = [];
   const modeRadio = document.querySelector('input[name="locationMode"]:checked');
@@ -1068,23 +1061,6 @@ async function autoDeactivateOnceEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Expose to window
-// ═══════════════════════════════════════════════════════
-
-window.loadEventsPage = loadEventsPage;
-window.openEventModal = openEventModal;
-window.closeEventModal = closeEventModal;
-window.saveEvent = saveEvent;
-window.editEvent = editEvent;
-window.archiveEvent = archiveEvent;
-window.confirmDeleteEvent = confirmDeleteEvent;
-window.viewOccurrences = viewOccurrences;
-window.closeOccurrencesModal = closeOccurrencesModal;
-window.cancelOccurrence = cancelOccurrence;
-window.restoreOccurrence = restoreOccurrence;
-window.autoDeactivateOnceEvents = autoDeactivateOnceEvents;
-
-// ═══════════════════════════════════════════════════════
 //   RSVP Actions (Handlers)
 // ═══════════════════════════════════════════════════════
 
@@ -1092,7 +1068,6 @@ window.handleRsvpConfirm = async function(eventId, occurrenceDate) {
   if (typeof window.confirmRsvp === 'function') {
     const result = await window.confirmRsvp(eventId);
     if (result) {
-      // ⚡ أعد تحميل الصفحة
       const area = document.getElementById('contentArea');
       await loadEventsPage(area, currentMode);
     }
@@ -1108,3 +1083,20 @@ window.handleRsvpCancel = function(eventId, eventTitle, occurrenceDate) {
     alert('⚠️ RSVP غير جاهز، حاول من جديد');
   }
 };
+
+// ═══════════════════════════════════════════════════════
+//   Expose to window
+// ═══════════════════════════════════════════════════════
+
+window.loadEventsPage = loadEventsPage;
+window.openEventModal = openEventModal;
+window.closeEventModal = closeEventModal;
+window.saveEvent = saveEvent;
+window.editEvent = editEvent;
+window.archiveEvent = archiveEvent;
+window.confirmDeleteEvent = confirmDeleteEvent;
+window.viewOccurrences = viewOccurrences;
+window.closeOccurrencesModal = closeOccurrencesModal;
+window.cancelOccurrence = cancelOccurrence;
+window.restoreOccurrence = restoreOccurrence;
+window.autoDeactivateOnceEvents = autoDeactivateOnceEvents;
