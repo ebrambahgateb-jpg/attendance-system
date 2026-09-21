@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   Schedule (الجدول) — 5 تابات داخلية
-//   ⚡ محدّث: عرض الملتزمين + Popup التفاصيل
+//   Schedule (الجدول) — عرض شهري + أسبوعي
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -32,19 +31,29 @@ let schLocations = [];
 let schTemplates = [];
 let schRequests = [];
 let schMyRequests = [];
-let schRegistrations = {};     // { eventId: [registrations] }
-let schPeople = {};            // { personId: person }
+let schRegistrations = {};
+let schPeople = {};
 let schSettings = {};
+
+// ⚡ للجدول
+let schViewMode = 'month';          // 'month' | 'week'
+let schCurrentDate = new Date();    // نقطة البداية للتنقل
 
 // ═══ أيام الأسبوع ═══
 const DAYS_OF_WEEK = [
-  { value: 'Saturday',  label: 'السبت', icon: '🕯️' },
-  { value: 'Sunday',    label: 'الأحد', icon: '⛪' },
-  { value: 'Monday',    label: 'الاثنين', icon: '📅' },
-  { value: 'Tuesday',   label: 'الثلاثاء', icon: '📅' },
-  { value: 'Wednesday', label: 'الأربعاء', icon: '📅' },
-  { value: 'Thursday',  label: 'الخميس', icon: '📅' },
-  { value: 'Friday',    label: 'الجمعة', icon: '⛪' }
+  { value: 'Saturday',  label: 'السبت',   short: 'سبت',  icon: '🕯️', jsDay: 6 },
+  { value: 'Sunday',    label: 'الأحد',   short: 'أحد',  icon: '⛪', jsDay: 0 },
+  { value: 'Monday',    label: 'الاثنين', short: 'اثنين', icon: '📅', jsDay: 1 },
+  { value: 'Tuesday',   label: 'الثلاثاء', short: 'ثلاثاء', icon: '📅', jsDay: 2 },
+  { value: 'Wednesday', label: 'الأربعاء', short: 'أربعاء', icon: '📅', jsDay: 3 },
+  { value: 'Thursday',  label: 'الخميس',  short: 'خميس',  icon: '📅', jsDay: 4 },
+  { value: 'Friday',    label: 'الجمعة',  short: 'جمعة',  icon: '⛪', jsDay: 5 }
+];
+
+// ═══ أسماء الشهور ═══
+const MONTHS_AR = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -62,7 +71,12 @@ async function loadSchedulePage(area) {
     }
     schWorkspace = schUser.currentWorkspace || schUser.selectedRole || 'User';
 
-    // ⚡ اجلب كل البيانات
+    // ⚡ استرجع وضع العرض المحفوظ
+    try {
+      const saved = localStorage.getItem('schViewMode');
+      if (saved === 'week' || saved === 'month') schViewMode = saved;
+    } catch (e) {}
+
     const [
       eventsSnap,
       eventTypesSnap,
@@ -99,13 +113,11 @@ async function loadSchedulePage(area) {
     schMyRequests = myRequestsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     schSettings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ خزّن الناس
     schPeople = {};
     peopleSnap.docs.forEach(d => {
       schPeople[d.id] = { id: d.id, ...d.data() };
     });
 
-    // ⚡ خزّن التسجيلات بـeventId
     schRegistrations = {};
     registrationsSnap.docs.forEach(d => {
       const reg = { id: d.id, ...d.data() };
@@ -194,156 +206,390 @@ function renderActiveTab() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   1. Grid View (الجدول الأسبوعي)
+//   1. Grid View (الجدول)
 // ═══════════════════════════════════════════════════════
 
 function renderGridView(container) {
-  // ⚡ نعرض الأحداث الأسبوعية النشطة بس
-  const activeWeeklyEvents = schEvents.filter(e =>
-    String(e.Status || '').toLowerCase() === 'active' &&
-    String(e.Type || '').toLowerCase() === 'weekly'
-  );
-
-  // ⚡ توزيع على الأيام
-  const eventsByDay = {};
-  DAYS_OF_WEEK.forEach(d => eventsByDay[d.value] = []);
-
-  activeWeeklyEvents.forEach(event => {
-    if (event.DayOfWeek && eventsByDay[event.DayOfWeek]) {
-      eventsByDay[event.DayOfWeek].push(event);
-    }
-  });
-
-  // ⚡ رتب حسب الوقت
-  Object.values(eventsByDay).forEach(list => {
-    list.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
-  });
+  const headerHtml = renderGridHeader();
+  const bodyHtml = schViewMode === 'week' ? renderWeekView() : renderMonthView();
 
   container.innerHTML = `
-    <div class="sch-grid">
-      ${DAYS_OF_WEEK.map(day => {
-        const dayEvents = eventsByDay[day.value] || [];
-        return `
-          <div class="sch-day">
-            <div class="sch-day-header">
-              <span class="sch-day-icon">${day.icon}</span>
-              <span class="sch-day-label">${day.label}</span>
-              <span class="sch-day-count">${dayEvents.length}</span>
-            </div>
-            <div class="sch-day-body">
-              ${dayEvents.length === 0 ? `
-                <div class="sch-day-empty">لا يوجد أحداث</div>
-              ` : dayEvents.map(e => renderGridEventCard(e)).join('')}
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
+    ${headerHtml}
+    ${bodyHtml}
   `;
+
+  setupGridEvents();
 }
 
-function renderGridEventCard(event) {
-  const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
-  const eventTypeIcon = eventType ? (eventType.Icon || '📅') : '📅';
-  const endTime = getEventEndTime(event);
-  const locInfo = getEventLocationText(event);
-
-  // ⚡ احسب إحصائيات الملتزمين
-  const stats = getEventAttendeesStats(event);
+function renderGridHeader() {
+  const title = schViewMode === 'week'
+    ? renderWeekTitle()
+    : renderMonthTitle();
 
   return `
-    <div class="sch-event-card" onclick="openEventAttendeesModal('${event.id}')" style="cursor:pointer;">
-      <div class="sch-event-header">
-        <span class="sch-event-icon">${eventTypeIcon}</span>
-        <span class="sch-event-title">${escapeHtml(event.Title || '')}</span>
+    <div class="sch-grid-header">
+      <div class="sch-view-switcher">
+        <button class="sch-view-btn ${schViewMode === 'week' ? 'active' : ''}" onclick="switchScheduleView('week')">
+          📆 أسبوعي
+        </button>
+        <button class="sch-view-btn ${schViewMode === 'month' ? 'active' : ''}" onclick="switchScheduleView('month')">
+          📅 شهري
+        </button>
       </div>
-      <div class="sch-event-info">
-        <span class="sch-event-time">🕐 ${event.Time || '-'} - ${endTime}</span>
-        <span class="sch-event-loc">📍 ${escapeHtml(locInfo)}</span>
+
+      <div class="sch-nav">
+        <button class="sch-nav-btn" onclick="changeScheduleRange(-1)">◀</button>
+        <div class="sch-nav-title">${title}</div>
+        <button class="sch-nav-btn" onclick="changeScheduleRange(1)">▶</button>
       </div>
-      <div class="sch-event-stats">
-        <span class="sch-stat-committed">👥 ${stats.committed} ملتزم</span>
-        <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+
+      <div class="sch-nav-today">
+        <button class="sch-today-btn" onclick="goToScheduleToday()">اليوم</button>
       </div>
     </div>
   `;
 }
 
-/**
- * ⚡ احسب إحصائيات الملتزمين لحدث
- */
-function getEventAttendeesStats(event) {
-  const attendees = getEventAttendees(event);
-
-  let committed = attendees.length;
-  let confirmed = 0;
-  let pending = 0;
-  let cancelRequested = 0;
-  let cancelled = 0;
-
-  for (const att of attendees) {
-    if (att.rsvpStatus === 'confirmed') confirmed++;
-    else if (att.rsvpStatus === 'cancel_requested') cancelRequested++;
-    else if (att.rsvpStatus === 'cancelled') cancelled++;
-    else pending++;
-  }
-
-  return { committed, confirmed, pending, cancelRequested, cancelled };
+function renderMonthTitle() {
+  return `${MONTHS_AR[schCurrentDate.getMonth()]} ${schCurrentDate.getFullYear()}`;
 }
 
-/**
- * ⚡ اجلب قائمة الملتزمين لحدث معين
- * - كل الناس النشطين (لو all)
- * - قائمة محددة (لو specific)
- * ⚡ كل عنصر فيه: { person, rsvpStatus, registration }
- */
-function getEventAttendees(event) {
-  const scope = String(event.RegistrationScope || 'all').toLowerCase();
-  const registrations = schRegistrations[event.id] || [];
+function renderWeekTitle() {
+  const weekStart = getWeekStart(schCurrentDate);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
 
-  // ⚡ 1. جهّز الـregistrations map
-  const regByPerson = {};
-  registrations.forEach(r => {
-    if (r.PersonID) regByPerson[r.PersonID] = r;
-  });
+  const startStr = `${weekStart.getDate()} ${MONTHS_AR[weekStart.getMonth()]}`;
+  const endStr = `${weekEnd.getDate()} ${MONTHS_AR[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
 
-  // ⚡ 2. حدد الـpersonIds الملتزمين
-  let personIds = [];
-
-  if (scope === 'specific') {
-    const ids = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
-    personIds = ids.filter(id => schPeople[id]);
-  } else {
-    // ⚡ all → كل الناس النشطين
-    personIds = Object.keys(schPeople).filter(id => {
-      const p = schPeople[id];
-      return String(p.Status || 'active').toLowerCase() === 'active';
-    });
-  }
-
-  // ⚡ 3. اجمع المعلومات
-  const attendees = personIds.map(personId => {
-    const person = schPeople[personId];
-    const reg = regByPerson[personId];
-    const rsvpStatus = reg?.Status || 'pending';
-
-    return { person, rsvpStatus, registration: reg };
-  });
-
-  // ⚡ 4. رتب: confirmed → pending → cancel_requested → cancelled
-  const order = { confirmed: 0, pending: 1, cancel_requested: 2, cancelled: 3 };
-  attendees.sort((a, b) => {
-    const oa = order[a.rsvpStatus] ?? 4;
-    const ob = order[b.rsvpStatus] ?? 4;
-    if (oa !== ob) return oa - ob;
-    return getPersonFullName(a.person).localeCompare(getPersonFullName(b.person), 'ar');
-  });
-
-  return attendees;
+  return `${startStr} — ${endStr}`;
 }
 
 // ═══════════════════════════════════════════════════════
-//   Event Attendees Modal (Popup التفاصيل)
+//   Month View
+// ═══════════════════════════════════════════════════════
+
+function renderMonthView() {
+  const year = schCurrentDate.getFullYear();
+  const month = schCurrentDate.getMonth();
+
+  // ⚡ أول يوم في الشهر
+  const firstDayOfMonth = new Date(year, month, 1);
+
+  // ⚡ أول خلية في الشبكة = أول يوم السبت قبل أو في أول الشهر
+  const startDate = new Date(firstDayOfMonth);
+  const firstDayJs = firstDayOfMonth.getDay(); // 0=Sunday, 6=Saturday
+  const daysToSubtract = (firstDayJs - 6 + 7) % 7;  // عشان نبدأ من السبت
+  startDate.setDate(firstDayOfMonth.getDate() - daysToSubtract);
+
+  // ⚡ آخر يوم في الشهر
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+
+  // ⚡ آخر خلية = آخر يوم الجمعة بعد أو في آخر الشهر
+  const endDate = new Date(lastDayOfMonth);
+  const lastDayJs = lastDayOfMonth.getDay();
+  const daysToAdd = (5 - lastDayJs + 7) % 7;  // عشان ننهي عند الجمعة
+  endDate.setDate(lastDayOfMonth.getDate() + daysToAdd);
+
+  // ⚡ ابني الخلايا
+  const cells = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    cells.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  // ⚡ هيدر الأيام
+  const headerRow = `
+    <div class="sch-month-header">
+      ${DAYS_OF_WEEK.map(d => `<div class="sch-month-header-cell">${d.label}</div>`).join('')}
+    </div>
+  `;
+
+  // ⚡ الخلايا
+  const cellsHtml = cells.map(date => renderMonthCell(date, month)).join('');
+
+  return `
+    <div class="sch-month-wrapper">
+      ${headerRow}
+      <div class="sch-month-grid">
+        ${cellsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderMonthCell(date, currentMonth) {
+  const isToday = isSameDay(date, new Date());
+  const isCurrentMonth = date.getMonth() === currentMonth;
+  const dateStr = formatDateISO(date);
+  const dayNum = date.getDate();
+
+  // ⚡ الأحداث في اليوم ده
+  const events = getEventsForDate(date);
+
+  // ⚡ اعرض أول 3 أحداث بس
+  const MAX_VISIBLE = 3;
+  const visibleEvents = events.slice(0, MAX_VISIBLE);
+  const extraCount = events.length - MAX_VISIBLE;
+
+  const eventsHtml = visibleEvents.map(e => {
+    const eventType = schEventTypes.find(t => t.id === e.EventTypeID);
+    const icon = eventType ? (eventType.Icon || '📅') : '📅';
+    const endTime = getEventEndTime(e);
+    const isWeekly = String(e.Type || '').toLowerCase() === 'weekly';
+
+    return `
+      <div class="sch-month-event" onclick="event.stopPropagation(); openEventAttendeesModal('${e.id}')">
+        <span class="sch-month-event-icon">${icon}${isWeekly ? '' : ' ⭐'}</span>
+        <span class="sch-month-event-title">${escapeHtml(e.Title || '')}</span>
+        <span class="sch-month-event-time">${e.Time || ''}</span>
+      </div>
+    `;
+  }).join('');
+
+  const moreHtml = extraCount > 0
+    ? `<div class="sch-month-more">+${extraCount} أكثر</div>`
+    : '';
+
+  const emptyHtml = events.length === 0
+    ? '<div class="sch-month-empty"></div>'
+    : '';
+
+  return `
+    <div class="sch-month-cell ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}"
+         onclick="openDayEventsModal('${dateStr}')"
+         data-date="${dateStr}">
+      <div class="sch-month-day-num">${dayNum}</div>
+      <div class="sch-month-events">
+        ${eventsHtml}
+        ${moreHtml}
+        ${emptyHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Week View
+// ═══════════════════════════════════════════════════════
+
+function renderWeekView() {
+  const weekStart = getWeekStart(schCurrentDate);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    days.push(d);
+  }
+
+  return `
+    <div class="sch-week-grid">
+      ${days.map(date => renderWeekColumn(date)).join('')}
+    </div>
+  `;
+}
+
+function renderWeekColumn(date) {
+  const isToday = isSameDay(date, new Date());
+  const dayName = DAYS_OF_WEEK.find(d => d.jsDay === date.getDay());
+  const dayLabel = dayName ? dayName.label : '';
+  const dayIcon = dayName ? dayName.icon : '';
+  const dateStr = formatDateISO(date);
+
+  const events = getEventsForDate(date);
+  events.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+
+  const eventsHtml = events.length === 0
+    ? '<div class="sch-week-empty">لا يوجد أحداث</div>'
+    : events.map(e => renderWeekEventCard(e)).join('');
+
+  return `
+    <div class="sch-week-col ${isToday ? 'today' : ''}">
+      <div class="sch-week-col-header" onclick="openDayEventsModal('${dateStr}')">
+        <div class="sch-week-day-icon">${dayIcon}</div>
+        <div class="sch-week-day-name">${dayLabel}</div>
+        <div class="sch-week-day-date">${date.getDate()} ${MONTHS_AR[date.getMonth()]}</div>
+      </div>
+      <div class="sch-week-col-body">
+        ${eventsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderWeekEventCard(event) {
+  const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
+  const icon = eventType ? (eventType.Icon || '📅') : '📅';
+  const endTime = getEventEndTime(event);
+  const locInfo = getEventLocationText(event);
+  const isWeekly = String(event.Type || '').toLowerCase() === 'weekly';
+
+  const stats = getEventAttendeesStats(event);
+
+  return `
+    <div class="sch-week-event" onclick="openEventAttendeesModal('${event.id}')">
+      <div class="sch-week-event-header">
+        <span class="sch-week-event-icon">${icon}</span>
+        <span class="sch-week-event-title">${escapeHtml(event.Title || '')}</span>
+        ${!isWeekly ? '<span class="sch-week-event-once">⭐</span>' : ''}
+      </div>
+      <div class="sch-week-event-info">
+        <span>🕐 ${event.Time || '-'} - ${endTime}</span>
+        <span>📍 ${escapeHtml(locInfo)}</span>
+      </div>
+      <div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.committed}</span>
+        <span class="sch-stat-confirmed">✅ ${stats.confirmed}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Get Events For Date
+// ═══════════════════════════════════════════════════════
+
+function getEventsForDate(date) {
+  const dateISO = formatDateISO(date);
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+
+  return schEvents.filter(e => {
+    const status = String(e.Status || '').toLowerCase();
+    if (status !== 'active') return false;
+
+    const type = String(e.Type || 'once').toLowerCase();
+
+    if (type === 'weekly') {
+      return e.DayOfWeek === dayName;
+    }
+
+    if (type === 'once') {
+      return e.Date === dateISO;
+    }
+
+    return false;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//   Navigation
+// ═══════════════════════════════════════════════════════
+
+window.switchScheduleView = function(mode) {
+  if (mode !== 'week' && mode !== 'month') return;
+  schViewMode = mode;
+  try { localStorage.setItem('schViewMode', mode); } catch (e) {}
+  renderGridView(document.getElementById('schContent'));
+};
+
+window.changeScheduleRange = function(direction) {
+  if (schViewMode === 'week') {
+    schCurrentDate.setDate(schCurrentDate.getDate() + direction * 7);
+  } else {
+    schCurrentDate.setMonth(schCurrentDate.getMonth() + direction);
+  }
+  renderGridView(document.getElementById('schContent'));
+};
+
+window.goToScheduleToday = function() {
+  schCurrentDate = new Date();
+  renderGridView(document.getElementById('schContent'));
+};
+
+function getWeekStart(date) {
+  // ⚡ بداية الأسبوع = السبت
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0=Sunday, 6=Saturday
+  const diff = (day - 6 + 7) % 7; // كم يوم نرجع للسبت
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Day Events Modal
+// ═══════════════════════════════════════════════════════
+
+window.openDayEventsModal = function(dateISO) {
+  const date = new Date(dateISO + 'T00:00:00');
+  const events = getEventsForDate(date);
+  events.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+
+  const dayName = DAYS_OF_WEEK.find(d => d.jsDay === date.getDay());
+  const dayLabel = dayName ? dayName.label : '';
+  const dateFormatted = `${dayLabel} ${date.getDate()} ${MONTHS_AR[date.getMonth()]} ${date.getFullYear()}`;
+
+  let modal = document.getElementById('dayEventsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'dayEventsModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  let contentHtml = '';
+  if (events.length === 0) {
+    contentHtml = `
+      <div class="att-empty">
+        <div class="att-empty-icon">📅</div>
+        <p>لا يوجد أحداث في هذا اليوم</p>
+      </div>
+    `;
+  } else {
+    contentHtml = events.map(e => {
+      const eventType = schEventTypes.find(t => t.id === e.EventTypeID);
+      const icon = eventType ? (eventType.Icon || '📅') : '📅';
+      const typeName = eventType ? eventType.Name : '';
+      const endTime = getEventEndTime(e);
+      const locInfo = getEventLocationText(e);
+      const isWeekly = String(e.Type || '').toLowerCase() === 'weekly';
+      const stats = getEventAttendeesStats(e);
+
+      return `
+        <div class="sch-day-event-card" onclick="closeDayEventsModal(); openEventAttendeesModal('${e.id}')">
+          <div class="sch-day-event-header">
+            <span class="sch-day-event-icon">${icon}</span>
+            <span class="sch-day-event-title">${escapeHtml(e.Title || '')}</span>
+            ${isWeekly ? '<span class="sch-week-event-weekly">🔄</span>' : '<span class="sch-week-event-once">⭐</span>'}
+          </div>
+          ${typeName ? `<div class="sch-day-event-line">📋 ${escapeHtml(typeName)}</div>` : ''}
+          <div class="sch-day-event-line">🕐 ${e.Time || '-'} - ${endTime}</div>
+          <div class="sch-day-event-line">📍 ${escapeHtml(locInfo)}</div>
+          <div class="sch-event-stats">
+            <span class="sch-stat-committed">👥 ${stats.committed} ملتزم</span>
+            <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>📅 ${dateFormatted}</h2>
+        <button class="modal-close" onclick="closeDayEventsModal()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+        ${contentHtml}
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeDayEventsModal()">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+window.closeDayEventsModal = function() {
+  const modal = document.getElementById('dayEventsModal');
+  if (modal) modal.style.display = 'none';
+};
+
+// ═══════════════════════════════════════════════════════
+//   Event Attendees Modal
 // ═══════════════════════════════════════════════════════
 
 window.openEventAttendeesModal = function(eventId) {
@@ -356,7 +602,6 @@ window.openEventAttendeesModal = function(eventId) {
   const attendees = getEventAttendees(event);
   const stats = getEventAttendeesStats(event);
 
-  // ⚡ المجموعات
   const confirmedList = attendees.filter(a => a.rsvpStatus === 'confirmed');
   const pendingList = attendees.filter(a => a.rsvpStatus === 'pending');
   const cancelRequestedList = attendees.filter(a => a.rsvpStatus === 'cancel_requested');
@@ -367,7 +612,16 @@ window.openEventAttendeesModal = function(eventId) {
   const eventTypeName = eventType ? eventType.Name : '';
   const endTime = getEventEndTime(event);
   const locInfo = getEventLocationText(event);
-  const dayLabel = DAYS_OF_WEEK.find(d => d.value === event.DayOfWeek)?.label || '';
+
+  const type = String(event.Type || 'once').toLowerCase();
+  let dateLine = '';
+  if (type === 'weekly') {
+    const dayLabel = DAYS_OF_WEEK.find(d => d.value === event.DayOfWeek)?.label || '';
+    dateLine = `كل ${dayLabel}`;
+  } else if (event.Date) {
+    const d = new Date(event.Date + 'T00:00:00');
+    dateLine = `${d.getDate()} ${MONTHS_AR[d.getMonth()]} ${d.getFullYear()}`;
+  }
 
   let modal = document.getElementById('attendeesModal');
   if (!modal) {
@@ -386,15 +640,13 @@ window.openEventAttendeesModal = function(eventId) {
 
       <div class="modal-body" style="overflow-y:auto;flex:1;">
 
-        <!-- ═══ معلومات الحدث ═══ -->
         <div class="att-event-info">
           ${eventTypeName ? `<div class="att-event-line"><span>📋</span><span>${escapeHtml(eventTypeName)}</span></div>` : ''}
-          ${dayLabel ? `<div class="att-event-line"><span>🔄</span><span>كل ${dayLabel}</span></div>` : ''}
+          ${dateLine ? `<div class="att-event-line"><span>${type === 'weekly' ? '🔄' : '📅'}</span><span>${dateLine}</span></div>` : ''}
           <div class="att-event-line"><span>🕐</span><span>${event.Time || '-'} - ${endTime}</span></div>
           <div class="att-event-line"><span>📍</span><span>${escapeHtml(locInfo)}</span></div>
         </div>
 
-        <!-- ═══ إحصائيات ═══ -->
         <div class="att-stats-box">
           <div class="att-stat-item">
             <span class="att-stat-number">${stats.committed}</span>
@@ -418,10 +670,9 @@ window.openEventAttendeesModal = function(eventId) {
           </div>
         </div>
 
-        <!-- ═══ قائمة الملتزمين ═══ -->
         ${renderAttendeesGroup('✅ المؤكدين', confirmedList, 'confirmed')}
         ${renderAttendeesGroup('⏳ في انتظار التأكيد', pendingList, 'pending')}
-        ${renderAttendeesGroup('🔄 طلبات إلغاء (بانتظار موافقة)', cancelRequestedList, 'cancel-requested')}
+        ${renderAttendeesGroup('🔄 طلبات إلغاء', cancelRequestedList, 'cancel-requested')}
         ${renderAttendeesGroup('❌ الملغيين', cancelledList, 'cancelled')}
 
         ${attendees.length === 0 ? `
@@ -490,6 +741,68 @@ window.closeAttendeesModal = function() {
   const modal = document.getElementById('attendeesModal');
   if (modal) modal.style.display = 'none';
 };
+
+// ═══════════════════════════════════════════════════════
+//   Get Event Attendees
+// ═══════════════════════════════════════════════════════
+
+function getEventAttendeesStats(event) {
+  const attendees = getEventAttendees(event);
+
+  let committed = attendees.length;
+  let confirmed = 0;
+  let pending = 0;
+  let cancelRequested = 0;
+  let cancelled = 0;
+
+  for (const att of attendees) {
+    if (att.rsvpStatus === 'confirmed') confirmed++;
+    else if (att.rsvpStatus === 'cancel_requested') cancelRequested++;
+    else if (att.rsvpStatus === 'cancelled') cancelled++;
+    else pending++;
+  }
+
+  return { committed, confirmed, pending, cancelRequested, cancelled };
+}
+
+function getEventAttendees(event) {
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+  const registrations = schRegistrations[event.id] || [];
+
+  const regByPerson = {};
+  registrations.forEach(r => {
+    if (r.PersonID) regByPerson[r.PersonID] = r;
+  });
+
+  let personIds = [];
+
+  if (scope === 'specific') {
+    const ids = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
+    personIds = ids.filter(id => schPeople[id]);
+  } else {
+    personIds = Object.keys(schPeople).filter(id => {
+      const p = schPeople[id];
+      return String(p.Status || 'active').toLowerCase() === 'active';
+    });
+  }
+
+  const attendees = personIds.map(personId => {
+    const person = schPeople[personId];
+    const reg = regByPerson[personId];
+    const rsvpStatus = reg?.Status || 'pending';
+    return { person, rsvpStatus, registration: reg };
+  });
+
+  const order = { confirmed: 0, pending: 1, cancel_requested: 2, cancelled: 3 };
+  attendees.sort((a, b) => {
+    const oa = order[a.rsvpStatus] ?? 4;
+    const ob = order[b.rsvpStatus] ?? 4;
+    if (oa !== ob) return oa - ob;
+    return getPersonFullName(a.person).localeCompare(getPersonFullName(b.person), 'ar');
+  });
+
+  return attendees;
+}
 
 // ═══════════════════════════════════════════════════════
 //   2. Locations View
@@ -694,7 +1007,7 @@ function renderTemplateCard(template) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Location Modal (Add/Edit)
+//   Location Modal
 // ═══════════════════════════════════════════════════════
 
 window.openLocationModal = function(locId) {
@@ -976,6 +1289,13 @@ function parseDate(value) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function formatDateISO(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function formatDateShort(dateStr) {
   if (!dateStr) return '-';
   try {
@@ -999,6 +1319,12 @@ function formatRelativeTime(date) {
   if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
   if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
   return date.toLocaleDateString('ar-EG');
+}
+
+function isSameDay(d1, d2) {
+  return d1.getFullYear() === d2.getFullYear()
+    && d1.getMonth() === d2.getMonth()
+    && d1.getDate() === d2.getDate();
 }
 
 function getPersonFullName(p) {
