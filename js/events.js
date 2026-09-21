@@ -60,7 +60,7 @@ async function loadEventsPage(area, mode) {
       eventTypesSnap,
       peopleSnap
     ] = await Promise.all([
-      getDocs(collection(db, COLLECTIONS.MEETINGS || 'events')),
+      getDocs(collection(db, 'events')),
       getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC)),
       getDocs(collection(db, 'locations')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'eventTypes')).catch(() => ({ docs: [] })),
