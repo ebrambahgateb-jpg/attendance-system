@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   My Attendance (سجل حضورك بنفسك)
+//   My Attendance (سجل حضورك بنفسك) — Events
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -22,19 +22,19 @@ import {
 let maUser = null;
 let maPerson = null;
 let maSettings = {};
-let maMeetings = [];
-let maSelectedMeeting = null;
+let maEvents = [];
+let maSelectedEvent = null;
 let maHtml5QrCode = null;
 let maIsScanning = false;
 let maLastScanTime = 0;
 let maUserLocation = null;
 let maAvailableLocations = [];
-let maMatchedLocation = null;
+let maAvailableEventTypes = [];
 
 // ═══ Constants ═══
 const MA_SCAN_COOLDOWN = 2000;
-const MA_MAX_ACCURACY = 15;          // ⚡ أقصى دقة GPS مقبولة (بالمتر)
-const MA_STRICT_RADIUS = true;        // ⚡ وضع صارم: نستخدم Radius فقط بدون Tolerance
+const MA_MAX_ACCURACY = 15;
+const MA_STRICT_RADIUS = true;
 
 // ═══════════════════════════════════════════════════════
 //   Load Page
@@ -50,11 +50,26 @@ async function loadMyAttendancePage(area) {
       return;
     }
 
-    const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
+    // ⚡ اجلب الإعدادات + الأماكن + أنواع الأحداث
+    const [settingsDoc, locationsSnap, eventTypesSnap] = await Promise.all([
+      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC)),
+      getDocs(collection(db, 'locations')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'eventTypes')).catch(() => ({ docs: [] }))
+    ]);
+
     maSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    maAvailableLocations = Array.isArray(maSettings.Locations) ? maSettings.Locations : [];
+    // ⚡ الأماكن من Collection منفصل
+    maAvailableLocations = locationsSnap.docs
+      ? locationsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      : [];
 
+    // ⚡ أنواع الأحداث
+    maAvailableEventTypes = eventTypesSnap.docs
+      ? eventTypesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      : [];
+
+    // ⚡ اجلب الشخص
     maPerson = null;
     const personId = maUser.personId || maUser.account?.PersonID;
 
@@ -80,13 +95,14 @@ async function loadMyAttendancePage(area) {
       }
     }
 
-    const meetingsSnap = await getDocs(collection(db, COLLECTIONS.MEETINGS));
+    // ⚡ اجلب الأحداث من events
+    const eventsSnap = await getDocs(collection(db, 'events'));
 
     // ⚡ فلتر: Active + عنده موعد النهاردة
-    maMeetings = meetingsSnap.docs
+    maEvents = eventsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(m => String(m.Status || '').toLowerCase() === 'active')
-      .filter(m => getTodayOccurrence(m) !== null)
+      .filter(e => String(e.Status || '').toLowerCase() === 'active')
+      .filter(e => getTodayOccurrence(e) !== null)
       .sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
 
     renderMyAttendancePage(area);
@@ -139,16 +155,16 @@ function renderMyAttendancePage(area) {
     maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName
   ].filter(Boolean).join(' ');
 
-  // ⚡ لو مفيش اجتماعات النهاردة
-  if (maMeetings.length === 0) {
+  // ⚡ لو مفيش أحداث النهاردة
+  if (maEvents.length === 0) {
     container.innerHTML = `
       <div style="text-align:center;margin-bottom:20px;">
         <h2 style="color:var(--text);margin-bottom:6px;">مرحبًا ${escapeHtml(fullName)}</h2>
       </div>
       <div class="ma-empty">
         <div class="ma-empty-icon">📅</div>
-        <h2>لا يوجد اجتماعات مجدولة اليوم</h2>
-        <p>سيظهر هنا الاجتماعات فور إضافتها، أو عُد غدًا.</p>
+        <h2>لا يوجد أحداث مجدولة اليوم</h2>
+        <p>سيظهر هنا الأحداث فور إضافتها، أو عُد غدًا.</p>
       </div>
     `;
     return;
@@ -163,20 +179,22 @@ function renderMyAttendancePage(area) {
     <div class="ma-step">
       <div class="ma-step-title">
         <span class="step-num">1</span>
-        <span>اختر الاجتماع</span>
+        <span>اختر الحدث</span>
       </div>
 
-      <select id="maMeetingSelect" class="ma-select">
-        <option value="">-- اختر الاجتماع --</option>
-        ${maMeetings.map(m => {
-          const type = String(m.Type || 'once').toLowerCase();
+      <select id="maEventSelect" class="ma-select">
+        <option value="">-- اختر الحدث --</option>
+        ${maEvents.map(e => {
+          const type = String(e.Type || 'once').toLowerCase();
           const typeLabel = type === 'weekly' ? '🔄' : '📅';
-          const endTime = getMeetingEndTime(m);
-          return `<option value="${m.id}">${typeLabel} ${escapeHtml(m.Title || '')} — ${m.Time || ''} - ${endTime}</option>`;
+          const endTime = getEventEndTime(e);
+          const eventType = maAvailableEventTypes.find(t => t.id === e.EventTypeID);
+          const typeIcon = eventType ? (eventType.Icon || '📅') : '📅';
+          return `<option value="${e.id}">${typeIcon} ${escapeHtml(e.Title || '')} — ${e.Time || ''} - ${endTime}</option>`;
         }).join('')}
       </select>
 
-      <div id="maMeetingInfo" class="ma-meeting-info" style="display:none;"></div>
+      <div id="maEventInfo" class="ma-meeting-info" style="display:none;"></div>
     </div>
 
     <div class="ma-step" id="maScanStep" style="display:none;">
@@ -209,25 +227,25 @@ function renderMyAttendancePage(area) {
 // ═══════════════════════════════════════════════════════
 
 function setupMyAttendanceEvents() {
-  const select = document.getElementById('maMeetingSelect');
+  const select = document.getElementById('maEventSelect');
   const scanBtn = document.getElementById('maScanBtn');
 
   if (select) {
     select.onchange = () => {
-      const meetingId = select.value;
+      const eventId = select.value;
 
-      if (!meetingId) {
-        maSelectedMeeting = null;
-        const info = document.getElementById('maMeetingInfo');
+      if (!eventId) {
+        maSelectedEvent = null;
+        const info = document.getElementById('maEventInfo');
         const scanStep = document.getElementById('maScanStep');
         if (info) info.style.display = 'none';
         if (scanStep) scanStep.style.display = 'none';
         return;
       }
 
-      maSelectedMeeting = maMeetings.find(m => m.id === meetingId);
-      if (maSelectedMeeting) {
-        renderMeetingInfo();
+      maSelectedEvent = maEvents.find(e => e.id === eventId);
+      if (maSelectedEvent) {
+        renderEventInfo();
         const scanStep = document.getElementById('maScanStep');
         if (scanStep) scanStep.style.display = 'block';
 
@@ -242,52 +260,62 @@ function setupMyAttendanceEvents() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Meeting Info
+//   Event Info
 // ═══════════════════════════════════════════════════════
 
-function renderMeetingInfo() {
-  const info = document.getElementById('maMeetingInfo');
-  if (!info || !maSelectedMeeting) return;
+function renderEventInfo() {
+  const info = document.getElementById('maEventInfo');
+  if (!info || !maSelectedEvent) return;
 
-  const type = String(maSelectedMeeting.Type || 'once').toLowerCase();
-  const endTime = getMeetingEndTime(maSelectedMeeting);
+  const type = String(maSelectedEvent.Type || 'once').toLowerCase();
+  const endTime = getEventEndTime(maSelectedEvent);
+
+  // ⚡ نوع الحدث
+  const eventType = maAvailableEventTypes.find(t => t.id === maSelectedEvent.EventTypeID);
+  const eventTypeText = eventType ? `${eventType.Icon || '📅'} ${eventType.Name}` : '';
 
   let dayText = '';
   if (type === 'weekly') {
     const days = {Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
-    dayText = 'كل ' + (days[maSelectedMeeting.DayOfWeek] || '');
+    dayText = 'كل ' + (days[maSelectedEvent.DayOfWeek] || '');
   } else {
-    dayText = maSelectedMeeting.Date || '';
+    dayText = maSelectedEvent.Date || '';
   }
 
-  const isOpen = isMeetingOpenNow(maSelectedMeeting);
+  const isOpen = isEventOpenNow(maSelectedEvent);
   const timeStatus = isOpen
     ? { class: 'status-open', icon: '🟢', text: 'الحضور مفتوح الآن' }
     : { class: 'status-closed', icon: '🔴', text: 'الحضور مغلق حالياً' };
 
-  const locMode = String(maSelectedMeeting.LocationMode || 'any').toLowerCase();
+  const locMode = String(maSelectedEvent.LocationMode || 'any').toLowerCase();
   let locText = '';
 
   if (locMode === 'any') {
     locText = 'أي مكان مسجل';
   } else {
-    const ids = Array.isArray(maSelectedMeeting.LocationIds) ? maSelectedMeeting.LocationIds : [];
+    const ids = Array.isArray(maSelectedEvent.LocationIds) ? maSelectedEvent.LocationIds : [];
     const names = ids.map(id => {
       const loc = maAvailableLocations.find(l => l.id === id);
-      return loc ? loc.name : null;
+      return loc ? loc.Name : null;
     }).filter(Boolean);
 
     locText = names.length > 0 ? names.join(' • ') : 'لم يتم تحديد أماكن';
   }
 
   info.innerHTML = `
+    ${eventTypeText ? `
+      <div class="ma-info-row">
+        <span class="icon">📋</span>
+        <span>${escapeHtml(eventTypeText)}</span>
+      </div>
+    ` : ''}
     <div class="ma-info-row">
       <span class="icon">${type === 'weekly' ? '🔄' : '📅'}</span>
       <span>${dayText}</span>
     </div>
     <div class="ma-info-row">
       <span class="icon">🕐</span>
-      <span>${maSelectedMeeting.Time || ''} - ${endTime}</span>
+      <span>${maSelectedEvent.Time || ''} - ${endTime}</span>
     </div>
     <div class="ma-info-row">
       <span class="icon">📍</span>
@@ -314,7 +342,6 @@ function checkLocation() {
   if (!locationEnabled) {
     statusEl.className = 'ma-location-status valid';
     statusEl.innerHTML = '<span class="dot"></span><span>التحقق من الموقع غير مفعّل</span>';
-    maMatchedLocation = null;
     updateScanButton();
     return;
   }
@@ -348,7 +375,7 @@ function checkLocation() {
 
       if (check.valid) {
         statusEl.className = 'ma-location-status valid';
-        const locName = check.location ? check.location.name : '';
+        const locName = check.location ? check.location.Name : '';
         const distStr = check.distance ? ` (${Math.round(check.distance)}م)` : '';
         statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}${distStr}</span>`;
       } else {
@@ -377,15 +404,15 @@ function validateLocation(loc) {
   const locationEnabled = maSettings.LocationEnabled !== false;
   if (!locationEnabled) return { valid: true, location: null };
 
-  if (!maSelectedMeeting) {
-    return { valid: false, location: null, reason: 'no_meeting' };
+  if (!maSelectedEvent) {
+    return { valid: false, location: null, reason: 'no_event' };
   }
 
   if ((loc.accuracy || 0) > MA_MAX_ACCURACY) {
     return { valid: false, location: null, reason: 'low_accuracy' };
   }
 
-  const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
+  const allowedLocations = getAllowedLocationsForEvent(maSelectedEvent);
 
   if (allowedLocations.length === 0) {
     return { valid: false, location: null, reason: 'no_locations' };
@@ -395,11 +422,11 @@ function validateLocation(loc) {
   let bestDistance = Infinity;
 
   for (const targetLoc of allowedLocations) {
-    const distance = getDistance(loc.lat, loc.lng, targetLoc.lat, targetLoc.lng);
+    const distance = getDistance(loc.lat, loc.lng, targetLoc.Lat, targetLoc.Lng);
 
     const allowed = MA_STRICT_RADIUS
-      ? (targetLoc.radius || 4)
-      : ((targetLoc.radius || 4) + (targetLoc.tolerance || 15));
+      ? (targetLoc.Radius || 4)
+      : ((targetLoc.Radius || 4) + (targetLoc.Tolerance || 15));
 
     if (distance <= allowed) {
       if (distance < bestDistance) {
@@ -424,14 +451,14 @@ function validateLocation(loc) {
   };
 }
 
-function getAllowedLocationsForMeeting(meeting) {
-  const mode = String(meeting.LocationMode || 'any').toLowerCase();
+function getAllowedLocationsForEvent(event) {
+  const mode = String(event.LocationMode || 'any').toLowerCase();
 
   if (mode === 'any') {
     return maAvailableLocations;
   }
 
-  const ids = Array.isArray(meeting.LocationIds) ? meeting.LocationIds : [];
+  const ids = Array.isArray(event.LocationIds) ? event.LocationIds : [];
 
   if (ids.length === 0) {
     return [];
@@ -462,14 +489,14 @@ function updateScanButton() {
   if (!btn) return;
 
   const locationEnabled = maSettings.LocationEnabled !== false;
-  const isOpen = isMeetingOpenNow(maSelectedMeeting);
+  const isOpen = isEventOpenNow(maSelectedEvent);
 
   let canScan = true;
   let reason = '';
 
-  if (!maSelectedMeeting) {
+  if (!maSelectedEvent) {
     canScan = false;
-    reason = 'اختر اجتماع أولاً';
+    reason = 'اختر حدث أولاً';
   } else if (!isOpen) {
     canScan = false;
     reason = 'الحضور مغلق حالياً';
@@ -487,7 +514,7 @@ function updateScanButton() {
         canScan = false;
 
         if (check.reason === 'no_locations') {
-          reason = 'الاجتماع غير مرتبط بأماكن';
+          reason = 'الحدث غير مرتبط بأماكن';
         } else if (check.reason === 'low_accuracy') {
           reason = `دقة GPS ضعيفة`;
         } else if (check.reason === 'out_of_range') {
@@ -508,8 +535,8 @@ function updateScanButton() {
 // ═══════════════════════════════════════════════════════
 
 async function openScanner() {
-  if (!maSelectedMeeting) { alert('اختر اجتماع أولاً'); return; }
-  if (!isMeetingOpenNow(maSelectedMeeting)) { alert('الحضور مغلق حالياً'); return; }
+  if (!maSelectedEvent) { alert('اختر حدث أولاً'); return; }
+  if (!isEventOpenNow(maSelectedEvent)) { alert('الحضور مغلق حالياً'); return; }
 
   const locationEnabled = maSettings.LocationEnabled !== false;
   if (locationEnabled) {
@@ -600,34 +627,35 @@ async function processScan(scannedText) {
       return showResult('error', 'حساب معطل', 'تواصل مع المسؤول.');
     }
 
-    if (!maSelectedMeeting) {
-      return showResult('error', 'لا يوجد اجتماع', 'اختر اجتماع أولاً.');
+    if (!maSelectedEvent) {
+      return showResult('error', 'لا يوجد حدث', 'اختر حدث أولاً.');
     }
 
-    const occurrenceDate = getTodayOccurrence(maSelectedMeeting);
+    const occurrenceDate = getTodayOccurrence(maSelectedEvent);
     if (!occurrenceDate) {
-      return showResult('error', 'لا يوجد موعد اليوم', 'لا يوجد اجتماع مجدول اليوم.');
+      return showResult('error', 'لا يوجد موعد اليوم', 'لا يوجد حدث مجدول اليوم.');
     }
 
-    const cancelled = maSelectedMeeting.CanceledOccurrences || [];
+    const cancelled = maSelectedEvent.CanceledOccurrences || [];
     if (cancelled.includes(occurrenceDate)) {
       return showResult('error', 'الموعد ملغي', 'تم إلغاء هذا الموعد.');
     }
 
-    if (!isMeetingOpenNow(maSelectedMeeting)) {
+    if (!isEventOpenNow(maSelectedEvent)) {
       return showResult('error', 'الحضور مغلق', 'وقت التسجيل انتهى.');
     }
 
-    const allowedLocations = getAllowedLocationsForMeeting(maSelectedMeeting);
+    const allowedLocations = getAllowedLocationsForEvent(maSelectedEvent);
 
     if (allowedLocations.length === 0) {
-      return showResult('error', 'الاجتماع غير مرتبط بأماكن', 'تواصل مع المسؤول.');
+      return showResult('error', 'الحدث غير مرتبط بأماكن', 'تواصل مع المسؤول.');
     }
 
-    const scannedLocation = allowedLocations.find(loc => loc.qrCode === scannedText);
+    // ⚡ ابحث عن المكان اللي الـ QR بتاعه
+    const scannedLocation = allowedLocations.find(loc => loc.QRCode === scannedText);
 
     if (!scannedLocation) {
-      return showResult('error', 'QR غير صالح', 'هذا QR ليس من الأماكن المسموحة لهذا الاجتماع.');
+      return showResult('error', 'QR غير صالح', 'هذا QR ليس من الأماكن المسموحة لهذا الحدث.');
     }
 
     // ═══ الموقع ═══
@@ -649,37 +677,38 @@ async function processScan(scannedText) {
       const distance = getDistance(
         maUserLocation.lat,
         maUserLocation.lng,
-        scannedLocation.lat,
-        scannedLocation.lng
+        scannedLocation.Lat,
+        scannedLocation.Lng
       );
 
       const allowed = MA_STRICT_RADIUS
-        ? (scannedLocation.radius || 4)
-        : ((scannedLocation.radius || 4) + (scannedLocation.tolerance || 15));
+        ? (scannedLocation.Radius || 4)
+        : ((scannedLocation.Radius || 4) + (scannedLocation.Tolerance || 15));
 
       if (distance > allowed) {
         return showResult(
           'error',
           'خارج النطاق',
-          `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.name}". النطاق المسموح ${allowed} متر.`
+          `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.Name}". النطاق المسموح ${allowed} متر.`
         );
       }
     }
 
     // ═══ منع التكرار ═══
-    const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedMeeting.id, occurrenceDate);
+    const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedEvent.id, occurrenceDate);
     const preventDup = maSettings.PreventDuplicateAttendance !== false;
 
     if (isDup && preventDup) {
-      return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الاجتماع.');
+      return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الحدث.');
     }
 
     // ═══ التسجيل ═══
     await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
       PersonID: maPerson.id,
       PersonName: [maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName].filter(Boolean).join(' '),
-      MeetingID: maSelectedMeeting.id,
-      MeetingTitle: maSelectedMeeting.Title || '',
+      EventID: maSelectedEvent.id,
+      EventTitle: maSelectedEvent.Title || '',
+      EventTypeID: maSelectedEvent.EventTypeID || '',
       OccurrenceDate: occurrenceDate,
       ScanTime: new Date().toISOString(),
       Status: 'present',
@@ -688,7 +717,7 @@ async function processScan(scannedText) {
       Method: 'self',
       Location: {
         id: scannedLocation.id,
-        name: scannedLocation.name,
+        name: scannedLocation.Name,
         lat: maUserLocation?.lat || null,
         lng: maUserLocation?.lng || null,
         accuracy: maUserLocation?.accuracy || null
@@ -697,7 +726,7 @@ async function processScan(scannedText) {
     });
 
     playSound('success');
-    showResult('success', 'تم تسجيل حضورك', `${maSelectedMeeting.Title || ''} — ${scannedLocation.name}`);
+    showResult('success', 'تم تسجيل حضورك', `${maSelectedEvent.Title || ''} — ${scannedLocation.Name}`);
 
   } catch (err) {
     console.error('❌ Process scan error:', err);
@@ -705,12 +734,12 @@ async function processScan(scannedText) {
   }
 }
 
-async function checkAlreadyRegistered(personId, meetingId, occurrenceDate) {
+async function checkAlreadyRegistered(personId, eventId, occurrenceDate) {
   try {
     const q = query(
       collection(db, COLLECTIONS.ATTENDANCE),
       where('PersonID', '==', personId),
-      where('MeetingID', '==', meetingId),
+      where('EventID', '==', eventId),
       where('OccurrenceDate', '==', occurrenceDate)
     );
     const snap = await getDocs(q);
@@ -830,15 +859,12 @@ function playSound(type) {
 //   Time Helpers
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ EndTime مع Fallback (+2 ساعات)
- */
-function getMeetingEndTime(meeting) {
-  if (!meeting) return '';
+function getEventEndTime(event) {
+  if (!event) return '';
 
-  if (meeting.EndTime) return String(meeting.EndTime);
+  if (event.EndTime) return String(event.EndTime);
 
-  const time = String(meeting.Time || '00:00');
+  const time = String(event.Time || '00:00');
   const [h, m] = time.split(':').map(Number);
 
   const totalMinutes = (h || 0) * 60 + (m || 0) + 120;
@@ -848,52 +874,47 @@ function getMeetingEndTime(meeting) {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
-/**
- * ⚡ هل الحضور مفتوح الآن؟ (يستخدم EndTime)
- */
-function isMeetingOpenNow(meeting) {
-  if (!meeting) return false;
+function isEventOpenNow(event) {
+  if (!event) return false;
 
-  const occurrenceDate = getTodayOccurrence(meeting);
+  const occurrenceDate = getTodayOccurrence(event);
   if (!occurrenceDate) return false;
 
   const now = new Date();
 
-  // وقت البداية
-  const [sh, sm] = String(meeting.Time || '00:00').split(':').map(Number);
-  const meetingStart = new Date(now);
-  meetingStart.setHours(sh || 0, sm || 0, 0, 0);
+  const [sh, sm] = String(event.Time || '00:00').split(':').map(Number);
+  const eventStart = new Date(now);
+  eventStart.setHours(sh || 0, sm || 0, 0, 0);
 
-  // وقت النهاية (مع Fallback)
-  const endTime = getMeetingEndTime(meeting);
+  const endTime = getEventEndTime(event);
   const [eh, em] = String(endTime).split(':').map(Number);
-  const meetingEnd = new Date(now);
-  meetingEnd.setHours(eh || 0, em || 0, 0, 0);
+  const eventEnd = new Date(now);
+  eventEnd.setHours(eh || 0, em || 0, 0, 0);
 
   const openBefore = Number(maSettings.OpenBeforeMinutes || 30);
   const closeAfter = Number(maSettings.CloseAfterMinutes || 15);
 
-  const openTime = new Date(meetingStart.getTime() - openBefore * 60000);
-  const closeTime = new Date(meetingEnd.getTime() + closeAfter * 60000);
+  const openTime = new Date(eventStart.getTime() - openBefore * 60000);
+  const closeTime = new Date(eventEnd.getTime() + closeAfter * 60000);
 
   return now >= openTime && now <= closeTime;
 }
 
-function getTodayOccurrence(meeting) {
-  if (!meeting) return null;
+function getTodayOccurrence(event) {
+  if (!event) return null;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = formatDateISO(today);
-  const type = String(meeting.Type || 'once').toLowerCase();
+  const type = String(event.Type || 'once').toLowerCase();
 
   if (type === 'weekly') {
     const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    if (days[today.getDay()] !== meeting.DayOfWeek) return null;
+    if (days[today.getDay()] !== event.DayOfWeek) return null;
     return todayStr;
   }
 
-  if (meeting.Date === todayStr) return todayStr;
+  if (event.Date === todayStr) return todayStr;
   return null;
 }
 
