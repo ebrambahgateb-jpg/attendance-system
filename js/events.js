@@ -278,7 +278,7 @@ function renderEventsGrid() {
       : '<span class="reg-badge reg-specific">👥 إلزامي لقائمة</span>';
 
     // ⚡ Footer
-    const footerHtml = isView
+        const footerHtml = isView
       ? `<div class="event-card-footer">
           <button class="btn-icon" onclick="viewOccurrences('${event.id}')" title="المواعيد">📋 المواعيد</button>
         </div>`
@@ -288,6 +288,16 @@ function renderEventsGrid() {
           ${status !== 'archived' ? `<button class="btn-icon" onclick="archiveEvent('${event.id}')" title="أرشفة">📦</button>` : ''}
           <button class="btn-icon danger" onclick="confirmDeleteEvent('${event.id}')" title="حذف">🗑️</button>
         </div>`;
+
+    // ⚡ زر RSVP (للمستخدم العادي، مش Admin/Owner)
+    const role = (JSON.parse(localStorage.getItem('currentUser')) || {}).selectedRole || '';
+    const showRsvp = ['User', 'Scanner'].includes(role) && status === 'active';
+    const rsvpHtml = showRsvp
+      ? `<div class="rsvp-actions" data-event-id="${event.id}" data-occurrence="${event.Type === 'once' ? event.Date : ''}">
+          <button class="rsvp-btn rsvp-btn-confirm" onclick="handleRsvpConfirm('${event.id}', '${event.Type === 'once' ? event.Date : ''}')">✅ سجّل حضورك</button>
+          <button class="rsvp-btn rsvp-btn-cancel" onclick="handleRsvpCancel('${event.id}', '${event.Title.replace(/'/g, '')}', '${event.Type === 'once' ? event.Date : ''}')">📢 إعلان عدم الحضور</button>
+        </div>`
+      : '';
 
     return `
       <div class="event-card" data-id="${event.id}">
@@ -323,7 +333,8 @@ function renderEventsGrid() {
             ${cancelInfo ? `<div class="event-info-row"><span class="event-info-icon">⚠️</span>${cancelInfo}</div>` : ''}
           </div>
         </div>
-        ${footerHtml}
+                ${footerHtml}
+        ${rsvpHtml}
       </div>
     `;
   }).join('');
@@ -1072,3 +1083,28 @@ window.closeOccurrencesModal = closeOccurrencesModal;
 window.cancelOccurrence = cancelOccurrence;
 window.restoreOccurrence = restoreOccurrence;
 window.autoDeactivateOnceEvents = autoDeactivateOnceEvents;
+
+// ═══════════════════════════════════════════════════════
+//   RSVP Actions (Handlers)
+// ═══════════════════════════════════════════════════════
+
+window.handleRsvpConfirm = async function(eventId, occurrenceDate) {
+  if (typeof window.confirmRsvp === 'function') {
+    const result = await window.confirmRsvp(eventId);
+    if (result) {
+      // ⚡ أعد تحميل الصفحة
+      const area = document.getElementById('contentArea');
+      await loadEventsPage(area, currentMode);
+    }
+  } else {
+    alert('⚠️ RSVP غير جاهز، حاول من جديد');
+  }
+};
+
+window.handleRsvpCancel = function(eventId, eventTitle, occurrenceDate) {
+  if (typeof window.openCancelModal === 'function') {
+    window.openCancelModal(eventId, eventTitle, occurrenceDate);
+  } else {
+    alert('⚠️ RSVP غير جاهز، حاول من جديد');
+  }
+};
