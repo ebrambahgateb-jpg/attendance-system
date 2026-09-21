@@ -1,12 +1,15 @@
 // ═══════════════════════════════════════════════════════
-//   Attendance Viewer (عرض سجل الحضور)
+//   Attendance Viewer (عرض سجل الحضور + طلبات الإلغاء)
 // ═══════════════════════════════════════════════════════
 
 import {
   collection,
   getDocs,
   doc,
-  getDoc
+  getDoc,
+  updateDoc,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -20,8 +23,10 @@ let attData = [];
 let attFiltered = [];
 let attPeople = {};
 let attMeetings = {};
+let attEvents = {};
 let attCurrentPage = 1;
 let attSettings = {};
+let attCancelRequests = [];
 const ATT_PER_PAGE = 50;
 
 let attFilters = {
@@ -41,11 +46,15 @@ async function loadAttendancePage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    const [attSnap, peopleSnap, meetingsSnap, settingsDoc] = await Promise.all([
+    const [attSnap, peopleSnap, eventsSnap, settingsDoc, cancelReqSnap] = await Promise.all([
       getDocs(collection(db, COLLECTIONS.ATTENDANCE)),
       getDocs(collection(db, COLLECTIONS.PEOPLE)),
-      getDocs(collection(db, COLLECTIONS.MEETINGS)),
-      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC))
+      getDocs(collection(db, 'events')).catch(() => ({ docs: [] })),
+      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC)),
+      getDocs(query(
+        collection(db, 'eventRegistrations'),
+        where('Status', '==', 'cancel_requested')
+      )).catch(() => ({ docs: [] }))
     ]);
 
     attData = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -56,9 +65,17 @@ async function loadAttendancePage(area) {
       attPeople[d.id] = { id: d.id, ...d.data() };
     });
 
-    attMeetings = {};
-    meetingsSnap.docs.forEach(d => {
-      attMeetings[d.id] = { id: d.id, ...d.data() };
+    attEvents = {};
+    eventsSnap.docs.forEach(d => {
+      attEvents[d.id] = { id: d.id, ...d.data() };
+    });
+
+    // ⚡ طلبات الإلغاء
+    attCancelRequests = cancelReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    attCancelRequests.sort((a, b) => {
+      const da = parseDate(a.CancelRequestedAt) || new Date(0);
+      const db2 = parseDate(b.CancelRequestedAt) || new Date(0);
+      return db2 - da;
     });
 
     attData.sort((a, b) => {
@@ -87,7 +104,178 @@ async function loadAttendancePage(area) {
 
 function renderAttendancePage(area) {
   area.innerHTML = `
+    <style>
+      /* ═══ Cancel Requests Section ═══ */
+      .att-cancel-section {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #f59e0b;
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 20px;
+      }
+
+      .att-cancel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .att-cancel-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #92400e;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+      }
+
+      .att-cancel-count {
+        background: #dc2626;
+        color: #fff;
+        font-size: 12px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-weight: 700;
+      }
+
+      .att-cancel-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .att-cancel-item {
+        background: #fff;
+        border-radius: 12px;
+        padding: 14px 16px;
+        border: 1px solid #fcd34d;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .att-cancel-info {
+        flex: 1;
+        min-width: 220px;
+      }
+
+      .att-cancel-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .att-cancel-line {
+        font-size: 13px;
+        color: #475569;
+        margin: 4px 0;
+        line-height: 1.5;
+      }
+
+      .att-cancel-line strong {
+        color: #0f172a;
+      }
+
+      .att-cancel-reason {
+        background: #fef2f2;
+        border-right: 3px solid #dc2626;
+        padding: 8px 12px;
+        border-radius: 8px;
+        margin-top: 8px;
+        font-size: 13px;
+        color: #7f1d1d;
+      }
+
+      .att-cancel-reason-label {
+        font-weight: 700;
+        color: #991b1b;
+        display: block;
+        margin-bottom: 3px;
+        font-size: 12px;
+      }
+
+      .att-cancel-time {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 6px;
+        font-weight: 600;
+      }
+
+      .att-cancel-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-self: center;
+      }
+
+      .att-cancel-btn {
+        padding: 10px 18px;
+        border-radius: 10px;
+        border: none;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+      }
+
+      .att-cancel-btn.approve {
+        background: #16a34a;
+        color: #fff;
+      }
+
+      .att-cancel-btn.approve:hover {
+        background: #15803d;
+        transform: translateY(-1px);
+      }
+
+      .att-cancel-btn.reject {
+        background: #fff;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+      }
+
+      .att-cancel-btn.reject:hover {
+        background: #dc2626;
+        color: #fff;
+        border-color: #dc2626;
+      }
+
+      .att-cancel-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      @media (max-width: 600px) {
+        .att-cancel-item {
+          flex-direction: column;
+        }
+        .att-cancel-actions {
+          width: 100%;
+        }
+        .att-cancel-btn {
+          flex: 1;
+        }
+      }
+    </style>
+
     <div class="att-container">
+
+      ${renderCancelRequestsSection()}
 
       <div class="att-header">
         <div class="att-search">
@@ -128,10 +316,10 @@ function renderAttendancePage(area) {
         </div>
 
         <div class="att-filter-group">
-          <label>الاجتماع</label>
+          <label>الحدث</label>
           <select id="attFilterMeeting">
             <option value="">الكل</option>
-            ${Object.values(attMeetings).map(m => `
+            ${Object.values(attEvents).map(m => `
               <option value="${m.id}" ${attFilters.meetingId === m.id ? 'selected' : ''}>${escapeHtml(m.Title || '')}</option>
             `).join('')}
           </select>
@@ -154,7 +342,7 @@ function renderAttendancePage(area) {
           <thead>
             <tr>
               <th>الشخص</th>
-              <th>الاجتماع</th>
+              <th>الحدث</th>
               <th>التاريخ</th>
               <th>الوقت</th>
               <th>الطريقة</th>
@@ -180,6 +368,126 @@ function renderAttendancePage(area) {
   renderAttendanceTable();
   setupAttendanceEvents();
 }
+
+// ═══════════════════════════════════════════════════════
+//   Render Cancel Requests Section
+// ═══════════════════════════════════════════════════════
+
+function renderCancelRequestsSection() {
+  if (!attCancelRequests || attCancelRequests.length === 0) {
+    return '';
+  }
+
+  const itemsHtml = attCancelRequests.map(req => {
+    const person = attPeople[req.PersonID];
+    const event = attEvents[req.EventID];
+
+    const personName = req.PersonName
+      || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
+
+    const eventTitle = event?.Title || req.EventTitle || '-';
+    const eventDate = event?.Date
+      ? formatDateShort(parseDate(event.Date + 'T00:00:00'))
+      : '';
+
+    const requestedAt = parseDate(req.CancelRequestedAt);
+    const requestedAgo = requestedAt ? formatRelativeTime(requestedAt) : '';
+
+    const reasonHtml = req.CancelReason
+      ? `<div class="att-cancel-reason">
+           <span class="att-cancel-reason-label">🔒 السبب (سري):</span>
+           ${escapeHtml(req.CancelReason)}
+         </div>`
+      : '<div class="att-cancel-reason" style="background:#f1f5f9;border-color:#94a3b8;color:#475569;">لم يذكر سبب</div>';
+
+    return `
+      <div class="att-cancel-item" data-reg-id="${req.id}">
+        <div class="att-cancel-info">
+          <div class="att-cancel-name">👤 ${escapeHtml(personName)}</div>
+          <div class="att-cancel-line">🎯 <strong>${escapeHtml(eventTitle)}</strong>${eventDate ? ` — ${eventDate}` : ''}</div>
+          ${reasonHtml}
+          ${requestedAgo ? `<div class="att-cancel-time">🕐 طلب منذ ${requestedAgo}</div>` : ''}
+        </div>
+        <div class="att-cancel-actions">
+          <button class="att-cancel-btn approve" onclick="approveCancelRequest('${req.id}')">✅ موافقة</button>
+          <button class="att-cancel-btn reject" onclick="rejectCancelRequest('${req.id}')">❌ رفض</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="att-cancel-section">
+      <div class="att-cancel-header">
+        <h3 class="att-cancel-title">
+          🔔 طلبات الإلغاء
+          <span class="att-cancel-count">${attCancelRequests.length}</span>
+        </h3>
+      </div>
+      <div class="att-cancel-list">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Approve / Reject Cancel Request
+// ═══════════════════════════════════════════════════════
+
+window.approveCancelRequest = async function(regId) {
+  if (!confirm('✅ هل تريد الموافقة على طلب الإلغاء؟\n\nسيتم إلغاء الحضور + إشعار الزملاء والمستخدمين.')) return;
+
+  const item = document.querySelector(`[data-reg-id="${regId}"]`);
+  const buttons = item ? item.querySelectorAll('.att-cancel-btn') : [];
+  buttons.forEach(b => b.disabled = true);
+
+  try {
+    if (typeof window.approveCancel !== 'function') {
+      throw new Error('دالة approveCancel غير متوفرة — تأكد من تحميل event-rsvp.js');
+    }
+
+    const ok = await window.approveCancel(regId);
+
+    if (ok) {
+      alert('✅ تمت الموافقة على الطلب\n\nتم إرسال الإشعارات للزملاء والمستخدمين.');
+      await loadAttendancePage(document.getElementById('contentArea'));
+    } else {
+      buttons.forEach(b => b.disabled = false);
+    }
+  } catch (err) {
+    console.error('approveCancelRequest error:', err);
+    alert('خطأ: ' + err.message);
+    buttons.forEach(b => b.disabled = false);
+  }
+};
+
+window.rejectCancelRequest = async function(regId) {
+  if (!confirm('❌ هل تريد رفض طلب الإلغاء؟\n\nسيبقى الحضور مؤكدًا، ولن يستطيع صاحب الطلب تقديم طلب جديد.')) return;
+
+  const item = document.querySelector(`[data-reg-id="${regId}"]`);
+  const buttons = item ? item.querySelectorAll('.att-cancel-btn') : [];
+  buttons.forEach(b => b.disabled = true);
+
+  try {
+    if (typeof window.rejectCancel !== 'function') {
+      throw new Error('دالة rejectCancel غير متوفرة — تأكد من تحميل event-rsvp.js');
+    }
+
+    const ok = await window.rejectCancel(regId);
+
+    if (ok) {
+      alert('❌ تم رفض الطلب\n\nتم إشعار الشخص، وحضوره مؤكد.');
+      await loadAttendancePage(document.getElementById('contentArea'));
+    } else {
+      buttons.forEach(b => b.disabled = false);
+    }
+  } catch (err) {
+    console.error('rejectCancelRequest error:', err);
+    alert('خطأ: ' + err.message);
+    buttons.forEach(b => b.disabled = false);
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   Render Table
@@ -211,7 +519,7 @@ function renderAttendanceTable() {
 
   tbody.innerHTML = pageData.map(record => {
     const person = attPeople[record.PersonID];
-    const meeting = attMeetings[record.MeetingID];
+    const event = attEvents[record.EventID] || attMeetings[record.EventID];
     const scanDate = parseDate(record.ScanTime);
 
     const personName = record.PersonName
@@ -243,7 +551,7 @@ function renderAttendanceTable() {
         </td>
         <td>
           <div class="att-meeting-cell">
-            <div class="att-meeting-title">${escapeHtml(meeting?.Title || record.MeetingTitle || '-')}</div>
+            <div class="att-meeting-title">${escapeHtml(event?.Title || record.EventTitle || record.MeetingTitle || '-')}</div>
           </div>
         </td>
         <td>${dateStr}</td>
@@ -360,13 +668,13 @@ function applyAttFilters() {
       const person = attPeople[record.PersonID];
       const personName = record.PersonName
         || (person ? [person.FirstName, person.SecondName].filter(Boolean).join(' ') : '');
-      const meetingTitle = attMeetings[record.MeetingID]?.Title || record.MeetingTitle || '';
+      const eventTitle = attEvents[record.EventID]?.Title || record.EventTitle || '';
 
-      const combined = (personName + ' ' + meetingTitle).toLowerCase();
+      const combined = (personName + ' ' + eventTitle).toLowerCase();
       if (!combined.includes(term)) return false;
     }
 
-    if (attFilters.meetingId && record.MeetingID !== attFilters.meetingId) {
+    if (attFilters.meetingId && record.EventID !== attFilters.meetingId) {
       return false;
     }
 
@@ -419,11 +727,11 @@ window.exportAttendanceCSV = function() {
     return;
   }
 
-  const headers = ['الاسم', 'الموبايل', 'الاجتماع', 'التاريخ', 'الوقت', 'الطريقة', 'الموقع', 'بواسطة'];
+  const headers = ['الاسم', 'الموبايل', 'الحدث', 'التاريخ', 'الوقت', 'الطريقة', 'الموقع', 'بواسطة'];
 
   const rows = attFiltered.map(record => {
     const person = attPeople[record.PersonID];
-    const meeting = attMeetings[record.MeetingID];
+    const event = attEvents[record.EventID] || attMeetings[record.EventID];
     const scanDate = parseDate(record.ScanTime);
 
     const personName = record.PersonName
@@ -432,7 +740,7 @@ window.exportAttendanceCSV = function() {
     return [
       personName,
       person?.Mobile || '',
-      meeting?.Title || record.MeetingTitle || '',
+      event?.Title || record.EventTitle || '',
       scanDate ? formatDateShort(scanDate) : '',
       scanDate ? formatTimeShort(scanDate) : '',
       record.Method === 'self' ? 'تسجيل ذاتي' : 'ماسح',
@@ -465,19 +773,15 @@ window.exportAttendancePDF = function() {
     return;
   }
 
-  // ⚡ اجلب اسم المؤسسة من الإعدادات
   const organizationName = attSettings.OrganizationName || 'نظام تسجيل الحضور';
-  const systemName = attSettings.SystemName || '';
   const logoUrl = attSettings.ThemeLogoUrl || '';
 
-  // ⚡ اجلب اسم المستخدم الحالي
   let currentUserName = '';
   try {
     const cu = JSON.parse(localStorage.getItem('currentUser'));
     currentUserName = cu?.name || cu?.email || '';
   } catch (e) {}
 
-  // ⚡ نطاق التاريخ
   let dateRangeText = 'كل السجلات';
   if (attFilters.dateFrom || attFilters.dateTo) {
     const from = attFilters.dateFrom || 'البداية';
@@ -485,11 +789,10 @@ window.exportAttendancePDF = function() {
     dateRangeText = `من ${from} إلى ${to}`;
   }
 
-  // ⚡ فلتر إضافي
   let filterInfo = '';
   if (attFilters.meetingId) {
-    const meetingTitle = attMeetings[attFilters.meetingId]?.Title || '';
-    filterInfo += ` • الاجتماع: ${meetingTitle}`;
+    const eventTitle = attEvents[attFilters.meetingId]?.Title || '';
+    filterInfo += ` • الحدث: ${eventTitle}`;
   }
   if (attFilters.method) {
     filterInfo += ` • النوع: ${attFilters.method === 'self' ? 'تسجيل ذاتي' : 'ماسح'}`;
@@ -498,19 +801,16 @@ window.exportAttendancePDF = function() {
     filterInfo += ` • بحث: "${attFilters.search}"`;
   }
 
-  // ⚡ التاريخ والوقت الحالي
   const now = new Date();
   const nowText = `${formatDateShort(now)} ${formatTimeShort(now)}`;
 
-  // ⚡ JPG أو PNG للـLogo
   const logoHtml = logoUrl
     ? `<img src="${logoUrl}" class="pdf-logo" alt="" />`
     : '';
 
-  // ⚡ ابنِ صفوف الجدول
   const rowsHtml = attFiltered.map((record, idx) => {
     const person = attPeople[record.PersonID];
-    const meeting = attMeetings[record.MeetingID];
+    const event = attEvents[record.EventID] || attMeetings[record.EventID];
     const scanDate = parseDate(record.ScanTime);
 
     const personName = record.PersonName
@@ -523,7 +823,7 @@ window.exportAttendancePDF = function() {
         <td>${idx + 1}</td>
         <td>${escapeHtml(personName)}</td>
         <td>${escapeHtml(person?.Mobile || '-')}</td>
-        <td>${escapeHtml(meeting?.Title || record.MeetingTitle || '-')}</td>
+        <td>${escapeHtml(event?.Title || record.EventTitle || '-')}</td>
         <td>${scanDate ? formatDateShort(scanDate) : '-'}</td>
         <td>${scanDate ? formatTimeShort(scanDate) : '-'}</td>
         <td>${methodText}</td>
@@ -532,7 +832,6 @@ window.exportAttendancePDF = function() {
     `;
   }).join('');
 
-  // ⚡ HTML التقرير
   const reportHtml = `
     <!DOCTYPE html>
     <html dir="rtl" lang="ar">
@@ -540,15 +839,8 @@ window.exportAttendancePDF = function() {
       <meta charset="UTF-8">
       <title>تقرير الحضور</title>
       <style>
-        @page {
-          size: A4 landscape;
-          margin: 15mm 10mm;
-        }
-
-        * {
-          box-sizing: border-box;
-        }
-
+        @page { size: A4 landscape; margin: 15mm 10mm; }
+        * { box-sizing: border-box; }
         body {
           font-family: 'Segoe UI', 'Tahoma', 'Arial', sans-serif;
           direction: rtl;
@@ -557,7 +849,6 @@ window.exportAttendancePDF = function() {
           padding: 0;
           font-size: 12px;
         }
-
         .pdf-header {
           display: flex;
           align-items: center;
@@ -567,34 +858,9 @@ window.exportAttendancePDF = function() {
           margin-bottom: 20px;
           gap: 20px;
         }
-
-        .pdf-header-left {
-          flex: 1;
-        }
-
-        .pdf-header-right {
-          flex-shrink: 0;
-        }
-
-        .pdf-logo {
-          max-height: 70px;
-          max-width: 150px;
-          object-fit: contain;
-        }
-
-        .pdf-title {
-          font-size: 24px;
-          font-weight: 800;
-          margin: 0 0 5px 0;
-          color: #1e293b;
-        }
-
-        .pdf-subtitle {
-          font-size: 14px;
-          color: #64748b;
-          margin: 0;
-        }
-
+        .pdf-logo { max-height: 70px; max-width: 150px; object-fit: contain; }
+        .pdf-title { font-size: 24px; font-weight: 800; margin: 0 0 5px 0; color: #1e293b; }
+        .pdf-subtitle { font-size: 14px; color: #64748b; margin: 0; }
         .pdf-meta {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -605,27 +871,10 @@ window.exportAttendancePDF = function() {
           margin-bottom: 20px;
           border: 1px solid #e2e8f0;
         }
-
-        .pdf-meta-item {
-          font-size: 12px;
-          color: #475569;
-        }
-
-        .pdf-meta-item strong {
-          color: #0f172a;
-        }
-
-        .pdf-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 11px;
-        }
-
-        .pdf-table thead {
-          background: #1e293b;
-          color: #fff;
-        }
-
+        .pdf-meta-item { font-size: 12px; color: #475569; }
+        .pdf-meta-item strong { color: #0f172a; }
+        .pdf-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .pdf-table thead { background: #1e293b; color: #fff; }
         .pdf-table th {
           padding: 10px 8px;
           text-align: right;
@@ -633,22 +882,13 @@ window.exportAttendancePDF = function() {
           font-size: 11px;
           border: 1px solid #1e293b;
         }
-
         .pdf-table td {
           padding: 8px;
           border: 1px solid #e2e8f0;
           text-align: right;
           vertical-align: middle;
         }
-
-        .pdf-table tbody tr:nth-child(even) {
-          background: #f8fafc;
-        }
-
-        .pdf-table tbody tr:hover {
-          background: #f1f5f9;
-        }
-
+        .pdf-table tbody tr:nth-child(even) { background: #f8fafc; }
         .pdf-footer {
           margin-top: 20px;
           padding-top: 12px;
@@ -660,16 +900,6 @@ window.exportAttendancePDF = function() {
           align-items: center;
           gap: 20px;
         }
-
-        .pdf-footer-left,
-        .pdf-footer-right {
-          flex: 1;
-        }
-
-        .pdf-footer-right {
-          text-align: left;
-        }
-
         .pdf-count {
           background: #475569;
           color: #fff;
@@ -678,7 +908,6 @@ window.exportAttendancePDF = function() {
           font-weight: 700;
           font-size: 11px;
         }
-
         @media print {
           body { margin: 0; }
           .pdf-table tbody tr { page-break-inside: avoid; }
@@ -688,13 +917,11 @@ window.exportAttendancePDF = function() {
     <body>
 
       <div class="pdf-header">
-        <div class="pdf-header-left">
+        <div>
           <h1 class="pdf-title">تقرير الحضور</h1>
           <p class="pdf-subtitle">${escapeHtml(organizationName)}</p>
         </div>
-        <div class="pdf-header-right">
-          ${logoHtml}
-        </div>
+        <div>${logoHtml}</div>
       </div>
 
       <div class="pdf-meta">
@@ -708,7 +935,7 @@ window.exportAttendancePDF = function() {
             <th>#</th>
             <th>الاسم</th>
             <th>الموبايل</th>
-            <th>الاجتماع</th>
+            <th>الحدث</th>
             <th>التاريخ</th>
             <th>الوقت</th>
             <th>الطريقة</th>
@@ -721,10 +948,8 @@ window.exportAttendancePDF = function() {
       </table>
 
       <div class="pdf-footer">
-        <div class="pdf-footer-left">
-          تم الإنشاء: ${nowText}
-        </div>
-        <div class="pdf-footer-right">
+        <div>تم الإنشاء: ${nowText}</div>
+        <div>
           <span class="pdf-count">${attFiltered.length} سجل</span>
           ${currentUserName ? ` • بواسطة: ${escapeHtml(currentUserName)}` : ''}
         </div>
@@ -732,14 +957,9 @@ window.exportAttendancePDF = function() {
 
       <script>
         window.onload = function() {
-          setTimeout(function() {
-            window.print();
-          }, 500);
-
+          setTimeout(function() { window.print(); }, 500);
           window.onafterprint = function() {
-            setTimeout(function() {
-              window.close();
-            }, 500);
+            setTimeout(function() { window.close(); }, 500);
           };
         };
       <\/script>
@@ -748,7 +968,6 @@ window.exportAttendancePDF = function() {
     </html>
   `;
 
-  // ⚡ افتح نافذة جديدة
   const win = window.open('', '_blank', 'width=1200,height=800');
   if (!win) {
     alert('الرجاء السماح بالنوافذ المنبثقة لتصدير PDF');
@@ -820,6 +1039,18 @@ function formatDateISO(date) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function formatRelativeTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const diff = (now - date) / 1000;
+
+  if (diff < 60) return 'الآن';
+  if (diff < 3600) return `${Math.floor(diff / 60)} دقيقة`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} ساعة`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} يوم`;
+  return formatDateShort(date);
 }
 
 function escapeHtml(str) {
