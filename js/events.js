@@ -263,10 +263,12 @@ function renderEventsGrid() {
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
+    // ⚡ قواعد التسجيل — عرض عدد الأشخاص الملتزمين
     const regScope = String(event.RegistrationScope || 'all').toLowerCase();
+    const regPersonIds = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
     const regInfo = regScope === 'all'
       ? '<span class="reg-badge reg-all">🌍 إلزامي للكل</span>'
-      : '<span class="reg-badge reg-specific">👥 إلزامي لقائمة</span>';
+      : `<span class="reg-badge reg-specific">👥 إلزامي لقائمة (${regPersonIds.length})</span>`;
 
     const footerHtml = isView
       ? `<div class="event-card-footer">
@@ -416,6 +418,7 @@ function openEventModal(eventId) {
   const todayISO = formatDateISO(new Date());
   const endTime = event ? getEventEndTime(event) : '21:00';
   const regScope = event ? String(event.RegistrationScope || 'all').toLowerCase() : 'all';
+  const regPersonIds = event && Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
   const selectedTypeId = event ? String(event.EventTypeID || '') : (availableEventTypes[0]?.id || '');
 
   modal.innerHTML = `
@@ -505,8 +508,8 @@ function openEventModal(eventId) {
           </div>
 
           <div id="specificPeopleBox" class="location-picker-box" style="${regScope === 'specific' ? '' : 'display:none;'}">
-            <label>اختر الأشخاص</label>
-            <p class="hint">سيتم تحديد قائمة الأشخاص بعد الحفظ في المرحلة القادمة</p>
+            <label>اختر الأشخاص الملتزمين</label>
+            <div class="locations-checkbox-list" id="regPeopleList"></div>
           </div>
         </div>
 
@@ -641,7 +644,6 @@ function openEventModal(eventId) {
     };
   });
 
-  // ⚡ إشعار: تبويب قسم الأشخاص
   document.querySelectorAll('input[name="notifType"]').forEach(radio => {
     radio.onchange = (e) => {
       const box = document.getElementById('notifPeopleBox');
@@ -653,29 +655,52 @@ function openEventModal(eventId) {
     };
   });
 
-  // ⚡ ملء قائمة الأشخاص (فقط عند الإضافة)
+  // ⚡ ملء قائمة الأشخاص الملتزمين (regPeopleList)
+  const regPeopleList = document.getElementById('regPeopleList');
+  if (regPeopleList) {
+    fillPeopleList(regPeopleList, regPersonIds);
+  }
+
+  // ⚡ ملء قائمة الأشخاص للإشعار (فقط عند الإضافة)
   const notifPeopleList = document.getElementById('notifPeopleList');
   if (notifPeopleList) {
-    const activePeople = availablePeople
-      .filter(p => String(p.Status || '').toLowerCase() === 'active')
-      .sort((a, b) => getPersonFullName(a).localeCompare(getPersonFullName(b), 'ar'));
-
-    if (activePeople.length === 0) {
-      notifPeopleList.innerHTML = '<p class="hint" style="padding:8px;color:#94a3b8;">لا يوجد أشخاص نشطين</p>';
-    } else {
-      notifPeopleList.innerHTML = activePeople.map(p => `
-        <label class="location-checkbox-item">
-          <input type="checkbox" value="${p.id}" />
-          <span>${escapeHtml(getPersonFullName(p))}</span>
-        </label>
-      `).join('');
-    }
+    fillPeopleList(notifPeopleList, []);
   }
 
   setTimeout(() => {
     const titleInput = document.getElementById('eventTitle');
     if (titleInput) titleInput.focus();
   }, 100);
+}
+
+/**
+ * ⚡ Helper: ملء قائمة أشخاص (checkboxes) في أي container
+ * @param {HTMLElement} container - الـ div اللي هيتعبى
+ * @param {string[]} selectedIds - IDs الأشخاص المحددين مسبقًا
+ */
+function fillPeopleList(container, selectedIds) {
+  if (!container) return;
+
+  const selected = Array.isArray(selectedIds) ? selectedIds : [];
+
+  const activePeople = availablePeople
+    .filter(p => String(p.Status || '').toLowerCase() === 'active')
+    .sort((a, b) => getPersonFullName(a).localeCompare(getPersonFullName(b), 'ar'));
+
+  if (activePeople.length === 0) {
+    container.innerHTML = '<p class="hint" style="padding:8px;color:#94a3b8;">لا يوجد أشخاص نشطين</p>';
+    return;
+  }
+
+  container.innerHTML = activePeople.map(p => {
+    const isChecked = selected.includes(p.id);
+    return `
+      <label class="location-checkbox-item">
+        <input type="checkbox" value="${p.id}" ${isChecked ? 'checked' : ''} />
+        <span>${escapeHtml(getPersonFullName(p))}</span>
+      </label>
+    `;
+  }).join('');
 }
 
 function closeEventModal() {
@@ -726,9 +751,21 @@ async function saveEvent() {
     }
   }
 
+  // ⚡ قواعد التسجيل
   let regScope = 'all';
+  let regPersonIds = [];
   const regRadio = document.querySelector('input[name="regScope"]:checked');
-  if (regRadio) regScope = regRadio.value;
+  if (regRadio) {
+    regScope = regRadio.value;
+    if (regScope === 'specific') {
+      const checked = document.querySelectorAll('#regPeopleList input[type="checkbox"]:checked');
+      regPersonIds = Array.from(checked).map(c => c.value);
+      if (regPersonIds.length === 0) {
+        alert('⚠️ اختر شخص واحد على الأقل في القائمة، أو اختر "إلزامي لكل الأشخاص"');
+        return;
+      }
+    }
+  }
 
   let locationMode = 'any';
   let locationIds = [];
@@ -776,6 +813,7 @@ async function saveEvent() {
         EndTime: endTime,
         Status: status,
         RegistrationScope: regScope,
+        RegistrationPersonIDs: regPersonIds,
         LocationMode: locationMode,
         LocationIds: locationIds,
         UpdatedAt: new Date().toISOString()
@@ -793,6 +831,7 @@ async function saveEvent() {
         EndTime: endTime,
         Status: status,
         RegistrationScope: regScope,
+        RegistrationPersonIDs: regPersonIds,
         LocationMode: locationMode,
         LocationIds: locationIds,
         Rules: {
