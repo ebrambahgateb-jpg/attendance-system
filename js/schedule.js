@@ -1275,39 +1275,178 @@ window.printQR = function(locId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Requests — Approve/Reject
+//   Requests — Approve / Reject (فعلي)
 // ═══════════════════════════════════════════════════════
 
 window.approveRequest = async function(reqId) {
-  if (!confirm('✅ هل تريد الموافقة على الطلب؟')) return;
+  if (!confirm('✅ هل تريد الموافقة على الطلب؟\n\nسيتم نقل تسجيل الشخص من الحدث الأصلي للجديد.')) return;
 
   try {
+    const reqDoc = await getDoc(doc(db, 'massChangeRequests', reqId));
+    if (!reqDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return;
+    }
+
+    const req = { id: reqDoc.id, ...reqDoc.data() };
+
+    if (req.Status !== 'pending') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار');
+      return;
+    }
+
+    const personId = req.RequesterPersonID;
+    const fromEventId = req.FromEventID;
+    const toEventId = req.ToEventID;
+
+    // ═══ 1. حدّث التسجيل في الحدث الأصلي ═══
+    let fromRegId = null;
+    try {
+      const q1 = query(
+        collection(db, 'eventRegistrations'),
+        where('EventID', '==', fromEventId),
+        where('PersonID', '==', personId)
+      );
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        fromRegId = snap1.docs[0].id;
+        await updateDoc(doc(db, 'eventRegistrations', fromRegId), {
+          Status: 'cancelled',
+          CancelledAt: new Date().toISOString(),
+          CancelApprovedAt: new Date().toISOString(),
+          CancelApprovedBy: schUser.email,
+          TransferedTo: toEventId,
+          UpdatedAt: new Date().toISOString()
+        });
+      }
+    } catch (e) {
+      console.warn('Update from registration error:', e);
+    }
+
+    // ═══ 2. أنشئ/حدّث التسجيل في الحدث الجديد ═══
+    let toRegId = null;
+    try {
+      const q2 = query(
+        collection(db, 'eventRegistrations'),
+        where('EventID', '==', toEventId),
+        where('PersonID', '==', personId)
+      );
+      const snap2 = await getDocs(q2);
+
+      if (!snap2.empty) {
+        toRegId = snap2.docs[0].id;
+        await updateDoc(doc(db, 'eventRegistrations', toRegId), {
+          Status: 'confirmed',
+          ConfirmedAt: new Date().toISOString(),
+          ConfirmedVia: 'transfer',
+          TransferedFrom: fromEventId,
+          UpdatedAt: new Date().toISOString()
+        });
+      } else {
+        const person = schPeople[personId];
+        const newRef = await addDoc(collection(db, 'eventRegistrations'), {
+          EventID: toEventId,
+          PersonID: personId,
+          PersonName: person ? getPersonFullName(person) : req.RequesterName,
+          PersonEmail: req.RequesterEmail || '',
+          Status: 'confirmed',
+          ConfirmedAt: new Date().toISOString(),
+          ConfirmedVia: 'transfer',
+          TransferedFrom: fromEventId,
+          RegisteredBy: schUser.email,
+          RegisteredAt: new Date().toISOString(),
+          RejectedBefore: false,
+          CreatedAt: new Date().toISOString()
+        });
+        toRegId = newRef.id;
+      }
+    } catch (e) {
+      console.error('Create/update to registration error:', e);
+    }
+
+    // ═══ 3. حدّث الطلب ═══
     await updateDoc(doc(db, 'massChangeRequests', reqId), {
       Status: 'approved',
       ApprovedAt: new Date().toISOString(),
-      ApprovedBy: schUser.email
+      ApprovedBy: schUser.email,
+      FromRegistrationID: fromRegId,
+      ToRegistrationID: toRegId
     });
 
-    alert('✅ تمت الموافقة');
+    // ═══ 4. إشعار للشخص ═══
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_approved',
+        Title: '✅ تمت الموافقة على طلب النقل',
+        Body: `تم نقل حضورك:\nمن: ${req.FromEventTitle || ''}\nإلى: ${req.ToEventTitle || ''}`,
+        RelatedEventID: toEventId,
+        RelatedPersonID: personId,
+        TargetType: 'person',
+        TargetPersonID: personId,
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Notification error:', e);
+    }
+
+    alert('✅ تمت الموافقة\n\nتم نقل التسجيل بنجاح.');
     await loadSchedulePage(document.getElementById('contentArea'));
   } catch (err) {
+    console.error('❌ approveRequest error:', err);
     alert('خطأ: ' + err.message);
   }
 };
 
 window.rejectRequest = async function(reqId) {
-  if (!confirm('❌ هل تريد رفض الطلب؟')) return;
+  if (!confirm('❌ هل تريد رفض الطلب؟\n\nتسجيل الشخص في الحدث الأصلي هيفضل كما هو.')) return;
 
   try {
+    const reqDoc = await getDoc(doc(db, 'massChangeRequests', reqId));
+    if (!reqDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return;
+    }
+
+    const req = { id: reqDoc.id, ...reqDoc.data() };
+
+    if (req.Status !== 'pending') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار');
+      return;
+    }
+
+    // ═══ 1. حدّث الطلب ═══
     await updateDoc(doc(db, 'massChangeRequests', reqId), {
       Status: 'rejected',
       RejectedAt: new Date().toISOString(),
       RejectedBy: schUser.email
     });
 
-    alert('❌ تم الرفض');
+    // ═══ 2. إشعار للشخص ═══
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_rejected',
+        Title: '❌ تم رفض طلب النقل',
+        Body: `تم رفض طلب نقل حضورك:\nمن: ${req.FromEventTitle || ''}\nإلى: ${req.ToEventTitle || ''}\n\nتسجيلك في الحدث الأصلي كما هو.`,
+        RelatedEventID: req.FromEventID,
+        RelatedPersonID: req.RequesterPersonID,
+        TargetType: 'person',
+        TargetPersonID: req.RequesterPersonID,
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Notification error:', e);
+    }
+
+    alert('❌ تم رفض الطلب');
     await loadSchedulePage(document.getElementById('contentArea'));
   } catch (err) {
+    console.error('❌ rejectRequest error:', err);
     alert('خطأ: ' + err.message);
   }
 };
