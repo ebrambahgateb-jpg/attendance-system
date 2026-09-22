@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadThemeFromStorage();
 
-  // ⚡ Auto Deactivate Once Events
   autoDeactivateOnceEventsSafe();
 
   renderUserInfo();
@@ -247,7 +246,7 @@ function navigateTo(pageId) {
   closeSidebar();
 }
 
-// ═══ Load Dashboard Init (حسب الواجهة) ═══
+// ═══ Load Dashboard Init ═══
 async function loadDashboardInit(useCache) {
   const area = document.getElementById('contentArea');
   if (!area) return;
@@ -727,6 +726,11 @@ function loadReportsLazy(area) {
   else showLoadError(area, 'التقارير');
 }
 
+function loadLogsLazy(area) {
+  if (typeof window.loadLogsPage === 'function') window.loadLogsPage(area);
+  else showLoadError(area, 'السجلات');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -884,6 +888,7 @@ window.loadMyEventsLazy = loadMyEventsLazy;
 window.loadScheduleLazy = loadScheduleLazy;
 window.loadArchiveLazy = loadArchiveLazy;
 window.loadReportsLazy = loadReportsLazy;
+window.loadLogsLazy = loadLogsLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
