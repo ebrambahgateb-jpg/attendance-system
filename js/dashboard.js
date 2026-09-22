@@ -97,7 +97,6 @@ function renderWorkspaceSwitcher() {
   const container = document.getElementById('workspaceSwitcher');
   if (!container) return;
 
-  // ⚡ لو الشخص عنده دور واحد بس → مفيش زرار
   const roles = dashboardUser.roles || [];
   if (roles.length <= 1) {
     container.style.display = 'none';
@@ -129,7 +128,6 @@ function renderWorkspaceSwitcher() {
     }
   };
 
-  // ⚡ اقفل الـ dropdown عند الضغط خارجها
   document.addEventListener('click', (e) => {
     if (!container.contains(e.target)) {
       dropdown.style.display = 'none';
@@ -156,7 +154,6 @@ function renderWorkspaceDropdown(dropdown) {
     `;
   }).join('');
 
-  // ⚡ اربط الأزرار
   dropdown.querySelectorAll('.ws-item').forEach(item => {
     if (item.disabled) return;
     item.onclick = () => {
@@ -174,12 +171,10 @@ function switchWorkspace(newWorkspace) {
   const confirmMsg = `هل تريد التبديل إلى "${ws ? ws.label : newWorkspace}"؟`;
   if (!confirm(confirmMsg)) return;
 
-  // ⚡ احفظ
   dashboardUser.currentWorkspace = newWorkspace;
   localStorage.setItem('currentUser', JSON.stringify(dashboardUser));
   localStorage.setItem('currentWorkspace', newWorkspace);
 
-  // ⚡ أعد تحميل الصفحة
   window.location.reload();
 }
 
@@ -189,7 +184,6 @@ function renderSidebar() {
   if (!nav) return;
   nav.innerHTML = '';
 
-  // ⚡ اجلب تابات الواجهة الحالية
   const allowedTabs = getTabsForWorkspace(currentWorkspace);
 
   allowedTabs.forEach(item => {
@@ -265,7 +259,6 @@ async function loadDashboardInit(useCache) {
 
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
-  // ⚡ استخدم currentWorkspace بدل selectedRole
   const ws = currentWorkspace;
 
   try {
@@ -724,6 +717,11 @@ function loadScheduleLazy(area) {
   else showLoadError(area, 'الجدول');
 }
 
+function loadArchiveLazy(area) {
+  if (typeof window.loadArchivePage === 'function') window.loadArchivePage(area);
+  else showLoadError(area, 'الأرشيف');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -879,6 +877,7 @@ window.loadEventsLazy = loadEventsLazy;
 window.loadProfileLazy = loadProfileLazy;
 window.loadMyEventsLazy = loadMyEventsLazy;
 window.loadScheduleLazy = loadScheduleLazy;
+window.loadArchiveLazy = loadArchiveLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
