@@ -420,12 +420,14 @@ function renderEventCard(event, status) {
         <button class="me-btn me-btn-confirm" onclick="meConfirmRsvp('${event.id}')">✅ سجّل حضورك</button>
       </div>
     `;
-  } else if (status === 'confirmed') {
+    } else if (status === 'confirmed') {
     actionsHtml = `
       <div class="me-actions">
+        <button class="me-btn me-btn-transfer" onclick="meOpenTransferModal('${event.id}', '${escapeAttr(event.Title || '')}')">🔄 طلب نقل</button>
         <button class="me-btn me-btn-cancel" onclick="meOpenCancelModal('${event.id}', '${escapeAttr(event.Title || '')}', '${type === 'once' ? event.Date : ''}')">📢 إعلان عدم الحضور</button>
       </div>
     `;
+    
   } else if (status === 'cancel_requested') {
     const reasonHtml = reg?.CancelReason
       ? `<div class="me-cancel-reason"><strong>السبب:</strong> ${escapeHtml(reg.CancelReason)}</div>`
@@ -631,6 +633,18 @@ function escapeAttr(str) {
     .replace(/'/g, '&#39;')
     .replace(/\n/g, ' ');
 }
+
+// ═══════════════════════════════════════════════════════
+//   Transfer Actions
+// ═══════════════════════════════════════════════════════
+
+window.meOpenTransferModal = function(eventId, eventTitle) {
+  if (typeof window.openTransferModal === 'function') {
+    window.openTransferModal(eventId, eventTitle);
+  } else {
+    alert('⚠️ خدمة طلب النقل غير جاهزة، حاول من جديد');
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   Expose
