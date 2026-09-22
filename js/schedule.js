@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
-//   ⚡ محدّث: Templates Management
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -36,11 +35,9 @@ let schRegistrations = {};
 let schPeople = {};
 let schSettings = {};
 
-// ⚡ للجدول
 let schViewMode = 'month';
 let schCurrentDate = new Date();
 
-// ⚡ للأنماط
 let currentTemplateId = null;
 let templateDaysState = {};
 
@@ -55,7 +52,6 @@ const DAYS_OF_WEEK = [
   { value: 'Friday',    label: 'الجمعة',  short: 'جمعة',  icon: '⛪', jsDay: 5 }
 ];
 
-// ═══ أسماء الشهور ═══
 const MONTHS_AR = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
   'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
@@ -276,14 +272,12 @@ function renderMonthView() {
   const month = schCurrentDate.getMonth();
 
   const firstDayOfMonth = new Date(year, month, 1);
-
   const startDate = new Date(firstDayOfMonth);
   const firstDayJs = firstDayOfMonth.getDay();
   const daysToSubtract = (firstDayJs - 6 + 7) % 7;
   startDate.setDate(firstDayOfMonth.getDate() - daysToSubtract);
 
   const lastDayOfMonth = new Date(year, month + 1, 0);
-
   const endDate = new Date(lastDayOfMonth);
   const lastDayJs = lastDayOfMonth.getDay();
   const daysToAdd = (5 - lastDayJs + 7) % 7;
@@ -626,7 +620,6 @@ window.closeDayEventsModal = function() {
 
 // ═══════════════════════════════════════════════════════
 //   Event Attendees Modal
-//   ⚡ Admin/Owner: كل الحالات / User/Scanner: المؤكدين بس
 // ═══════════════════════════════════════════════════════
 
 window.openEventAttendeesModal = function(eventId) {
@@ -1060,7 +1053,7 @@ function renderRequestCard(req, showActions) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   4. Templates View (⚡ إدارة كاملة)
+//   4. Templates View
 // ═══════════════════════════════════════════════════════
 
 function renderTemplatesView(container) {
@@ -1088,11 +1081,6 @@ function renderTemplatesView(container) {
   `;
 }
 
-/**
- * ⚡ الحصول على Schedule كنمط موحّد
- * - لو Schedule فيه arrays → نرجّعها
- * - لو Schedule قديم (string) → نرجّع {} عشان مايسببش أخطاء
- */
 function normalizeSchedule(schedule) {
   if (!schedule || typeof schedule !== 'object') return {};
 
@@ -1196,7 +1184,7 @@ window.toggleTemplateDay = function(templateId, dayValue) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Template Modal (Add/Edit)
+//   Template Modal
 // ═══════════════════════════════════════════════════════
 
 window.openTemplateModal = function(templateId) {
@@ -1205,7 +1193,6 @@ window.openTemplateModal = function(templateId) {
 
   const template = isEdit ? schTemplates.find(t => t.id === templateId) : null;
 
-  // ⚡ نبني الـstate من الـnormalizeSchedule
   const normalized = normalizeSchedule(template?.Schedule);
   templateDaysState = {};
   DAYS_OF_WEEK.forEach(d => {
@@ -1419,12 +1406,34 @@ window.saveTemplate = async function() {
     if (currentTemplateId) {
       await updateDoc(doc(db, 'massTemplates', currentTemplateId), data);
       alert('✅ تم التعديل');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'template_updated',
+          type: 'template',
+          title: `تعديل نمط: ${name}`,
+          description: `تم تعديل النمط`,
+          relatedID: currentTemplateId,
+          relatedTitle: name
+        });
+      }
     } else {
       data.CreatedAt = new Date().toISOString();
       data.CreatedBy = schUser?.email || '';
       data.IsDefault = false;
-      await addDoc(collection(db, 'massTemplates'), data);
+      const docRef = await addDoc(collection(db, 'massTemplates'), data);
       alert('✅ تمت الإضافة');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'template_added',
+          type: 'template',
+          title: `إضافة نمط: ${name}`,
+          description: description || '',
+          relatedID: docRef.id,
+          relatedTitle: name
+        });
+      }
     }
 
     closeTemplateModal();
@@ -1444,6 +1453,17 @@ window.deleteTemplate = async function(templateId) {
   if (!confirm(`⚠️ هل تريد حذف "${t.Name}"؟`)) return;
 
   try {
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_deleted',
+        type: 'template',
+        title: `حذف نمط: ${t.Name}`,
+        description: `تم حذف النمط نهائيًا`,
+        relatedID: templateId,
+        relatedTitle: t.Name
+      });
+    }
+
     await deleteDoc(doc(db, 'massTemplates', templateId));
     alert('✅ تم الحذف');
     await loadSchedulePage(document.getElementById('contentArea'));
@@ -1460,6 +1480,18 @@ window.toggleTemplateStatus = async function(templateId) {
 
   try {
     await updateDoc(doc(db, 'massTemplates', templateId), { Status: newStatus });
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_status_changed',
+        type: 'template',
+        title: `${newStatus === 'active' ? 'تفعيل' : 'تعطيل'} نمط: ${t.Name}`,
+        description: `الحالة: ${newStatus === 'active' ? 'مفعّل' : 'معطّل'}`,
+        relatedID: templateId,
+        relatedTitle: t.Name
+      });
+    }
+
     alert(newStatus === 'active' ? '✅ تم التفعيل' : '⏸️ تم التعطيل');
     await loadSchedulePage(document.getElementById('contentArea'));
   } catch (err) {
@@ -1470,11 +1502,25 @@ window.toggleTemplateStatus = async function(templateId) {
 window.setActiveTemplate = async function(templateId) {
   if (!confirm('⭐ هل تريد تعيين هذا النمط كنمط نشط؟')) return;
 
+  const t = schTemplates.find(x => x.id === templateId);
+
   try {
     await updateDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
       ActiveMassTemplateID: templateId
     });
     schSettings.ActiveMassTemplateID = templateId;
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_set_active',
+        type: 'template',
+        title: `تعيين نمط نشط: ${t?.Name || templateId}`,
+        description: `تم تعيينه كنمط نشط للنظام`,
+        relatedID: templateId,
+        relatedTitle: t?.Name || ''
+      });
+    }
+
     alert('✅ تم تعيين النمط النشط');
     await loadSchedulePage(document.getElementById('contentArea'));
   } catch (err) {
@@ -1595,11 +1641,33 @@ window.saveLocation = async function(locId) {
     if (locId) {
       await updateDoc(doc(db, 'locations', locId), data);
       alert('✅ تم التعديل');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'location_updated',
+          type: 'event',
+          title: `تعديل مكان: ${name}`,
+          description: `تم تعديل بيانات المكان`,
+          relatedID: locId,
+          relatedTitle: name
+        });
+      }
     } else {
       data.CreatedAt = new Date().toISOString();
       data.CreatedBy = schUser?.email || '';
-      await addDoc(collection(db, 'locations'), data);
+      const docRef = await addDoc(collection(db, 'locations'), data);
       alert('✅ تمت الإضافة');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'location_added',
+          type: 'event',
+          title: `إضافة مكان: ${name}`,
+          description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          relatedID: docRef.id,
+          relatedTitle: name
+        });
+      }
     }
 
     closeLocationModal();
@@ -1619,6 +1687,17 @@ window.deleteLocation = async function(locId) {
   if (!confirm(`⚠️ هل تريد حذف "${loc.Name}"؟`)) return;
 
   try {
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'location_deleted',
+        type: 'event',
+        title: `حذف مكان: ${loc.Name}`,
+        description: `تم حذف المكان نهائيًا`,
+        relatedID: locId,
+        relatedTitle: loc.Name
+      });
+    }
+
     await deleteDoc(doc(db, 'locations', locId));
     alert('✅ تم الحذف');
     await loadSchedulePage(document.getElementById('contentArea'));
@@ -1819,6 +1898,18 @@ window.approveRequest = async function(reqId) {
       console.warn('Notification error:', e);
     }
 
+    // ⚡ سجل الموافقة
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'transfer_approved',
+        type: 'request',
+        title: `موافقة على نقل: ${req.RequesterName || ''}`,
+        description: `من: ${req.FromEventTitle || ''} → إلى: ${req.ToEventTitle || ''}`,
+        relatedID: reqId,
+        relatedTitle: req.RequesterName || ''
+      });
+    }
+
     alert('✅ تمت الموافقة\n\nتم نقل التسجيل بنجاح.');
     await loadSchedulePage(document.getElementById('contentArea'));
   } catch (err) {
@@ -1866,6 +1957,18 @@ window.rejectRequest = async function(reqId) {
       });
     } catch (e) {
       console.warn('Notification error:', e);
+    }
+
+    // ⚡ سجل الرفض
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'transfer_rejected',
+        type: 'request',
+        title: `رفض نقل: ${req.RequesterName || ''}`,
+        description: `من: ${req.FromEventTitle || ''} → إلى: ${req.ToEventTitle || ''}`,
+        relatedID: reqId,
+        relatedTitle: req.RequesterName || ''
+      });
     }
 
     alert('❌ تم رفض الطلب');
