@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Profile Page (صفحة حسابي)
+//   ⚡ محدّث: Upload Widget للصورة
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -24,7 +25,8 @@ let profilePerson = null;
 let profileSettings = {};
 let isEditMode = false;
 let isViewingOther = false;
- 
+let currentProfilePhotoURL = '';
+
 // ═══════════════════════════════════════════════════════
 //   Load Profile Page
 // ═══════════════════════════════════════════════════════
@@ -39,18 +41,15 @@ async function loadProfilePage(area) {
       return;
     }
 
-    // ⚡ اقرأ personId من URL (لو موجود)
     const urlParams = new URLSearchParams(window.location.search);
     const urlPersonId = urlParams.get('id');
 
     const isOwnerOrAdmin = ['Owner', 'Admin'].includes(profileUser.selectedRole);
     isViewingOther = urlPersonId && urlPersonId !== profileUser.personId;
 
-    // اجلب الإعدادات
     const settingsDoc = await getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC));
     profileSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ لو بيشوف ملف حد تاني
     if (isViewingOther) {
       if (!isOwnerOrAdmin) {
         area.innerHTML = `<div class="placeholder-page">
@@ -72,7 +71,6 @@ async function loadProfilePage(area) {
         return;
       }
     } else {
-      // ⚡ وضع "حسابي"
       profilePerson = null;
 
       if (profileUser.personId) {
@@ -82,7 +80,6 @@ async function loadProfilePage(area) {
         }
       }
 
-      // لو مش مربوط، جرّب نربطه بالبريد
       if (!profilePerson && profileUser.email) {
         const q = query(
           collection(db, COLLECTIONS.PEOPLE),
@@ -98,6 +95,9 @@ async function loadProfilePage(area) {
         }
       }
     }
+
+    // ⚡ خزّن الصورة الحالية
+    currentProfilePhotoURL = profilePerson?.PhotoURL || '';
 
     renderProfilePage(area);
 
@@ -161,6 +161,10 @@ function renderHeader() {
     ? `<button class="btn-secondary" onclick="goBackToPeople()" style="margin-bottom:16px;">← رجوع للأشخاص</button>`
     : '';
 
+  const photoBtn = !isViewingOther
+    ? `<button class="btn-small" onclick="openPhotoUploadModal()">📤 تغيير الصورة</button>`
+    : '';
+
   return `
     ${backBtn}
     <div class="profile-header-card">
@@ -173,6 +177,7 @@ function renderHeader() {
         <span class="profile-status-badge ${isActive ? 'active' : 'inactive'}">
           ${isActive ? '✅ نشط' : '⛔ معطل'}
         </span>
+        ${photoBtn}
       </div>
     </div>
   `;
@@ -342,11 +347,6 @@ function renderEditForm() {
         <input type="text" id="pf_Facebook" value="${escapeHtml(profilePerson.Facebook || '')}" placeholder="facebook.com/username" />
       </div>
 
-      <div class="profile-edit-row">
-        <label>رابط الصورة</label>
-        <input type="text" id="pf_PhotoURL" value="${escapeHtml(profilePerson.PhotoURL || '')}" placeholder="https://..." />
-      </div>
-
       <div class="profile-actions">
         <button class="btn-secondary" onclick="cancelEdit()">إلغاء</button>
         <button class="btn-primary" onclick="saveProfile()">💾 حفظ التعديلات</button>
@@ -463,6 +463,81 @@ function setupProfileEvents() {
   }
 }
 
+// ═══ ⚡ Photo Upload Modal ═══
+
+window.openPhotoUploadModal = function() {
+  let modal = document.getElementById('photoUploadModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'photoUploadModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:480px;">
+      <div class="modal-header">
+        <h2>📤 تغيير الصورة الشخصية</h2>
+        <button class="modal-close" onclick="closePhotoUploadModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="profilePhotoUploadContainer"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closePhotoUploadModal()">إغلاق</button>
+        <button class="btn-primary" onclick="saveProfilePhoto()">💾 حفظ</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  setTimeout(() => {
+    if (typeof window.renderUploadWidget === 'function') {
+      window.renderUploadWidget(
+        'profilePhotoUploadContainer',
+        currentProfilePhotoURL,
+        (url) => {
+          currentProfilePhotoURL = url;
+          console.log('✅ Photo uploaded:', url);
+        },
+        () => {
+          currentProfilePhotoURL = '';
+          console.log('🗑️ Photo removed');
+        }
+      );
+    }
+  }, 50);
+};
+
+window.closePhotoUploadModal = function() {
+  const modal = document.getElementById('photoUploadModal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.saveProfilePhoto = async function() {
+  if (!profilePerson) return;
+
+  try {
+    const personRef = doc(db, COLLECTIONS.PEOPLE, profilePerson.id);
+    await updateDoc(personRef, {
+      PhotoURL: currentProfilePhotoURL,
+      UpdatedAt: new Date().toISOString()
+    });
+
+    profilePerson.PhotoURL = currentProfilePhotoURL;
+
+    alert('✅ تم حفظ الصورة بنجاح');
+    closePhotoUploadModal();
+
+    const area = document.getElementById('contentArea');
+    loadProfilePage(area);
+  } catch (err) {
+    console.error('Save photo error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
 // ═══ Edit Mode ═══
 window.toggleEditMode = function() {
   const view = document.getElementById('profileInfoView');
@@ -499,7 +574,6 @@ window.saveProfile = async function() {
   const whatsapp = document.getElementById('pf_WhatsApp')?.value.trim() || '';
   const address = document.getElementById('pf_Address')?.value.trim() || '';
   const facebook = document.getElementById('pf_Facebook')?.value.trim() || '';
-  const photoURL = document.getElementById('pf_PhotoURL')?.value.trim() || '';
 
   if (!firstName) { alert('الاسم الأول مطلوب'); return; }
   if (!secondName) { alert('الاسم الثاني مطلوب'); return; }
@@ -518,7 +592,6 @@ window.saveProfile = async function() {
       WhatsApp: whatsapp,
       Address: address,
       Facebook: facebook,
-      PhotoURL: photoURL,
       UpdatedAt: new Date().toISOString()
     });
 
