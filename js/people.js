@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   People Management (Firestore) + Auto Accounts
+//   ⚡ محدّث: Upload Widget للصور
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -22,6 +23,7 @@ import {
 let peopleData = [];
 let filteredPeople = [];
 let currentEditId = null;
+let currentPhotoURL = '';  // ⚡ الصورة الحالية في الـModal
 
 // ═══ Constant ═══
 const DEFAULT_ROLE = 'User';
@@ -121,22 +123,14 @@ function getFacebookDisplay(value) {
 //   ⚡ Auto Account Creation
 // ═══════════════════════════════════════════════════════
 
-/**
- * ينشئ أو يحدّث account للشخص
- * @param {string} personId - ID الشخص
- * @param {object} personData - بيانات الشخص
- * @returns {object} - { action, accountId, message }
- */
 async function ensureAccountForPerson(personId, personData) {
   const email = String(personData.Email || '').toLowerCase().trim();
 
-  // ⚡ لو مفيش بريد → تخطى
   if (!email) {
     return { action: 'skipped', reason: 'no_email' };
   }
 
   try {
-    // ⚡ دور على account بنفس البريد
     const q = query(
       collection(db, COLLECTIONS.ACCOUNTS),
       where('Email', '==', email)
@@ -148,7 +142,6 @@ async function ensureAccountForPerson(personId, personData) {
       : 'disabled';
 
     if (!snap.empty) {
-      // ⚡ موجود → حدّث
       const existingDoc = snap.docs[0];
       const existingData = existingDoc.data();
 
@@ -158,7 +151,6 @@ async function ensureAccountForPerson(personId, personData) {
         UpdatedAt: new Date().toISOString()
       };
 
-      // ⚡ لو ملوش دور، ضيف User
       if (!existingData.Role) {
         updateData.Role = DEFAULT_ROLE;
       }
@@ -171,7 +163,6 @@ async function ensureAccountForPerson(personId, personData) {
         message: `تم ربط الحساب الموجود (${email}) بالشخص`
       };
     } else {
-      // ⚡ مش موجود → أنشئ جديد
       const newAccount = {
         Email: email,
         Role: DEFAULT_ROLE,
@@ -392,6 +383,9 @@ function openPersonModal(personId) {
   const person = personId ? peopleData.find(p => p.id === personId) : null;
   const isEdit = !!person;
 
+  // ⚡ خزّن الصورة الحالية
+  currentPhotoURL = person?.PhotoURL || '';
+
   let modal = document.getElementById('personModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -479,16 +473,13 @@ function openPersonModal(personId) {
         </div>
 
         <div class="modal-section">
-          <h4 class="modal-section-title">الصورة والحالة</h4>
-          <div class="form-row">
-            <label>رابط الصورة</label>
-            <input type="text" id="p_PhotoURL" value="${escapeHtml(p.PhotoURL || '')}" placeholder="https://..." dir="ltr" />
-          </div>
+          <h4 class="modal-section-title">الصورة</h4>
+          <!-- ⚡ Upload Widget -->
+          <div id="photoUploadContainer"></div>
+        </div>
 
-          <div id="photoPreviewBox" class="photo-preview-box" style="${p.PhotoURL ? '' : 'display:none;'}">
-            <img id="photoPreviewImg" src="${p.PhotoURL || ''}" alt="" />
-          </div>
-
+        <div class="modal-section">
+          <h4 class="modal-section-title">الحالة</h4>
           <div class="form-row checkbox-row">
             <input type="checkbox" id="p_Active" ${!person || String(p.Status || 'active').toLowerCase() === 'active' ? 'checked' : ''} />
             <label for="p_Active">حساب نشط</label>
@@ -506,20 +497,25 @@ function openPersonModal(personId) {
 
   modal.style.display = 'flex';
 
-  const photoInput = document.getElementById('p_PhotoURL');
-  if (photoInput) {
-    photoInput.addEventListener('input', (e) => {
-      const url = e.target.value.trim();
-      const box = document.getElementById('photoPreviewBox');
-      const img = document.getElementById('photoPreviewImg');
-      if (url && box && img) {
-        img.src = url;
-        box.style.display = 'block';
-      } else if (box) {
-        box.style.display = 'none';
-      }
-    });
-  }
+  // ⚡ Render Upload Widget بعد ما الـModal يفتح
+  setTimeout(() => {
+    if (typeof window.renderUploadWidget === 'function') {
+      window.renderUploadWidget(
+        'photoUploadContainer',
+        currentPhotoURL,
+        (url) => {
+          currentPhotoURL = url;
+          console.log('✅ Photo uploaded:', url);
+        },
+        () => {
+          currentPhotoURL = '';
+          console.log('🗑️ Photo removed');
+        }
+      );
+    } else {
+      console.warn('⚠️ renderUploadWidget not available');
+    }
+  }, 50);
 
   setTimeout(() => {
     const el = document.getElementById('p_FirstName');
@@ -531,6 +527,7 @@ function closePersonModal() {
   const modal = document.getElementById('personModal');
   if (modal) modal.style.display = 'none';
   currentEditId = null;
+  currentPhotoURL = '';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -549,7 +546,6 @@ async function savePerson() {
   const whatsapp = document.getElementById('p_WhatsApp')?.value.trim() || '';
   const email = document.getElementById('p_Email')?.value.trim() || '';
   const facebook = document.getElementById('p_Facebook')?.value.trim() || '';
-  const photoURL = document.getElementById('p_PhotoURL')?.value.trim() || '';
   const isActive = document.getElementById('p_Active')?.checked;
 
   if (!firstName) { alert('الاسم الأول مطلوب'); return; }
@@ -557,6 +553,9 @@ async function savePerson() {
   if (!mobile) { alert('رقم الموبايل مطلوب'); return; }
 
   const status = isActive ? 'active' : 'inactive';
+
+  // ⚡ الصورة من currentPhotoURL (اللي بيتحدث من الـUpload Widget)
+  const photoURL = currentPhotoURL || '';
 
   const personData = {
     FirstName: firstName,
@@ -579,7 +578,6 @@ async function savePerson() {
     let personId = currentEditId;
     let isNew = false;
 
-    // ═══ Save Person ═══
     if (currentEditId) {
       const personRef = doc(db, COLLECTIONS.PEOPLE, currentEditId);
       await updateDoc(personRef, personData);
@@ -591,7 +589,6 @@ async function savePerson() {
       isNew = true;
     }
 
-    // ═══ ⚡ Ensure Account ═══
     let accountMessage = '';
 
     if (email) {
@@ -647,7 +644,6 @@ async function togglePersonStatus(personId) {
   if (!confirm(confirmMsg)) return;
 
   try {
-    // ═══ Update Person ═══
     const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
     await updateDoc(personRef, {
       Status: newStatus,
@@ -655,7 +651,6 @@ async function togglePersonStatus(personId) {
     });
     person.Status = newStatus;
 
-    // ═══ ⚡ Sync Account Status ═══
     if (person.Email) {
       const email = String(person.Email).toLowerCase().trim();
       const q = query(
