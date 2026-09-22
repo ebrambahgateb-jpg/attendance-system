@@ -1,3 +1,7 @@
+/* ═══════════════════════════════════════════════════════
+   Global Reset + Variables
+   ═══════════════════════════════════════════════════════ */
+
 :root {
   --primary: #475569;
   --primary-hover: #334155;
@@ -10,6 +14,9 @@
   --sidebar-bg: #1e293b;
   --sidebar-text: #cbd5e1;
   --sidebar-active: #475569;
+
+  --overlay-opacity: 0.55;
+  --card-blur: 12px;
 }
 
 * {
@@ -19,6 +26,10 @@
   font-family: 'Segoe UI', Tahoma, sans-serif;
 }
 
+/* ═══════════════════════════════════════════════════════
+   Body + Background
+   ═══════════════════════════════════════════════════════ */
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -26,65 +37,259 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow-x: hidden;
 }
+
+/* ═══ Background Image ═══ */
+.bg-image {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  z-index: -2;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.bg-image.has-image {
+  opacity: 1;
+}
+
+/* ═══ Overlay ═══ */
+.bg-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.7) 0%,
+    rgba(30, 41, 59, 0.5) 100%
+  );
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+
+/* ═══ لما فيه صورة → فعّل الـOverlay ═══ */
+body:has(.bg-image.has-image) .bg-overlay {
+  opacity: 1;
+}
+
+/* ═══ لما مفيش صورة → نلغي الـOverlay وندي gradient جميل ═══ */
+body:not(:has(.bg-image.has-image)) {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Screens
+   ═══════════════════════════════════════════════════════ */
 
 .screen {
   display: none;
   width: 100%;
   padding: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .screen.active {
   display: flex;
   justify-content: center;
   align-items: center;
+  animation: fadeInScreen 0.4s ease;
 }
 
-.login-card, .role-card, .denied-card {
+@keyframes fadeInScreen {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Login Wrapper (Brand + Card + Footer)
+   ═══════════════════════════════════════════════════════ */
+
+.login-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 460px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Brand Area (Logo + Name + Subtitle)
+   ═══════════════════════════════════════════════════════ */
+
+.brand-area {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  animation: fadeInBrand 0.6s ease;
+}
+
+@keyframes fadeInBrand {
+  from { opacity: 0; transform: translateY(-15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══ Logo ═══ */
+.brand-logo {
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 40px 32px;
-  max-width: 420px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  color: var(--accent);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  padding: 14px;
+}
+
+.brand-logo.has-image {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.brand-logo .logo-image {
   width: 100%;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.08);
-  text-align: center;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.2));
 }
 
-.logo {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 16px;
+.brand-logo .default-logo {
+  color: var(--accent);
 }
 
-h1 {
+/* ═══ Name ═══ */
+.brand-name {
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  margin: 0;
+  word-break: break-word;
+}
+
+/* ═══ Subtitle ═══ */
+.brand-subtitle {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  font-weight: 500;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  margin: 0;
+  max-width: 400px;
+}
+
+/* ═══ لو مفيش صورة خلفية → ألوان مختلفة ═══ */
+body:not(:has(.bg-image.has-image)) .brand-name {
   color: var(--text);
-  font-size: 28px;
-  margin-bottom: 8px;
+  text-shadow: none;
 }
 
-h2 {
-  color: var(--text);
-  font-size: 22px;
-  margin-bottom: 8px;
-}
-
-.subtitle {
+body:not(:has(.bg-image.has-image)) .brand-subtitle {
   color: var(--text-muted);
-  font-size: 14px;
-  margin-bottom: 24px;
+  text-shadow: none;
 }
 
-.g_id_signin {
-  display: flex;
-  justify-content: center;
-  margin: 20px 0;
+body:not(:has(.bg-image.has-image)) .brand-logo {
+  background: var(--card-bg);
+  border-color: var(--border);
 }
+
+/* ═══════════════════════════════════════════════════════
+   Login Card
+   ═══════════════════════════════════════════════════════ */
+
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px;
+  width: 100%;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  animation: fadeInCard 0.5s ease 0.15s backwards;
+  backdrop-filter: blur(var(--card-blur));
+}
+
+body:has(.bg-image.has-image) .login-card {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@keyframes fadeInCard {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Google Sign-in Button
+   ═══════════════════════════════════════════════════════ */
+
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: inherit;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.google-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--bg);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.google-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.google-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Messages
+   ═══════════════════════════════════════════════════════ */
 
 .message {
   margin-top: 16px;
   font-size: 14px;
   min-height: 20px;
+  font-weight: 500;
 }
 
 .message.error {
@@ -93,6 +298,50 @@ h2 {
 
 .message.success {
   color: #059669;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Page Footer
+   ═══════════════════════════════════════════════════════ */
+
+.page-footer {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  min-height: 20px;
+}
+
+body:not(:has(.bg-image.has-image)) .page-footer {
+  color: var(--text-muted);
+  text-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Role Card (Screen 2)
+   ═══════════════════════════════════════════════════════ */
+
+.role-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.role-card h2 {
+  color: var(--text);
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.role-card .subtitle {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
 }
 
 .roles-list {
@@ -111,6 +360,7 @@ h2 {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
+  font-family: inherit;
   transition: all 0.2s;
   display: flex;
   align-items: center;
@@ -122,20 +372,28 @@ h2 {
   border-color: var(--primary);
   background: var(--bg);
   color: var(--primary);
+  transform: translateY(-2px);
 }
 
 .role-btn .role-icon {
   font-size: 20px;
 }
 
-.btn-primary, .btn-secondary {
+/* ═══════════════════════════════════════════════════════
+   Buttons
+   ═══════════════════════════════════════════════════════ */
+
+.btn-primary,
+.btn-secondary {
   padding: 12px 24px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
+  font-family: inherit;
   margin-top: 16px;
+  transition: all 0.2s ease;
 }
 
 .btn-primary {
@@ -145,6 +403,7 @@ h2 {
 
 .btn-primary:hover {
   background: var(--primary-hover);
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -153,30 +412,92 @@ h2 {
   border: 1px solid var(--border);
 }
 
+.btn-secondary:hover {
+  background: var(--border);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Denied / Disabled Cards
+   ═══════════════════════════════════════════════════════ */
+
+.denied-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.denied-card h2 {
+  color: var(--text);
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.denied-card p {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
 .denied-icon {
   font-size: 60px;
   margin-bottom: 16px;
 }
+
+/* ═══════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════ */
+
 @media (max-width: 768px) {
+  .login-wrapper {
+    gap: 18px;
+    max-width: 100%;
+  }
+
+  .brand-logo {
+    width: 90px;
+    height: 90px;
+    border-radius: 20px;
+    padding: 12px;
+  }
+
+  .brand-name {
+    font-size: 24px;
+  }
+
+  .brand-subtitle {
+    font-size: 13px;
+  }
+
   .login-card,
   .role-card,
   .denied-card {
     padding: 24px 20px;
-    margin: 16px;
     max-width: 100%;
-  }
-
-  h1 {
-    font-size: 22px;
-  }
-
-  h2 {
-    font-size: 18px;
+    border-radius: 16px;
   }
 
   .google-btn {
-    width: 100%;
-    font-size: 14px;
     padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .page-footer {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .brand-logo {
+    width: 80px;
+    height: 80px;
+    padding: 10px;
+  }
+
+  .brand-name {
+    font-size: 20px;
   }
 }
