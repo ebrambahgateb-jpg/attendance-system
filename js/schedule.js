@@ -1088,9 +1088,25 @@ function renderTemplatesView(container) {
   `;
 }
 
+/**
+ * ⚡ الحصول على Schedule كنمط موحّد
+ * - لو Schedule فيه arrays → نرجّعها
+ * - لو Schedule قديم (string) → نرجّع {} عشان مايسببش أخطاء
+ */
+function normalizeSchedule(schedule) {
+  if (!schedule || typeof schedule !== 'object') return {};
+
+  const normalized = {};
+  DAYS_OF_WEEK.forEach(d => {
+    const dayData = schedule[d.value];
+    normalized[d.value] = Array.isArray(dayData) ? dayData : [];
+  });
+  return normalized;
+}
+
 function renderTemplateCard(template, isOwner) {
   const isActive = schSettings.ActiveMassTemplateID === template.id;
-  const schedule = template.Schedule || {};
+  const schedule = normalizeSchedule(template.Schedule);
 
   let totalEvents = 0;
   DAYS_OF_WEEK.forEach(d => {
@@ -1115,7 +1131,6 @@ function renderTemplateCard(template, isOwner) {
 
       ${template.Description ? `<p class="sch-template-desc">${escapeHtml(template.Description)}</p>` : ''}
 
-      <!-- ═══ Accordion الأيام ═══ -->
       <div class="sch-template-days">
         ${DAYS_OF_WEEK.map(day => {
           const dayEvents = schedule[day.value] || [];
@@ -1190,9 +1205,11 @@ window.openTemplateModal = function(templateId) {
 
   const template = isEdit ? schTemplates.find(t => t.id === templateId) : null;
 
+  // ⚡ نبني الـstate من الـnormalizeSchedule
+  const normalized = normalizeSchedule(template?.Schedule);
   templateDaysState = {};
   DAYS_OF_WEEK.forEach(d => {
-    templateDaysState[d.value] = (template?.Schedule?.[d.value]) ? [...template.Schedule[d.value]] : [];
+    templateDaysState[d.value] = [...(normalized[d.value] || [])];
   });
 
   let modal = document.getElementById('templateModal');
