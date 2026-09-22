@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   Schedule (الجدول) — عرض شهري + أسبوعي
-//   ⚡ محدّث: عرض المؤكدين فقط للـUser + كل الحالات للـAdmin
+//   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
+//   ⚡ محدّث: Templates Management
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -39,6 +39,10 @@ let schSettings = {};
 // ⚡ للجدول
 let schViewMode = 'month';
 let schCurrentDate = new Date();
+
+// ⚡ للأنماط
+let currentTemplateId = null;
+let templateDaysState = {};
 
 // ═══ أيام الأسبوع ═══
 const DAYS_OF_WEEK = [
@@ -562,7 +566,6 @@ window.openDayEventsModal = function(dateISO) {
         scopeBadge = '<span class="sch-scope-badge all">🌍 للكل</span>';
       }
 
-      // ⚡ إحصائيات حسب الصلاحية
       let statsHtml = '';
       if (isAdminView) {
         if (scope === 'optional') {
@@ -633,14 +636,12 @@ window.openEventAttendeesModal = function(eventId) {
     return;
   }
 
-  // ⚡ هل المستخدم Admin/Owner؟
   const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
 
   const attendees = getEventAttendees(event);
   const stats = getEventAttendeesStats(event);
   const scope = String(event.RegistrationScope || 'all').toLowerCase();
 
-  // ⚡ لو User/Scanner: عرض المؤكدين بس
   const confirmedList = attendees.filter(a => a.rsvpStatus === 'confirmed');
   const pendingList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'pending') : [];
   const cancelRequestedList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'cancel_requested') : [];
@@ -662,7 +663,6 @@ window.openEventAttendeesModal = function(eventId) {
     dateLine = `${d.getDate()} ${MONTHS_AR[d.getMonth()]} ${d.getFullYear()}`;
   }
 
-  // ⚡ Badge للـscope
   let scopeBadge = '';
   if (scope === 'optional') {
     scopeBadge = '<span class="sch-scope-badge optional">🟢 اختياري</span>';
@@ -680,10 +680,8 @@ window.openEventAttendeesModal = function(eventId) {
     document.body.appendChild(modal);
   }
 
-  // ⚡ إحصائيات حسب الصلاحية + scope
   let statsBoxHtml = '';
   if (isAdminView) {
-    // ⚡ Admin/Owner: كل الحالات
     if (scope === 'optional') {
       statsBoxHtml = `
         <div class="att-stats-box" style="grid-template-columns: repeat(3, 1fr);">
@@ -728,7 +726,6 @@ window.openEventAttendeesModal = function(eventId) {
       `;
     }
   } else {
-    // ⚡ User/Scanner: المؤكدين بس
     statsBoxHtml = `
       <div class="att-stats-box" style="grid-template-columns: repeat(1, 1fr);">
         <div class="att-stat-item confirmed">
@@ -1063,45 +1060,410 @@ function renderRequestCard(req, showActions) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   4. Templates View
+//   4. Templates View (⚡ إدارة كاملة)
 // ═══════════════════════════════════════════════════════
 
 function renderTemplatesView(container) {
+  const isOwner = schWorkspace === 'Owner';
+
   container.innerHTML = `
     <div class="sch-templates-header">
       <h3>⚙️ الأنماط (${schTemplates.length})</h3>
+      ${isOwner ? `
+        <button class="btn-primary" onclick="openTemplateModal()">➕ نمط جديد</button>
+      ` : ''}
     </div>
 
     ${schTemplates.length === 0 ? `
       <div class="sch-empty">
         <div class="sch-empty-icon">⚙️</div>
         <h3>لا يوجد أنماط</h3>
-        <p>الأنماط هتتضاف في مرحلة قادمة</p>
+        <p>ابدأ بإنشاء نمط جديد لتوزيع الأحداث على أيام الأسبوع</p>
       </div>
     ` : `
       <div class="sch-templates-list">
-        ${schTemplates.map(t => renderTemplateCard(t)).join('')}
+        ${schTemplates.map(t => renderTemplateCard(t, isOwner)).join('')}
       </div>
     `}
   `;
 }
 
-function renderTemplateCard(template) {
+function renderTemplateCard(template, isOwner) {
   const isActive = schSettings.ActiveMassTemplateID === template.id;
+  const schedule = template.Schedule || {};
+
+  let totalEvents = 0;
+  DAYS_OF_WEEK.forEach(d => {
+    const dayEvents = schedule[d.value] || [];
+    totalEvents += dayEvents.length;
+  });
 
   return `
     <div class="sch-template-card ${isActive ? 'active' : ''}">
       <div class="sch-template-header">
-        <h4>${escapeHtml(template.Name || '')}</h4>
-        ${isActive ? '<span class="status-badge active">✅ نشط</span>' : ''}
+        <div class="sch-template-title-wrap">
+          <h4>${escapeHtml(template.Name || '')}</h4>
+          <div class="sch-template-meta">
+            ${isActive ? '<span class="status-badge active">✅ النمط النشط</span>' : ''}
+            <span class="status-badge ${template.Status === 'active' ? 'active' : 'inactive'}">
+              ${template.Status === 'active' ? '✅ مفعّل' : '⏸️ معطّل'}
+            </span>
+            <span class="sch-template-events-count">📋 ${totalEvents} حدث</span>
+          </div>
+        </div>
       </div>
+
       ${template.Description ? `<p class="sch-template-desc">${escapeHtml(template.Description)}</p>` : ''}
-      <div class="sch-template-info">
-        <span>الحالة: ${template.Status === 'active' ? '✅ مفعل' : '⏸️ معطل'}</span>
+
+      <!-- ═══ Accordion الأيام ═══ -->
+      <div class="sch-template-days">
+        ${DAYS_OF_WEEK.map(day => {
+          const dayEvents = schedule[day.value] || [];
+          return `
+            <div class="sch-template-day-accordion" data-template="${template.id}" data-day="${day.value}">
+              <button class="sch-template-day-btn" onclick="toggleTemplateDay('${template.id}', '${day.value}')">
+                <span class="sch-tpl-day-icon">${day.icon}</span>
+                <span class="sch-tpl-day-label">${day.label}</span>
+                <span class="sch-tpl-day-count">${dayEvents.length}</span>
+                <span class="sch-tpl-day-arrow">▾</span>
+              </button>
+              <div class="sch-template-day-content" style="display:none;">
+                ${dayEvents.length === 0 ? `
+                  <div class="sch-tpl-day-empty">لا يوجد أحداث في هذا اليوم</div>
+                ` : dayEvents.map((e, idx) => `
+                  <div class="sch-tpl-event-item">
+                    <div class="sch-tpl-event-header">
+                      <strong>${escapeHtml(e.Title || '')}</strong>
+                    </div>
+                    <div class="sch-tpl-event-info">
+                      <span>🕐 ${e.Time || '-'} - ${e.EndTime || '-'}</span>
+                      <span>👥 ${getScopeLabel(e.RegistrationScope)}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      ${isOwner ? `
+        <div class="sch-template-actions">
+          ${!isActive ? `<button class="btn-small" onclick="setActiveTemplate('${template.id}')">⭐ تفعيل كنمط</button>` : ''}
+          <button class="btn-small" onclick="editTemplate('${template.id}')">✏️ تعديل</button>
+          <button class="btn-small" onclick="toggleTemplateStatus('${template.id}')">
+            ${template.Status === 'active' ? '⏸️ تعطيل' : '✅ تفعيل'}
+          </button>
+          <button class="btn-small danger" onclick="deleteTemplate('${template.id}')">🗑️ حذف</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function getScopeLabel(scope) {
+  const s = String(scope || 'all').toLowerCase();
+  if (s === 'optional') return '🟢 اختياري';
+  if (s === 'specific') return '👥 قائمة محددة';
+  return '🌍 للكل';
+}
+
+window.toggleTemplateDay = function(templateId, dayValue) {
+  const el = document.querySelector(`.sch-template-day-accordion[data-template="${templateId}"][data-day="${dayValue}"]`);
+  if (!el) return;
+  const content = el.querySelector('.sch-template-day-content');
+  const arrow = el.querySelector('.sch-tpl-day-arrow');
+  if (!content) return;
+
+  const isOpen = content.style.display !== 'none';
+  content.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▾' : '▴';
+};
+
+// ═══════════════════════════════════════════════════════
+//   Template Modal (Add/Edit)
+// ═══════════════════════════════════════════════════════
+
+window.openTemplateModal = function(templateId) {
+  const isEdit = !!templateId;
+  currentTemplateId = templateId || null;
+
+  const template = isEdit ? schTemplates.find(t => t.id === templateId) : null;
+
+  templateDaysState = {};
+  DAYS_OF_WEEK.forEach(d => {
+    templateDaysState[d.value] = (template?.Schedule?.[d.value]) ? [...template.Schedule[d.value]] : [];
+  });
+
+  let modal = document.getElementById('templateModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'templateModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  renderTemplateModal(modal, template);
+  modal.style.display = 'flex';
+};
+
+function renderTemplateModal(modal, template) {
+  const isEdit = !!template;
+
+  modal.innerHTML = `
+    <div class="modal-content modal-large" style="max-width:800px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>${isEdit ? '✏️ تعديل نمط' : '➕ نمط جديد'}</h2>
+        <button class="modal-close" onclick="closeTemplateModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <div class="form-row">
+          <label>اسم النمط *</label>
+          <input type="text" id="tplName" value="${template ? escapeHtml(template.Name || '') : ''}" placeholder="مثال: النمط العادي" />
+        </div>
+
+        <div class="form-row">
+          <label>الوصف (اختياري)</label>
+          <textarea id="tplDescription" rows="2" placeholder="وصف مختصر للنمط">${template ? escapeHtml(template.Description || '') : ''}</textarea>
+        </div>
+
+        <div class="form-row checkbox-row">
+          <input type="checkbox" id="tplStatus" ${!template || template.Status === 'active' ? 'checked' : ''} />
+          <label for="tplStatus">مفعّل</label>
+        </div>
+
+        <div class="tpl-days-section">
+          <h4>📅 جدول الأيام</h4>
+          <p class="hint">أضف الأحداث لكل يوم. لو اليوم فاضي، يبقى مفيش أحداث.</p>
+
+          <div class="tpl-days-list" id="tplDaysList">
+            ${DAYS_OF_WEEK.map(day => renderTemplateDayEditor(day)).join('')}
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTemplateModal()">إلغاء</button>
+        <button class="btn-primary" onclick="saveTemplate()">💾 حفظ</button>
       </div>
     </div>
   `;
 }
+
+function renderTemplateDayEditor(day) {
+  const events = templateDaysState[day.value] || [];
+
+  return `
+    <div class="tpl-day-editor" data-day="${day.value}">
+      <div class="tpl-day-editor-header">
+        <span>${day.icon} ${day.label}</span>
+        <button class="btn-small" onclick="addTemplateDayEvent('${day.value}')">➕ إضافة حدث</button>
+      </div>
+
+      <div class="tpl-day-events" id="tplEvents-${day.value}">
+        ${events.length === 0 ? `
+          <div class="tpl-day-empty-hint">لا يوجد أحداث</div>
+        ` : events.map((e, idx) => renderTemplateEventEditor(day.value, idx, e)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderTemplateEventEditor(dayValue, idx, event) {
+  const eventTypesOptions = schEventTypes.map(t => `
+    <option value="${t.id}" ${event.EventTypeID === t.id ? 'selected' : ''}>${t.Icon || '📅'} ${escapeHtml(t.Name)}</option>
+  `).join('');
+
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+  return `
+    <div class="tpl-event-editor" data-day="${dayValue}" data-idx="${idx}">
+      <div class="tpl-event-row">
+        <div class="tpl-event-field">
+          <label>العنوان *</label>
+          <input type="text" value="${escapeHtml(event.Title || '')}" 
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'Title', this.value)" />
+        </div>
+      </div>
+
+      <div class="tpl-event-row tpl-event-row-2">
+        <div class="tpl-event-field">
+          <label>من *</label>
+          <input type="time" value="${event.Time || '08:00'}"
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'Time', this.value)" />
+        </div>
+        <div class="tpl-event-field">
+          <label>إلى *</label>
+          <input type="time" value="${event.EndTime || '10:00'}"
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'EndTime', this.value)" />
+        </div>
+      </div>
+
+      <div class="tpl-event-row tpl-event-row-2">
+        <div class="tpl-event-field">
+          <label>النوع *</label>
+          <select onchange="updateTemplateEvent('${dayValue}', ${idx}, 'EventTypeID', this.value)">
+            ${eventTypesOptions}
+          </select>
+        </div>
+        <div class="tpl-event-field">
+          <label>التسجيل *</label>
+          <select onchange="updateTemplateEvent('${dayValue}', ${idx}, 'RegistrationScope', this.value)">
+            <option value="all" ${scope === 'all' ? 'selected' : ''}>🌍 إلزامي للكل</option>
+            <option value="specific" ${scope === 'specific' ? 'selected' : ''}>👥 لقائمة محددة</option>
+            <option value="optional" ${scope === 'optional' ? 'selected' : ''}>🟢 اختياري</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn-small danger tpl-event-remove" onclick="removeTemplateDayEvent('${dayValue}', ${idx})">🗑️ حذف الحدث</button>
+    </div>
+  `;
+}
+
+window.addTemplateDayEvent = function(dayValue) {
+  if (!templateDaysState[dayValue]) templateDaysState[dayValue] = [];
+
+  templateDaysState[dayValue].push({
+    Title: '',
+    Time: '08:00',
+    EndTime: '10:00',
+    EventTypeID: schEventTypes[0]?.id || '',
+    RegistrationScope: 'all',
+    LocationMode: 'any',
+    LocationIds: []
+  });
+
+  refreshTemplateDay(dayValue);
+};
+
+window.removeTemplateDayEvent = function(dayValue, idx) {
+  if (!confirm('⚠️ حذف هذا الحدث؟')) return;
+  templateDaysState[dayValue].splice(idx, 1);
+  refreshTemplateDay(dayValue);
+};
+
+window.updateTemplateEvent = function(dayValue, idx, field, value) {
+  if (!templateDaysState[dayValue]?.[idx]) return;
+  templateDaysState[dayValue][idx][field] = value;
+};
+
+function refreshTemplateDay(dayValue) {
+  const container = document.getElementById('tplEvents-' + dayValue);
+  if (!container) return;
+
+  const events = templateDaysState[dayValue] || [];
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="tpl-day-empty-hint">لا يوجد أحداث</div>';
+    return;
+  }
+
+  container.innerHTML = events.map((e, idx) => renderTemplateEventEditor(dayValue, idx, e)).join('');
+}
+
+window.closeTemplateModal = function() {
+  const modal = document.getElementById('templateModal');
+  if (modal) modal.style.display = 'none';
+  currentTemplateId = null;
+  templateDaysState = {};
+};
+
+window.saveTemplate = async function() {
+  const name = document.getElementById('tplName')?.value.trim();
+  const description = document.getElementById('tplDescription')?.value.trim() || '';
+  const status = document.getElementById('tplStatus')?.checked ? 'active' : 'inactive';
+
+  if (!name) { alert('⚠️ اسم النمط مطلوب'); return; }
+
+  let hasError = false;
+  DAYS_OF_WEEK.forEach(d => {
+    const events = templateDaysState[d.value] || [];
+    events.forEach((e, idx) => {
+      if (!e.Title) { alert(`⚠️ في ${d.label}: الحدث ${idx + 1} بدون عنوان`); hasError = true; }
+      if (!e.Time || !e.EndTime) { alert(`⚠️ في ${d.label}: الحدث ${idx + 1} بدون وقت`); hasError = true; }
+    });
+  });
+
+  if (hasError) return;
+
+  const data = {
+    Name: name,
+    Description: description,
+    Status: status,
+    Schedule: templateDaysState,
+    UpdatedAt: new Date().toISOString()
+  };
+
+  try {
+    if (currentTemplateId) {
+      await updateDoc(doc(db, 'massTemplates', currentTemplateId), data);
+      alert('✅ تم التعديل');
+    } else {
+      data.CreatedAt = new Date().toISOString();
+      data.CreatedBy = schUser?.email || '';
+      data.IsDefault = false;
+      await addDoc(collection(db, 'massTemplates'), data);
+      alert('✅ تمت الإضافة');
+    }
+
+    closeTemplateModal();
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.editTemplate = function(templateId) {
+  openTemplateModal(templateId);
+};
+
+window.deleteTemplate = async function(templateId) {
+  const t = schTemplates.find(x => x.id === templateId);
+  if (!t) return;
+  if (!confirm(`⚠️ هل تريد حذف "${t.Name}"؟`)) return;
+
+  try {
+    await deleteDoc(doc(db, 'massTemplates', templateId));
+    alert('✅ تم الحذف');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.toggleTemplateStatus = async function(templateId) {
+  const t = schTemplates.find(x => x.id === templateId);
+  if (!t) return;
+
+  const newStatus = t.Status === 'active' ? 'inactive' : 'active';
+
+  try {
+    await updateDoc(doc(db, 'massTemplates', templateId), { Status: newStatus });
+    alert(newStatus === 'active' ? '✅ تم التفعيل' : '⏸️ تم التعطيل');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.setActiveTemplate = async function(templateId) {
+  if (!confirm('⭐ هل تريد تعيين هذا النمط كنمط نشط؟')) return;
+
+  try {
+    await updateDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
+      ActiveMassTemplateID: templateId
+    });
+    schSettings.ActiveMassTemplateID = templateId;
+    alert('✅ تم تعيين النمط النشط');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   Location Modal
@@ -1327,7 +1689,7 @@ window.printQR = function(locId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Requests — Approve / Reject (فعلي)
+//   Requests — Approve / Reject
 // ═══════════════════════════════════════════════════════
 
 window.approveRequest = async function(reqId) {
@@ -1351,7 +1713,6 @@ window.approveRequest = async function(reqId) {
     const fromEventId = req.FromEventID;
     const toEventId = req.ToEventID;
 
-    // ═══ 1. حدّث التسجيل في الحدث الأصلي ═══
     let fromRegId = null;
     try {
       const q1 = query(
@@ -1375,7 +1736,6 @@ window.approveRequest = async function(reqId) {
       console.warn('Update from registration error:', e);
     }
 
-    // ═══ 2. أنشئ/حدّث التسجيل في الحدث الجديد ═══
     let toRegId = null;
     try {
       const q2 = query(
@@ -1416,7 +1776,6 @@ window.approveRequest = async function(reqId) {
       console.error('Create/update to registration error:', e);
     }
 
-    // ═══ 3. حدّث الطلب ═══
     await updateDoc(doc(db, 'massChangeRequests', reqId), {
       Status: 'approved',
       ApprovedAt: new Date().toISOString(),
@@ -1425,7 +1784,6 @@ window.approveRequest = async function(reqId) {
       ToRegistrationID: toRegId
     });
 
-    // ═══ 4. إشعار للشخص ═══
     try {
       await addDoc(collection(db, 'notifications'), {
         Type: 'transfer_approved',
@@ -1469,14 +1827,12 @@ window.rejectRequest = async function(reqId) {
       return;
     }
 
-    // ═══ 1. حدّث الطلب ═══
     await updateDoc(doc(db, 'massChangeRequests', reqId), {
       Status: 'rejected',
       RejectedAt: new Date().toISOString(),
       RejectedBy: schUser.email
     });
 
-    // ═══ 2. إشعار للشخص ═══
     try {
       await addDoc(collection(db, 'notifications'), {
         Type: 'transfer_rejected',
