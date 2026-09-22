@@ -679,6 +679,250 @@ window.getRsvpPerson = () => rsvpPerson;
 window.getRegistration = getRegistration;
 window.getRegistrationStatus = getRegistrationStatus;
 
+// ═══════════════════════════════════════════════════════
+//   Transfer Request (طلب نقل)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ يفتح Modal طلب النقل
+ */
+async function openTransferModal(fromEventId, fromEventTitle) {
+  if (!rsvpPerson) {
+    alert('❌ لا يوجد ملف شخصي مرتبط بحسابك');
+    return;
+  }
+
+  // ⚡ تأكد إن الشخص مؤكد في الحدث الأصلي
+  const fromReg = await getRegistration(fromEventId);
+  if (!fromReg || fromReg.Status !== 'confirmed') {
+    alert('❌ يجب أن يكون حضورك مؤكدًا في الحدث الأصلي أولاً');
+    return;
+  }
+
+  // ⚡ اجلب كل الأحداث النشطة (ما عدا الحدث الأصلي)
+  let allEvents = [];
+  try {
+    const snap = await getDocs(collection(db, 'events'));
+    allEvents = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(e => String(e.Status || '').toLowerCase() === 'active')
+      .filter(e => e.id !== fromEventId);
+  } catch (err) {
+    console.error('❌ Load events for transfer:', err);
+    alert('خطأ في تحميل الأحداث: ' + err.message);
+    return;
+  }
+
+  // ⚡ استثني الأحداث اللي الشخص مؤكد فيها بالفعل
+  const myRegs = {};
+  try {
+    const q = query(
+      collection(db, 'eventRegistrations'),
+      where('PersonID', '==', rsvpPerson.id)
+    );
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      const r = d.data();
+      if (r.EventID) myRegs[r.EventID] = r.Status;
+    });
+  } catch (e) {}
+
+  const availableEvents = allEvents.filter(e => {
+    const status = myRegs[e.id];
+    return status !== 'confirmed' && status !== 'cancel_requested';
+  });
+
+  if (availableEvents.length === 0) {
+    alert('❌ لا يوجد أحداث أخرى متاحة للنقل إليها');
+    return;
+  }
+
+  // ⚡ عرض الأحداث بشكل منظم حسب النوع
+  const eventTypes = {};
+  try {
+    const typesSnap = await getDocs(collection(db, 'eventTypes'));
+    typesSnap.docs.forEach(d => {
+      eventTypes[d.id] = { id: d.id, ...d.data() };
+    });
+  } catch (e) {}
+
+  const optionsHtml = availableEvents.map(e => {
+    const type = eventTypes[e.EventTypeID];
+    const typeIcon = type ? (type.Icon || '📅') : '📅';
+    const typeName = type ? type.Name : '';
+
+    const type_e = String(e.Type || 'once').toLowerCase();
+    let dateStr = '';
+    if (type_e === 'weekly') {
+      const days = {Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
+      dateStr = 'كل ' + (days[e.DayOfWeek] || '');
+    } else if (e.Date) {
+      dateStr = e.Date;
+    }
+
+    return `<option value="${e.id}">${typeIcon} ${escapeHtml(e.Title || '')}${typeName ? ' — ' + escapeHtml(typeName) : ''} (${dateStr} ${e.Time || ''})</option>`;
+  }).join('');
+
+  // ⚡ افتح Modal
+  let modal = document.getElementById('transferRsvpModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'transferRsvpModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header">
+        <h2>🔄 طلب نقل الحضور</h2>
+        <button class="modal-close" onclick="closeTransferModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="transfer-info-box">
+          <div class="transfer-info-row">
+            <span class="transfer-info-label">من:</span>
+            <span class="transfer-info-value">${escapeHtml(fromEventTitle)}</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>إلى الحدث *</label>
+          <select id="transferToEvent" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;">
+            <option value="">-- اختر الحدث --</option>
+            ${optionsHtml}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>السبب (اختياري):</label>
+          <textarea id="transferReason" rows="3" placeholder="مثال: ظرف عائلي، تغيير في الخطة..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;"></textarea>
+        </div>
+
+        <div class="transfer-warning">
+          <p class="transfer-warning-title">⚠️ مهم</p>
+          <ul class="transfer-warning-list">
+            <li>• الطلب هيتحوّل للمسؤول (Admin/Owner) للمراجعة</li>
+            <li>• لو وافق: ينقل تسجيلك من الحدث الأصلي للجديد</li>
+            <li>• لو رفض: تسجيلك في الحدث الأصلي يبقى زي ما هو</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTransferModal()">إلغاء</button>
+        <button class="btn-primary" id="confirmTransferBtn">🔄 إرسال الطلب</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  document.getElementById('confirmTransferBtn').onclick = async () => {
+    const toEventId = document.getElementById('transferToEvent')?.value;
+    const reason = document.getElementById('transferReason')?.value.trim() || '';
+
+    if (!toEventId) {
+      alert('⚠️ اختر الحدث اللي عايز تنقل إليه');
+      return;
+    }
+
+    await submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason);
+  };
+}
+
+/**
+ * ⚡ إرسال طلب النقل
+ */
+async function submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason) {
+  const btn = document.getElementById('confirmTransferBtn');
+  const originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+
+  try {
+    // ⚡ اجلب الحدث الجديد
+    const toEventDoc = await getDoc(doc(db, 'events', toEventId));
+    if (!toEventDoc.exists()) {
+      alert('❌ الحدث الجديد غير موجود');
+      if (btn) { btn.disabled = false; btn.textContent = originalText; }
+      return;
+    }
+    const toEvent = { id: toEventDoc.id, ...toEventDoc.data() };
+
+    // ⚡ احصل على تاريخ الحدثين
+    const fromEventDoc = await getDoc(doc(db, 'events', fromEventId));
+    const fromEvent = fromEventDoc.exists() ? fromEventDoc.data() : {};
+
+    // ⚡ أنشئ الطلب
+    const reqData = {
+      RequesterPersonID: rsvpPerson.id,
+      RequesterName: getPersonFullName(rsvpPerson),
+      RequesterEmail: rsvpUser.email,
+
+      FromEventID: fromEventId,
+      FromEventTitle: fromEventTitle,
+      FromDate: fromEvent.Date || '',
+
+      ToEventID: toEventId,
+      ToEventTitle: toEvent.Title || '',
+      ToDate: toEvent.Date || '',
+
+      Reason: reason,
+      Status: 'pending',
+
+      CreatedAt: new Date().toISOString(),
+      ApprovedAt: null,
+      ApprovedBy: null,
+      RejectedAt: null,
+      RejectedBy: null
+    };
+
+    const reqRef = await addDoc(collection(db, 'massChangeRequests'), reqData);
+
+    // ⚡ إشعار للـAdmin
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_request',
+        Title: `🔄 طلب نقل حضور`,
+        Body: `${getPersonFullName(rsvpPerson)} طلب نقل حضوره:\nمن: ${fromEventTitle}\nإلى: ${toEvent.Title || ''}\n\nالسبب: ${reason || 'لم يُذكر'}`,
+        RelatedEventID: toEventId,
+        RelatedPersonID: rsvpPerson.id,
+        RelatedRequestID: reqRef.id,
+        TargetType: 'admins',
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Admin notification error:', e);
+    }
+
+    alert('✅ تم إرسال طلب النقل بنجاح\n\nسيتم مراجعته من المسؤول.');
+    closeTransferModal();
+    return true;
+
+  } catch (err) {
+    console.error('❌ submitTransferRequest error:', err);
+    alert('خطأ: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return false;
+  }
+}
+
+function closeTransferModal() {
+  const modal = document.getElementById('transferRsvpModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// ═══ Expose ═══
+window.openTransferModal = openTransferModal;
+window.closeTransferModal = closeTransferModal;
+window.submitTransferRequest = submitTransferRequest;
+
 // ═══ Auto-init ═══
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
