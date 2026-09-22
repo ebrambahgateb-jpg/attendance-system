@@ -98,7 +98,7 @@ export const TABS_REGISTRY = [
     icon: '📈',
     workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    handler: null,
+    handler: 'loadReportsLazy',
     isPage: false
   },
   {
