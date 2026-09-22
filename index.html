@@ -9,40 +9,56 @@
 </head>
 <body>
 
-  <!-- شاشة تسجيل الدخول -->
+  <!-- ═══ الخلفية ═══ -->
+  <div class="bg-image" id="bgImage"></div>
+  <div class="bg-overlay"></div>
+
+  <!-- ═══ شاشة تسجيل الدخول ═══ -->
   <div id="loginScreen" class="screen active">
-    <div class="login-card">
-      <div class="logo">
-        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="3" y="14" width="7" height="7" rx="1"/>
-          <path d="M14 14h3v3h-3zM19 19h2v2h-2zM14 19h2v2h-2z"/>
-        </svg>
+    <div class="login-wrapper">
+
+      <!-- ═══ اللوجو + اسم المؤسسة ═══ -->
+      <div class="brand-area">
+        <div class="brand-logo" id="brandLogo">
+          <!-- اللوجو الافتراضي (SVG) — يتشال لو في لوجو من الإعدادات -->
+          <svg width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="default-logo">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <path d="M14 14h3v3h-3zM19 19h2v2h-2zM14 19h2v2h-2z"/>
+          </svg>
+        </div>
+        <h1 class="brand-name" id="brandName">QR Punch</h1>
+        <p class="brand-subtitle" id="brandSubtitle">سجّل دخولك لتتبع حضورك</p>
       </div>
-      <h1>QR Punch</h1>
-      <p class="subtitle">سجّل دخولك لتتبع حضورك</p>
 
-      <button id="googleSignInBtn" class="google-btn">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" height="20">
-        Sign in with Google
-      </button>
+      <!-- ═══ كارت تسجيل الدخول ═══ -->
+      <div class="login-card">
+        <button id="googleSignInBtn" class="google-btn">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" height="20">
+          <span>تسجيل الدخول بـ Google</span>
+        </button>
 
-      <div id="loginMessage" class="message"></div>
+        <div id="loginMessage" class="message"></div>
+      </div>
+
+      <!-- ═══ Footer ═══ -->
+      <p class="page-footer" id="pageFooter"></p>
+
     </div>
   </div>
 
-  <!-- شاشة اختيار الدور -->
+  <!-- ═══ شاشة اختيار الدور/الواجهة ═══ -->
   <div id="roleScreen" class="screen">
     <div class="role-card">
-      <h2>اختر الدور</h2>
-      <p class="subtitle">حسابك له أكثر من دور، اختر الدور الذي تريد الدخول به</p>
+      <h2>اختر الواجهة</h2>
+      <p class="subtitle">حسابك له أكثر من واجهة، اختر الواجهة التي تريد الدخول بها</p>
       <div id="rolesList" class="roles-list"></div>
       <button id="logoutBtn" class="btn-secondary">تسجيل خروج</button>
     </div>
   </div>
 
-  <!-- شاشة رفض الدخول -->
+  <!-- ═══ شاشة رفض الدخول ═══ -->
   <div id="deniedScreen" class="screen">
     <div class="denied-card">
       <div class="denied-icon">🚫</div>
@@ -52,7 +68,7 @@
     </div>
   </div>
 
-  <!-- شاشة تعطيل الحساب -->
+  <!-- ═══ شاشة تعطيل الحساب ═══ -->
   <div id="disabledScreen" class="screen">
     <div class="denied-card">
       <div class="denied-icon">⛔</div>
@@ -62,8 +78,102 @@
     </div>
   </div>
 
-  <!-- Firebase SDK + Config -->
+  <!-- ═══ Firebase SDK + Config ═══ -->
   <script type="module" src="js/firebase-config.js"></script>
+
+  <!-- ═══ Pre-Auth Settings Loader ═══ -->
+  <script type="module">
+    import { db, COLLECTIONS, SETTINGS_DOC } from './js/firebase-config.js';
+    import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+
+    // ⚡ القيم الافتراضية
+    const DEFAULTS = {
+      SystemName: 'QR Punch',
+      OrganizationName: '',
+      Subtitle: 'سجّل دخولك لتتبع حضورك',
+      LogoUrl: '',
+      BgImageUrl: '',
+      FooterText: ''
+    };
+
+    async function loadPublicSettings() {
+      let settings = { ...DEFAULTS };
+
+      try {
+        const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+        const snap = await getDoc(settingsRef);
+
+        if (snap.exists()) {
+          const data = snap.data();
+          settings = {
+            SystemName: data.SystemName || DEFAULTS.SystemName,
+            OrganizationName: data.OrganizationName || '',
+            Subtitle: data.LoginSubtitle || DEFAULTS.Subtitle,
+            LogoUrl: data.ThemeLogoUrl || '',
+            BgImageUrl: data.ThemeBgImageUrl || '',
+            FooterText: data.FooterText || ''
+          };
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not load settings:', err.message);
+      }
+
+      applySettings(settings);
+    }
+
+    function applySettings(s) {
+      // ═══ Title ═══
+      document.title = s.SystemName || DEFAULTS.SystemName;
+
+      // ═══ Logo ═══
+      const brandLogo = document.getElementById('brandLogo');
+      if (brandLogo) {
+        if (s.LogoUrl) {
+          brandLogo.innerHTML = `<img src="${s.LogoUrl}" alt="Logo" class="logo-image" />`;
+          brandLogo.classList.add('has-image');
+        } else {
+          brandLogo.classList.remove('has-image');
+        }
+      }
+
+      // ═══ Name ═══
+      const brandName = document.getElementById('brandName');
+      if (brandName) {
+        // ⚡ اسم المؤسسة لو موجود، وإلا اسم النظام
+        brandName.textContent = s.OrganizationName || s.SystemName || DEFAULTS.SystemName;
+      }
+
+      // ═══ Subtitle ═══
+      const brandSubtitle = document.getElementById('brandSubtitle');
+      if (brandSubtitle) {
+        brandSubtitle.textContent = s.Subtitle || DEFAULTS.Subtitle;
+      }
+
+      // ═══ Background ═══
+      const bgImage = document.getElementById('bgImage');
+      if (bgImage && s.BgImageUrl) {
+        bgImage.style.backgroundImage = `url('${s.BgImageUrl}')`;
+        bgImage.classList.add('has-image');
+      }
+
+      // ═══ Footer ═══
+      const pageFooter = document.getElementById('pageFooter');
+      if (pageFooter) {
+        if (s.FooterText) {
+          pageFooter.textContent = s.FooterText;
+        } else if (s.OrganizationName) {
+          pageFooter.textContent = `© ${new Date().getFullYear()} ${s.OrganizationName}`;
+        } else {
+          pageFooter.textContent = '';
+        }
+      }
+    }
+
+    // ⚡ نفّذ بمجرد ما الصفحة تفتح
+    loadPublicSettings();
+  </script>
+
+  <!-- ═══ Auth Logic ═══ -->
   <script type="module" src="js/auth.js"></script>
 </body>
 </html>
