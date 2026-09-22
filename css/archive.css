@@ -1,0 +1,302 @@
+/* ═══════════════════════════════════════════
+   Archive (الأرشيف) Styles
+   ═══════════════════════════════════════════ */
+
+.arch-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ═══ Stats ═══ */
+.arch-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.arch-stat {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arch-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.arch-stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ═══ Filters ═══ */
+.arch-filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  background: var(--card-bg);
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  align-items: flex-end;
+}
+
+.arch-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 130px;
+}
+
+.arch-filter-group label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.arch-filter-group input,
+.arch-filter-group select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.arch-filter-group input:focus,
+.arch-filter-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ═══ Results ═══ */
+.arch-results {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.arch-results-header {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.arch-results-header h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+/* ═══ List ═══ */
+.arch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ═══ Card ═══ */
+.arch-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  border-right: 4px solid #64748b;
+  opacity: 0.9;
+  transition: all 0.2s;
+}
+
+.arch-card:hover {
+  opacity: 1;
+  border-color: var(--primary);
+}
+
+.arch-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.arch-card-icon {
+  font-size: 22px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.arch-card-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.arch-card-title-wrap h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px 0;
+  word-break: break-word;
+}
+
+.arch-card-type {
+  display: inline-block;
+  font-size: 11px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.arch-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.arch-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.arch-info-icon {
+  width: 18px;
+  text-align: center;
+}
+
+.arch-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+/* ═══ Pagination ═══ */
+.arch-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.arch-page-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s;
+  min-width: 36px;
+}
+
+.arch-page-btn:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.arch-page-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.arch-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ═══ Empty ═══ */
+.arch-empty {
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.arch-empty-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.arch-empty h3 {
+  font-size: 18px;
+  color: var(--text);
+  margin: 0 0 8px 0;
+}
+
+.arch-empty p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .arch-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .arch-stat {
+    padding: 12px;
+  }
+
+  .arch-stat-value {
+    font-size: 20px;
+  }
+
+  .arch-filters {
+    flex-direction: column;
+  }
+
+  .arch-filter-group {
+    width: 100%;
+  }
+
+  .arch-card {
+    padding: 12px;
+  }
+
+  .arch-card-actions {
+    flex-direction: column;
+  }
+
+  .arch-card-actions button {
+    width: 100%;
+  }
+}
