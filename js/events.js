@@ -260,12 +260,17 @@ function renderEventsGrid() {
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
-    // ⚡ قواعد التسجيل — عرض عدد الأشخاص الملتزمين
+    // ⚡ قواعد التسجيل — 3 حالات
     const regScope = String(event.RegistrationScope || 'all').toLowerCase();
     const regPersonIds = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
-    const regInfo = regScope === 'all'
-      ? '<span class="reg-badge reg-all">🌍 إلزامي للكل</span>'
-      : `<span class="reg-badge reg-specific">👥 إلزامي لقائمة (${regPersonIds.length})</span>`;
+    let regInfo = '';
+    if (regScope === 'optional') {
+      regInfo = '<span class="reg-badge reg-optional">🟢 اختياري</span>';
+    } else if (regScope === 'specific') {
+      regInfo = `<span class="reg-badge reg-specific">👥 إلزامي لقائمة (${regPersonIds.length})</span>`;
+    } else {
+      regInfo = '<span class="reg-badge reg-all">🌍 إلزامي للكل</span>';
+    }
 
     const footerHtml = isView
       ? `<div class="event-card-footer">
@@ -492,6 +497,11 @@ function openEventModal(eventId) {
               <input type="radio" name="regScope" value="specific" ${regScope === 'specific' ? 'checked' : ''} />
               <span>👥 إلزامي لقائمة محددة</span>
               <small>اختر أشخاص معينين فقط</small>
+            </label>
+            <label class="location-mode-option">
+              <input type="radio" name="regScope" value="optional" ${regScope === 'optional' ? 'checked' : ''} />
+              <span>🟢 اختياري (بدون إلزام)</span>
+              <small>أي شخص يقدر يسجّل — بدون إلزام أو غياب</small>
             </label>
           </div>
 
@@ -732,6 +742,7 @@ async function saveEvent() {
     }
   }
 
+  // ⚡ قواعد التسجيل
   let regScope = 'all';
   let regPersonIds = [];
   const regRadio = document.querySelector('input[name="regScope"]:checked');
@@ -1186,27 +1197,6 @@ async function autoDeactivateOnceEvents() {
     return { deactivated: 0, error: err.message };
   }
 }
-
-// ═══════════════════════════════════════════════════════
-//   RSVP Actions (Handlers) — Backwards compatibility
-//   ⚡ الكود ده مش بيتستخدم دلوقتي — الـRSVP في my-events.js
-// ═══════════════════════════════════════════════════════
-
-window.handleRsvpConfirm = async function(eventId, occurrenceDate) {
-  if (typeof window.confirmRsvp === 'function') {
-    const result = await window.confirmRsvp(eventId);
-    if (result) {
-      const area = document.getElementById('contentArea');
-      await loadEventsPage(area, currentMode);
-    }
-  }
-};
-
-window.handleRsvpCancel = function(eventId, eventTitle, occurrenceDate) {
-  if (typeof window.openCancelModal === 'function') {
-    window.openCancelModal(eventId, eventTitle, occurrenceDate);
-  }
-};
 
 // ═══════════════════════════════════════════════════════
 //   Expose to window
