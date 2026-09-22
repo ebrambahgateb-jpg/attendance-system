@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   My Events (حضوري)
-//   ⚡ يعرض للمستخدم أحداثه + RSVP + سجل حضوره
+//   My Events (حضوري) — مع دعم الأحداث الاختيارية
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -24,7 +23,7 @@ let mePerson = null;
 let meEvents = [];
 let meEventTypes = [];
 let meLocations = [];
-let meRegistrations = {};  // { eventId: registration }
+let meRegistrations = {};
 let meAttendance = [];
 let meSettings = {};
 
@@ -53,7 +52,6 @@ async function loadMyEventsPage(area) {
       return;
     }
 
-    // ⚡ اجلب الشخص
     mePerson = null;
     const personId = meUser.personId || meUser.account?.PersonID;
 
@@ -87,7 +85,6 @@ async function loadMyEventsPage(area) {
       return;
     }
 
-    // ⚡ اجلب كل البيانات بشكل متوازي
     const [
       eventsSnap,
       eventTypesSnap,
@@ -116,7 +113,6 @@ async function loadMyEventsPage(area) {
     meAttendance = attSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     meSettings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ خزّن التسجيلات بـeventId
     meRegistrations = {};
     regsSnap.docs.forEach(d => {
       const reg = { id: d.id, ...d.data() };
@@ -143,10 +139,8 @@ function renderMyEventsPage(area) {
     mePerson.FirstName, mePerson.SecondName, mePerson.ThirdName, mePerson.FourthName
   ].filter(Boolean).join(' ');
 
-  // ⚡ صّنّف الأحداث
-  const { pending, confirmed, cancelRequested, cancelled } = categorizeEvents();
+  const { pending, confirmed, cancelRequested, cancelled, optional } = categorizeEvents();
 
-  // ⚡ إحصائيات
   const stats = {
     attended: meAttendance.length,
     confirmed: confirmed.length,
@@ -154,7 +148,6 @@ function renderMyEventsPage(area) {
     total: meEvents.filter(e => String(e.Status || '').toLowerCase() === 'active').length
   };
 
-  // ⚡ سجل الحضور (آخر 10)
   const recentAttendance = [...meAttendance]
     .sort((a, b) => {
       const da = parseDate(a.ScanTime) || new Date(0);
@@ -171,7 +164,6 @@ function renderMyEventsPage(area) {
         <p>هنا هتلاقي كل حاجة تخص حضورك</p>
       </div>
 
-      <!-- ═══ إحصائياتي ═══ -->
       <div class="me-stats">
         <div class="me-stat">
           <span class="me-stat-value">${stats.attended}</span>
@@ -191,7 +183,6 @@ function renderMyEventsPage(area) {
         </div>
       </div>
 
-      <!-- ═══ أحداث محتاجة تأكيد ═══ -->
       ${pending.length > 0 ? `
         <div class="me-section">
           <h3 class="me-section-title">
@@ -204,7 +195,6 @@ function renderMyEventsPage(area) {
         </div>
       ` : ''}
 
-      <!-- ═══ أحداث في انتظار موافقة الإلغاء ═══ -->
       ${cancelRequested.length > 0 ? `
         <div class="me-section">
           <h3 class="me-section-title">
@@ -217,7 +207,6 @@ function renderMyEventsPage(area) {
         </div>
       ` : ''}
 
-      <!-- ═══ أحداث مؤكدها ═══ -->
       ${confirmed.length > 0 ? `
         <div class="me-section">
           <h3 class="me-section-title">
@@ -230,7 +219,18 @@ function renderMyEventsPage(area) {
         </div>
       ` : ''}
 
-      <!-- ═══ أحداث ملغية ═══ -->
+      ${optional.length > 0 ? `
+        <div class="me-section">
+          <h3 class="me-section-title">
+            🟢 أحداث اختيارية (مفتوحة للجميع)
+            <span class="me-section-count optional">${optional.length}</span>
+          </h3>
+          <div class="me-list">
+            ${optional.map(e => renderEventCard(e, 'optional')).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       ${cancelled.length > 0 ? `
         <div class="me-section">
           <h3 class="me-section-title">
@@ -243,8 +243,7 @@ function renderMyEventsPage(area) {
         </div>
       ` : ''}
 
-      <!-- ═══ لو مفيش أي أحداث ═══ -->
-      ${pending.length === 0 && confirmed.length === 0 && cancelRequested.length === 0 && cancelled.length === 0 ? `
+      ${pending.length === 0 && confirmed.length === 0 && cancelRequested.length === 0 && cancelled.length === 0 && optional.length === 0 ? `
         <div class="me-empty">
           <div class="me-empty-icon">🎯</div>
           <h2>مفيش أحداث لسه</h2>
@@ -252,7 +251,6 @@ function renderMyEventsPage(area) {
         </div>
       ` : ''}
 
-      <!-- ═══ سجل الحضور ═══ -->
       <div class="me-section">
         <h3 class="me-section-title">📅 سجل الحضور (آخر 10)</h3>
         ${recentAttendance.length > 0 ? `
@@ -279,15 +277,35 @@ function categorizeEvents() {
   const confirmed = [];
   const cancelRequested = [];
   const cancelled = [];
+  const optional = [];
 
   const activeEvents = meEvents.filter(e => String(e.Status || '').toLowerCase() === 'active');
 
   for (const event of activeEvents) {
-    if (!isPersonObligated(event)) continue;
     if (!isEventUpcoming(event)) continue;
 
     const reg = meRegistrations[event.id];
     const status = reg?.Status || 'pending';
+    const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+    // ⚡ الأحداث الاختيارية
+    if (scope === 'optional') {
+      // ⚡ لو الشخص مسجّل فيها → يبقى مؤكد أو ملغي
+      if (status === 'confirmed') {
+        confirmed.push(event);
+      } else if (status === 'cancel_requested') {
+        cancelRequested.push(event);
+      } else if (status === 'cancelled') {
+        cancelled.push(event);
+      } else {
+        // ⚡ pending أو مفيش تسجيل → يحط في optional
+        optional.push(event);
+      }
+      continue;
+    }
+
+    // ⚡ الأحداث الإلزامية (all/specific)
+    if (!isPersonObligated(event)) continue;
 
     if (status === 'confirmed') {
       confirmed.push(event);
@@ -300,7 +318,6 @@ function categorizeEvents() {
     }
   }
 
-  // ⚡ ترتيب حسب التاريخ (الأقرب أولاً)
   const sortByDate = (a, b) => {
     const da = getEventSortDate(a);
     const db2 = getEventSortDate(b);
@@ -311,15 +328,11 @@ function categorizeEvents() {
   confirmed.sort(sortByDate);
   cancelRequested.sort(sortByDate);
   cancelled.sort(sortByDate);
+  optional.sort(sortByDate);
 
-  return { pending, confirmed, cancelRequested, cancelled };
+  return { pending, confirmed, cancelRequested, cancelled, optional };
 }
 
-/**
- * ⚡ هل الشخص ملتزم بالحدث؟
- * - RegistrationScope = 'all' → كل الناس
- * - RegistrationScope = 'specific' + الشخص في القائمة
- */
 function isPersonObligated(event) {
   const scope = String(event.RegistrationScope || 'all').toLowerCase();
 
@@ -333,20 +346,11 @@ function isPersonObligated(event) {
   return false;
 }
 
-/**
- * ⚡ هل الحدث upcoming؟
- * - once: التاريخ + الوقت في المستقبل (خلال 30 يوم)
- * - weekly: دائمًا upcoming
- */
 function isEventUpcoming(event) {
   const now = new Date();
-
   const type = String(event.Type || 'once').toLowerCase();
 
-  if (type === 'weekly') {
-    // ⚡ للأسبوعي: نتأكد إن الموعد الجاي خلال 30 يوم (ده دائمًا لأن الموعد بيتكرر أسبوعيًا)
-    return true;
-  }
+  if (type === 'weekly') return true;
 
   if (!event.Date) return false;
 
@@ -357,7 +361,6 @@ function isEventUpcoming(event) {
 
   if (end < now) return false;
 
-  // ⚡ خلال 30 يوم
   const diffDays = (end - now) / (1000 * 60 * 60 * 24);
   return diffDays <= 30;
 }
@@ -369,7 +372,6 @@ function getEventSortDate(event) {
     return new Date(event.Date + 'T00:00:00').getTime();
   }
 
-  // ⚡ weekly: نرجع التاريخ القادم من اليوم
   if (type === 'weekly' && event.DayOfWeek) {
     const dayMap = { Saturday: 6, Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5 };
     const targetDay = dayMap[event.DayOfWeek];
@@ -399,7 +401,6 @@ function renderEventCard(event, status) {
   const endTime = getEventEndTime(event);
   const timeInfo = `${event.Time || '-'} - ${endTime}`;
 
-  // ⚡ التاريخ
   let dateInfo = '';
   if (type === 'weekly') {
     const dayLabel = DAYS_OF_WEEK[event.DayOfWeek] || '';
@@ -408,13 +409,9 @@ function renderEventCard(event, status) {
     dateInfo = formatDate(event.Date);
   }
 
-  // ⚡ المكان
   const locInfo = getLocationInfo(event);
-
-  // ⚡ الـregistration
   const reg = meRegistrations[event.id];
 
-  // ⚡ الأزرار حسب الحالة
   let actionsHtml = '';
 
   if (status === 'pending') {
@@ -447,6 +444,15 @@ function renderEventCard(event, status) {
     actionsHtml = `
       <div class="me-status-banner cancelled">
         ❌ تم إلغاء حضورك
+      </div>
+    `;
+  } else if (status === 'optional') {
+    actionsHtml = `
+      <div class="me-status-banner optional">
+        🟢 حدث اختياري — يمكنك التسجيل
+      </div>
+      <div class="me-actions">
+        <button class="me-btn me-btn-confirm" onclick="meConfirmRsvp('${event.id}')">✅ سجّل حضورك</button>
       </div>
     `;
   }
@@ -542,7 +548,7 @@ window.meRevertCancel = async function(eventId) {
 };
 
 function setupMyEventsHandlers() {
-  // ⚡ بنستخدم inline onclick، فمفيش حاجة هنا
+  // ⚡ بنستخدم inline onclick
 }
 
 // ═══════════════════════════════════════════════════════
