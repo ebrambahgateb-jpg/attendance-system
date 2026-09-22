@@ -1,0 +1,431 @@
+/* ═══════════════════════════════════════════
+   Dark Mode Styles
+   ═══════════════════════════════════════════ */
+
+/* ═══ Root Variables — Light (default) ═══ */
+:root {
+  --dm-transition: 0.25s ease;
+
+  --dm-bg: #f1f5f9;
+  --dm-card-bg: #ffffff;
+  --dm-text: #1e293b;
+  --dm-text-muted: #64748b;
+  --dm-border: #e2e8f0;
+  --dm-sidebar-bg: #0f172a;
+  --dm-sidebar-text: #cbd5e1;
+  --dm-sidebar-active: #1e293b;
+
+  --dm-shadow: rgba(0, 0, 0, 0.08);
+  --dm-hover: #f8fafc;
+  --dm-input-bg: #ffffff;
+  --dm-input-border: #cbd5e1;
+  --dm-input-focus: rgba(59, 130, 246, 0.15);
+}
+
+/* ═══ Dark Mode Variables ═══ */
+html[data-theme="dark"] {
+  --dm-bg: #0f172a;
+  --dm-card-bg: #1e293b;
+  --dm-text: #f1f5f9;
+  --dm-text-muted: #94a3b8;
+  --dm-border: #334155;
+  --dm-sidebar-bg: #020617;
+  --dm-sidebar-text: #cbd5e1;
+  --dm-sidebar-active: #1e293b;
+
+  --dm-shadow: rgba(0, 0, 0, 0.4);
+  --dm-hover: #334155;
+  --dm-input-bg: #0f172a;
+  --dm-input-border: #475569;
+  --dm-input-focus: rgba(96, 165, 250, 0.25);
+}
+
+/* ═══════════════════════════════════════════
+   Apply Variables to Body
+   ═══════════════════════════════════════════ */
+
+html {
+  transition: background-color var(--dm-transition);
+}
+
+body {
+  background: var(--dm-bg) !important;
+  color: var(--dm-text);
+  transition: background-color var(--dm-transition), color var(--dm-transition);
+}
+
+/* ═══ Cards & Containers ═══ */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .modal-content,
+html[data-theme="dark"] .dashboard-card,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .event-card,
+html[data-theme="dark"] .me-card,
+html[data-theme="dark"] .sch-card,
+html[data-theme="dark"] .sch-month-wrapper,
+html[data-theme="dark"] .sch-week-col,
+html[data-theme="dark"] .sch-loc-card,
+html[data-theme="dark"] .sch-request-card,
+html[data-theme="dark"] .sch-template-card,
+html[data-theme="dark"] .arch-card,
+html[data-theme="dark"] .logs-results,
+html[data-theme="dark"] .rpt-section,
+html[data-theme="dark"] .rpt-stat,
+html[data-theme="dark"] .att-cancel-item,
+html[data-theme="dark"] .people-card,
+html[data-theme="dark"] .account-card,
+html[data-theme="dark"] .settings-group {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+  color: var(--dm-text) !important;
+  transition: background-color var(--dm-transition), border-color var(--dm-transition);
+}
+
+/* ═══ Sidebar ═══ */
+html[data-theme="dark"] .sidebar {
+  background: var(--dm-sidebar-bg) !important;
+}
+
+html[data-theme="dark"] .nav-item {
+  color: var(--dm-sidebar-text) !important;
+}
+
+html[data-theme="dark"] .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+html[data-theme="dark"] .nav-item.active {
+  background: var(--dm-sidebar-active) !important;
+  color: #fff !important;
+}
+
+/* ═══ Topbar ═══ */
+html[data-theme="dark"] .topbar {
+  background: var(--dm-card-bg) !important;
+  border-bottom-color: var(--dm-border) !important;
+  color: var(--dm-text) !important;
+}
+
+/* ═══ Text ═══ */
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html[data-theme="dark"] strong {
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] span,
+html[data-theme="dark"] label,
+html[data-theme="dark"] small {
+  color: inherit;
+}
+
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .text-muted {
+  color: var(--dm-text-muted) !important;
+}
+
+/* ═══ Inputs ═══ */
+html[data-theme="dark"] input:not([type="color"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  background: var(--dm-input-bg) !important;
+  border-color: var(--dm-input-border) !important;
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: var(--dm-text-muted) !important;
+}
+
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px var(--dm-input-focus) !important;
+}
+
+/* ═══ Tables ═══ */
+html[data-theme="dark"] table {
+  color: var(--dm-text);
+}
+
+html[data-theme="dark"] table thead {
+  background: var(--dm-hover) !important;
+}
+
+html[data-theme="dark"] table th {
+  color: var(--dm-text-muted) !important;
+  border-bottom-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] table td {
+  border-bottom-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] table tr:hover {
+  background: var(--dm-hover) !important;
+}
+
+/* ═══ Modals ═══ */
+html[data-theme="dark"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.75) !important;
+}
+
+html[data-theme="dark"] .modal-header {
+  border-bottom-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .modal-footer {
+  border-top-color: var(--dm-border) !important;
+}
+
+/* ═══ Empty States ═══ */
+html[data-theme="dark"] .sch-empty,
+html[data-theme="dark"] .events-empty,
+html[data-theme="dark"] .me-empty,
+html[data-theme="dark"] .arch-empty,
+html[data-theme="dark"] .logs-empty,
+html[data-theme="dark"] .notif-empty {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+  color: var(--dm-text-muted) !important;
+}
+
+/* ═══ Buttons — Secondary & Icon ═══ */
+html[data-theme="dark"] .btn-secondary {
+  background: var(--dm-hover) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .btn-secondary:hover {
+  background: var(--dm-input-bg) !important;
+}
+
+html[data-theme="dark"] .btn-icon {
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .btn-icon:hover {
+  background: var(--dm-hover) !important;
+}
+
+/* ═══ Filter Buttons ═══ */
+html[data-theme="dark"] .filter-btn,
+html[data-theme="dark"] .sch-view-btn,
+html[data-theme="dark"] .sch-today-btn {
+  background: var(--dm-card-bg) !important;
+  color: var(--dm-text-muted) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .filter-btn.active,
+html[data-theme="dark"] .sch-view-btn.active {
+  background: #3b82f6 !important;
+  color: #fff !important;
+}
+
+/* ═══ Topbar Notifications ═══ */
+html[data-theme="dark"] .notif-bell-btn {
+  background: var(--dm-card-bg) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .notif-item {
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] .notif-item.unread {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+html[data-theme="dark"] .notif-item:hover {
+  background: var(--dm-hover) !important;
+}
+
+/* ═══ Workspace Switcher ═══ */
+html[data-theme="dark"] .ws-btn {
+  background: var(--dm-card-bg) !important;
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .ws-dropdown {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+  box-shadow: 0 10px 40px var(--dm-shadow) !important;
+}
+
+html[data-theme="dark"] .ws-item {
+  color: var(--dm-text) !important;
+  border-bottom-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .ws-item:hover:not(:disabled) {
+  background: var(--dm-hover) !important;
+}
+
+html[data-theme="dark"] .ws-item.active {
+  background: var(--dm-hover) !important;
+}
+
+html[data-theme="dark"] .ws-item-icon {
+  background: var(--dm-hover) !important;
+  border-color: var(--dm-border) !important;
+}
+
+/* ═══ Schedule / Calendar ═══ */
+html[data-theme="dark"] .sch-month-cell {
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .sch-month-cell:hover {
+  background: var(--dm-hover) !important;
+}
+
+html[data-theme="dark"] .sch-month-cell.other-month {
+  background: rgba(0, 0, 0, 0.2) !important;
+  opacity: 0.4;
+}
+
+html[data-theme="dark"] .sch-month-cell.today {
+  background: rgba(245, 158, 11, 0.1) !important;
+}
+
+html[data-theme="dark"] .sch-month-day-num {
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] .sch-month-header {
+  background: var(--dm-hover) !important;
+}
+
+html[data-theme="dark"] .sch-month-header-cell {
+  color: var(--dm-text) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .sch-month-event {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .sch-month-event-title {
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] .sch-week-col {
+  background: var(--dm-card-bg) !important;
+}
+
+html[data-theme="dark"] .sch-week-col-header {
+  background: var(--dm-hover) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .sch-week-event {
+  background: var(--dm-hover) !important;
+  border-color: var(--dm-border) !important;
+}
+
+/* ═══ Toasts / Alerts ═══ */
+html[data-theme="dark"] .sync-result {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+}
+
+html[data-theme="dark"] .cancel-warning,
+html[data-theme="dark"] .transfer-warning {
+  background: rgba(245, 158, 11, 0.1) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+/* ═══════════════════════════════════════════
+   Dark Mode Toggle Button
+   ═══════════════════════════════════════════ */
+
+.dark-mode-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  color: var(--text);
+  position: relative;
+  overflow: hidden;
+}
+
+.dark-mode-toggle:hover {
+  background: var(--bg);
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
+.dark-mode-toggle .dm-icon {
+  display: inline-block;
+  transition: transform 0.4s ease;
+  line-height: 1;
+}
+
+html[data-theme="dark"] .dark-mode-toggle {
+  background: var(--dm-card-bg) !important;
+  border-color: var(--dm-border) !important;
+  color: var(--dm-text) !important;
+}
+
+html[data-theme="dark"] .dark-mode-toggle:hover {
+  background: var(--dm-hover) !important;
+  border-color: #3b82f6 !important;
+}
+
+html[data-theme="dark"] .dark-mode-toggle .dm-icon {
+  transform: rotate(360deg);
+}
+
+/* ═══ Smooth Transition on Theme Change ═══ */
+
+html.theme-transitioning,
+html.theme-transitioning * {
+  transition: background-color 0.25s ease,
+              color 0.25s ease,
+              border-color 0.25s ease,
+              box-shadow 0.25s ease !important;
+}
+
+/* ═══════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .dark-mode-toggle {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Print — دايماً Light Mode للطباعة
+   ═══════════════════════════════════════════ */
+
+@media print {
+  html[data-theme="dark"] * {
+    background: #fff !important;
+    color: #000 !important;
+  }
+}
