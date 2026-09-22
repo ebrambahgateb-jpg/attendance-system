@@ -308,7 +308,7 @@ window.clearAllNotifications = async function() {
 // ═══════════════════════════════════════════════════════
 
 function getTypeIcon(type) {
-  const map = {
+    const map = {
     event_added: '🎯',
     event_updated: '✏️',
     event_cancelled: '❌',
@@ -316,7 +316,10 @@ function getTypeIcon(type) {
     person_cancelled_admin: '📢',
     person_cancelled_member: '⚠️',
     person_cancelled_public: '🎟️',
-    rsvp_request: '📝'
+    rsvp_request: '📝',
+    transfer_request: '🔄',      // ⚡ جديد
+    transfer_approved: '✅',      // ⚡ جديد
+    transfer_rejected: '❌'       // ⚡ جديد
   };
   return map[type] || '🔔';
 }
