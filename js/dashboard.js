@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   Dashboard (Firestore)
+//   Dashboard (Firestore) — with TabPermissions support
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -27,8 +27,8 @@ import {
   TABS_REGISTRY,
   WORKSPACES,
   getTabById,
-  getTabsForWorkspace,
-  getWorkspaceById
+  getWorkspaceById,
+  OWNER_ONLY_TAB_IDS
 } from './tabs-config.js';
 
 // ═══ Global State ═══
@@ -36,6 +36,7 @@ let dashboardUser = null;
 let currentWorkspace = null;
 let currentPage = 'dashboard';
 let dashInitCache = null;
+let tabPermissions = null;
 
 // ═══ Initialize on Load ═══
 document.addEventListener('DOMContentLoaded', async () => {
@@ -56,6 +57,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   loadThemeFromStorage();
 
+  // ⚡ اجلب TabPermissions قبل ما نرسم الـSidebar
+  await loadTabPermissions();
+
   autoDeactivateOnceEventsSafe();
 
   renderUserInfo();
@@ -67,6 +71,75 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.innerWidth > 768) closeSidebar();
   });
 });
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Load Tab Permissions from Firestore
+// ═══════════════════════════════════════════════════════
+
+async function loadTabPermissions() {
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+    const snap = await getDoc(settingsRef);
+
+    if (snap.exists()) {
+      const data = snap.data();
+      tabPermissions = data.TabPermissions || null;
+    }
+  } catch (e) {
+    console.warn('⚠️ Load tab permissions error:', e);
+    tabPermissions = null;
+  }
+}
+
+/**
+ * ⚡ فلتر التابات حسب الواجهة + الصلاحيات المحفوظة
+ * - Owner: كل التابات (بدون فلترة)
+ * - User/Admin/Scanner: التابات المسموح بيها في TabPermissions
+ */
+function getTabsForRole() {
+  const ws = currentWorkspace;
+
+  // ⚡ Owner: كل التابات
+  if (ws === 'Owner') {
+    return TABS_REGISTRY;
+  }
+
+  // ⚡ Admin/Owner-only tabs → Owner بس
+  const allowedTabIds = getPermissionsForRole(ws);
+
+  return TABS_REGISTRY.filter(tab => {
+    // ⚡ لازم يكون في الواجهة الحالية
+    const wsMatch = tab.workspaces && tab.workspaces.includes(ws);
+    if (!wsMatch) return false;
+
+    // ⚡ Owner-only tabs → مش مسموح
+    if (tab.ownerOnly) return false;
+
+    // ⚡ فلترة حسب TabPermissions
+    if (allowedTabIds && allowedTabIds.length >= 0) {
+      return allowedTabIds.includes(tab.id);
+    }
+
+    // ⚡ لو TabPermissions مش موجودة → نستخدم الافتراضي (كل التابات في workspaces)
+    return true;
+  });
+}
+
+/**
+ * ⚡ جلب الصلاحيات لواجهة معينة
+ */
+function getPermissionsForRole(role) {
+  // ⚡ لو فيه TabPermissions في Firestore، استخدمها
+  if (tabPermissions && Array.isArray(tabPermissions[role])) {
+    return tabPermissions[role];
+  }
+
+  // ⚡ fallback: كل التابات المتاحة للواجهة دي (default)
+  const ws = role;
+  return TABS_REGISTRY
+    .filter(t => !t.ownerOnly && t.workspaces && t.workspaces.includes(ws))
+    .map(t => t.id);
+}
 
 // ═══ User Info ═══
 function renderUserInfo() {
@@ -183,7 +256,14 @@ function renderSidebar() {
   if (!nav) return;
   nav.innerHTML = '';
 
-  const allowedTabs = getTabsForWorkspace(currentWorkspace);
+  // ⚡ استخدم getTabsForRole بدل getTabsForWorkspace
+  const allowedTabs = getTabsForRole();
+
+  if (allowedTabs.length === 0) {
+    // ⚡ حماية: لو مفيش تابات، اعرض dashboard على الأقل
+    const dashboardTab = getTabById('dashboard');
+    if (dashboardTab) allowedTabs.push(dashboardTab);
+  }
 
   allowedTabs.forEach(item => {
     const btn = document.createElement('button');
