@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Event RSVP + Cancel (with Admin Approval)
-//   ⚡ تأكيد الحضور + طلب الإلغاء (محتاج موافقة المسؤول)
+//   ⚡ تأكيد الحضور + طلب الإلغاء + طلب النقل
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -86,10 +86,6 @@ async function getRegistration(eventId) {
   }
 }
 
-/**
- * ⚡ حالة التسجيل في حدث معين (للأزرار)
- * Return: { status, registration } | null لو مفيش تسجيل
- */
 async function getRegistrationStatus(eventId) {
   const reg = await getRegistration(eventId);
   if (!reg) return { status: 'pending', registration: null };
@@ -120,7 +116,6 @@ async function confirmRsvp(eventId) {
 
   const existing = await getRegistration(eventId);
 
-  // ⚡ لو عنده طلب إلغاء — نرجّعه عن طلبه
   if (existing && existing.Status === 'cancel_requested') {
     if (!confirm(`هل تريد التراجع عن طلب إلغاء الحضور في:\n"${event.Title}"؟\n\nسيبقى حضورك مؤكدًا.`)) return false;
 
@@ -133,8 +128,19 @@ async function confirmRsvp(eventId) {
         UpdatedAt: new Date().toISOString()
       });
 
-      // ⚡ إشعار للـAdmin
       await createAdminReconfirmNotification(event, rsvpPerson);
+
+      // ⚡ سجل التراجع
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'rsvp_reconfirmed',
+          type: 'event',
+          title: `تراجع عن طلب إلغاء: ${event.Title}`,
+          description: `${getPersonFullName(rsvpPerson)} تراجع عن طلب إلغاء حضوره`,
+          relatedID: eventId,
+          relatedTitle: event.Title
+        });
+      }
 
       alert('✅ تم التراجع — حضورك مؤكد');
       return true;
@@ -144,13 +150,11 @@ async function confirmRsvp(eventId) {
     }
   }
 
-  // ⚡ لو ملغي — ممنوع
   if (existing && existing.Status === 'cancelled') {
     alert('❌ لا يمكن تأكيد الحضور — تم إلغاء تسجيلك بالفعل');
     return false;
   }
 
-  // ⚡ لو ملغي + RejectedBefore → ممنوع
   if (existing && existing.RejectedBefore === true && existing.Status !== 'confirmed') {
     alert('❌ لا يمكن التسجيل — تم رفض طلبك سابقًا. تواصل مع المسؤول.');
     return false;
@@ -184,6 +188,18 @@ async function confirmRsvp(eventId) {
 
     await createAdminNotification(event, rsvpPerson);
 
+    // ⚡ سجل التأكيد
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'rsvp_confirmed',
+        type: 'event',
+        title: `تأكيد حضور: ${event.Title}`,
+        description: `${getPersonFullName(rsvpPerson)} أكّد حضوره`,
+        relatedID: eventId,
+        relatedTitle: event.Title
+      });
+    }
+
     alert('✅ تم تسجيل حضورك بنجاح\n\nسيتم إشعار المسؤول.');
     return true;
   } catch (err) {
@@ -194,7 +210,7 @@ async function confirmRsvp(eventId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Cancel Request (طلب إلغاء — محتاج موافقة)
+//   Cancel Request
 // ═══════════════════════════════════════════════════════
 
 function openCancelModal(eventId, eventTitle, occurrenceDate) {
@@ -281,21 +297,18 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
       return false;
     }
 
-    // ⚡ لو مرفوض قبل كده — ممنوع
     if (existing.RejectedBefore === true) {
       alert('❌ لا يمكن تقديم طلب إلغاء جديد — تم رفض طلبك سابقًا. تواصل مع المسؤول مباشرة.');
       closeCancelModal();
       return false;
     }
 
-    // ⚡ لو مش confirmed — مفيش حاجة نلغيها
     if (existing.Status !== 'confirmed') {
       alert('❌ لا يمكن تقديم طلب إلغاء — يجب أن يكون حضورك مؤكدًا أولاً');
       closeCancelModal();
       return false;
     }
 
-    // ⚡ حدّث الـ status لـ cancel_requested (طلب مش إلغاء)
     await updateDoc(doc(db, 'eventRegistrations', existing.id), {
       Status: 'cancel_requested',
       CancelRequestedAt: new Date().toISOString(),
@@ -304,12 +317,22 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ اجلب الحدث
     const eventDoc = await getDoc(doc(db, 'events', eventId));
     const event = eventDoc.exists() ? { id: eventId, ...eventDoc.data() } : { id: eventId, Title: eventTitle };
 
-    // ⚡ إشعار واحد للـAdmin بطلب الإلغاء
     await createCancelRequestNotification(event, rsvpPerson, occurrenceDate, reason);
+
+    // ⚡ سجل الطلب
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'rsvp_cancel_requested',
+        type: 'event',
+        title: `طلب إلغاء حضور: ${eventTitle}`,
+        description: `${getPersonFullName(rsvpPerson)} طلب إلغاء حضوره — السبب: ${reason || 'لم يُذكر'}`,
+        relatedID: eventId,
+        relatedTitle: eventTitle
+      });
+    }
 
     alert('✅ تم إرسال طلب الإلغاء\n\nسيقوم المسؤول بمراجعة طلبك.');
     closeCancelModal();
@@ -324,14 +347,9 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Admin Approval Functions (تُستدعى من تاب الحضور)
+//   Admin Approval Functions
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ موافقة الـAdmin على طلب الإلغاء
- * - يغيّر Status لـ cancelled
- * - يبعت الإشعارات التلاتة (Admin + Members + Public)
- */
 async function approveCancel(registrationId) {
   try {
     const regDoc = await getDoc(doc(db, 'eventRegistrations', registrationId));
@@ -348,7 +366,6 @@ async function approveCancel(registrationId) {
 
     const user = JSON.parse(localStorage.getItem('currentUser'));
 
-    // ⚡ 1. حدّث الحالة
     await updateDoc(doc(db, 'eventRegistrations', registrationId), {
       Status: 'cancelled',
       CancelApprovedAt: new Date().toISOString(),
@@ -357,17 +374,14 @@ async function approveCancel(registrationId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ 2. اجلب الحدث + الشخص
     const eventDoc = await getDoc(doc(db, 'events', reg.EventID));
     const event = eventDoc.exists() ? { id: eventDoc.id, ...eventDoc.data() } : { id: reg.EventID, Title: '' };
 
     const personDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, reg.PersonID));
     const person = personDoc.exists() ? { id: personDoc.id, ...personDoc.data() } : { id: reg.PersonID };
 
-    // ⚡ 3. ابعت الإشعارات التلاتة
     await createCancelNotifications(event, person, event.Date || '', reg.CancelReason || '');
 
-    // ⚡ 4. إشعار للشخص نفسه
     await addDoc(collection(db, 'notifications'), {
       Type: 'cancel_approved',
       Title: '✅ تمت الموافقة على طلب الإلغاء',
@@ -382,6 +396,18 @@ async function approveCancel(registrationId) {
       CreatedAt: new Date().toISOString()
     });
 
+    // ⚡ سجل الموافقة
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'rsvp_cancel_approved',
+        type: 'event',
+        title: `موافقة على إلغاء: ${event.Title || ''}`,
+        description: `${getPersonFullName(person)} تمت الموافقة على إلغاء حضوره`,
+        relatedID: event.id,
+        relatedTitle: event.Title || ''
+      });
+    }
+
     return true;
   } catch (err) {
     console.error('❌ approveCancel error:', err);
@@ -390,11 +416,6 @@ async function approveCancel(registrationId) {
   }
 }
 
-/**
- * ⚡ رفض الـAdmin على طلب الإلغاء
- * - يرجّع Status لـ confirmed
- * - RejectedBefore = true (منع تكرار الطلبات)
- */
 async function rejectCancel(registrationId) {
   try {
     const regDoc = await getDoc(doc(db, 'eventRegistrations', registrationId));
@@ -411,7 +432,6 @@ async function rejectCancel(registrationId) {
 
     const user = JSON.parse(localStorage.getItem('currentUser'));
 
-    // ⚡ 1. رجّع الحالة لـ confirmed + علّم RejectedBefore
     await updateDoc(doc(db, 'eventRegistrations', registrationId), {
       Status: 'confirmed',
       CancelRejectedAt: new Date().toISOString(),
@@ -422,11 +442,9 @@ async function rejectCancel(registrationId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ 2. اجلب الحدث
     const eventDoc = await getDoc(doc(db, 'events', reg.EventID));
     const event = eventDoc.exists() ? { id: eventDoc.id, ...eventDoc.data() } : { id: reg.EventID, Title: '' };
 
-    // ⚡ 3. إشعار للشخص
     await addDoc(collection(db, 'notifications'), {
       Type: 'cancel_rejected',
       Title: '❌ تم رفض طلب الإلغاء',
@@ -441,6 +459,18 @@ async function rejectCancel(registrationId) {
       CreatedAt: new Date().toISOString()
     });
 
+    // ⚡ سجل الرفض
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'rsvp_cancel_rejected',
+        type: 'event',
+        title: `رفض إلغاء: ${event.Title || ''}`,
+        description: `تم رفض طلب إلغاء الحضور`,
+        relatedID: event.id,
+        relatedTitle: event.Title || ''
+      });
+    }
+
     return true;
   } catch (err) {
     console.error('❌ rejectCancel error:', err);
@@ -450,12 +480,245 @@ async function rejectCancel(registrationId) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   Transfer Request
+// ═══════════════════════════════════════════════════════
+
+async function openTransferModal(fromEventId, fromEventTitle) {
+  if (!rsvpPerson) {
+    alert('❌ لا يوجد ملف شخصي مرتبط بحسابك');
+    return;
+  }
+
+  const fromReg = await getRegistration(fromEventId);
+  if (!fromReg || fromReg.Status !== 'confirmed') {
+    alert('❌ يجب أن يكون حضورك مؤكدًا في الحدث الأصلي أولاً');
+    return;
+  }
+
+  let allEvents = [];
+  try {
+    const snap = await getDocs(collection(db, 'events'));
+    allEvents = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(e => String(e.Status || '').toLowerCase() === 'active')
+      .filter(e => e.id !== fromEventId);
+  } catch (err) {
+    console.error('❌ Load events for transfer:', err);
+    alert('خطأ في تحميل الأحداث: ' + err.message);
+    return;
+  }
+
+  const myRegs = {};
+  try {
+    const q = query(
+      collection(db, 'eventRegistrations'),
+      where('PersonID', '==', rsvpPerson.id)
+    );
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      const r = d.data();
+      if (r.EventID) myRegs[r.EventID] = r.Status;
+    });
+  } catch (e) {}
+
+  const availableEvents = allEvents.filter(e => {
+    const status = myRegs[e.id];
+    return status !== 'confirmed' && status !== 'cancel_requested';
+  });
+
+  if (availableEvents.length === 0) {
+    alert('❌ لا يوجد أحداث أخرى متاحة للنقل إليها');
+    return;
+  }
+
+  const eventTypes = {};
+  try {
+    const typesSnap = await getDocs(collection(db, 'eventTypes'));
+    typesSnap.docs.forEach(d => {
+      eventTypes[d.id] = { id: d.id, ...d.data() };
+    });
+  } catch (e) {}
+
+  const optionsHtml = availableEvents.map(e => {
+    const type = eventTypes[e.EventTypeID];
+    const typeIcon = type ? (type.Icon || '📅') : '📅';
+    const typeName = type ? type.Name : '';
+
+    const type_e = String(e.Type || 'once').toLowerCase();
+    let dateStr = '';
+    if (type_e === 'weekly') {
+      const days = {Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
+      dateStr = 'كل ' + (days[e.DayOfWeek] || '');
+    } else if (e.Date) {
+      dateStr = e.Date;
+    }
+
+    return `<option value="${e.id}">${typeIcon} ${escapeHtml(e.Title || '')}${typeName ? ' — ' + escapeHtml(typeName) : ''} (${dateStr} ${e.Time || ''})</option>`;
+  }).join('');
+
+  let modal = document.getElementById('transferRsvpModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'transferRsvpModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header">
+        <h2>🔄 طلب نقل الحضور</h2>
+        <button class="modal-close" onclick="closeTransferModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="transfer-info-box">
+          <div class="transfer-info-row">
+            <span class="transfer-info-label">من:</span>
+            <span class="transfer-info-value">${escapeHtml(fromEventTitle)}</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>إلى الحدث *</label>
+          <select id="transferToEvent" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;">
+            <option value="">-- اختر الحدث --</option>
+            ${optionsHtml}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>السبب (اختياري):</label>
+          <textarea id="transferReason" rows="3" placeholder="مثال: ظرف عائلي، تغيير في الخطة..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;"></textarea>
+        </div>
+
+        <div class="transfer-warning">
+          <p class="transfer-warning-title">⚠️ مهم</p>
+          <ul class="transfer-warning-list">
+            <li>• الطلب هيتحوّل للمسؤول (Admin/Owner) للمراجعة</li>
+            <li>• لو وافق: ينقل تسجيلك من الحدث الأصلي للجديد</li>
+            <li>• لو رفض: تسجيلك في الحدث الأصلي يبقى زي ما هو</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTransferModal()">إلغاء</button>
+        <button class="btn-primary" id="confirmTransferBtn">🔄 إرسال الطلب</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  document.getElementById('confirmTransferBtn').onclick = async () => {
+    const toEventId = document.getElementById('transferToEvent')?.value;
+    const reason = document.getElementById('transferReason')?.value.trim() || '';
+
+    if (!toEventId) {
+      alert('⚠️ اختر الحدث اللي عايز تنقل إليه');
+      return;
+    }
+
+    await submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason);
+  };
+}
+
+async function submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason) {
+  const btn = document.getElementById('confirmTransferBtn');
+  const originalText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+
+  try {
+    const toEventDoc = await getDoc(doc(db, 'events', toEventId));
+    if (!toEventDoc.exists()) {
+      alert('❌ الحدث الجديد غير موجود');
+      if (btn) { btn.disabled = false; btn.textContent = originalText; }
+      return false;
+    }
+    const toEvent = { id: toEventDoc.id, ...toEventDoc.data() };
+
+    const fromEventDoc = await getDoc(doc(db, 'events', fromEventId));
+    const fromEvent = fromEventDoc.exists() ? fromEventDoc.data() : {};
+
+    const reqData = {
+      RequesterPersonID: rsvpPerson.id,
+      RequesterName: getPersonFullName(rsvpPerson),
+      RequesterEmail: rsvpUser.email,
+
+      FromEventID: fromEventId,
+      FromEventTitle: fromEventTitle,
+      FromDate: fromEvent.Date || '',
+
+      ToEventID: toEventId,
+      ToEventTitle: toEvent.Title || '',
+      ToDate: toEvent.Date || '',
+
+      Reason: reason,
+      Status: 'pending',
+
+      CreatedAt: new Date().toISOString(),
+      ApprovedAt: null,
+      ApprovedBy: null,
+      RejectedAt: null,
+      RejectedBy: null
+    };
+
+    const reqRef = await addDoc(collection(db, 'massChangeRequests'), reqData);
+
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_request',
+        Title: `🔄 طلب نقل حضور`,
+        Body: `${getPersonFullName(rsvpPerson)} طلب نقل حضوره:\nمن: ${fromEventTitle}\nإلى: ${toEvent.Title || ''}\n\nالسبب: ${reason || 'لم يُذكر'}`,
+        RelatedEventID: toEventId,
+        RelatedPersonID: rsvpPerson.id,
+        RelatedRequestID: reqRef.id,
+        TargetType: 'admins',
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Admin notification error:', e);
+    }
+
+    // ⚡ سجل الطلب
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'transfer_requested',
+        type: 'request',
+        title: `طلب نقل: ${getPersonFullName(rsvpPerson)}`,
+        description: `من: ${fromEventTitle} → إلى: ${toEvent.Title || ''}`,
+        relatedID: reqRef.id,
+        relatedTitle: fromEventTitle
+      });
+    }
+
+    alert('✅ تم إرسال طلب النقل بنجاح\n\nسيتم مراجعته من المسؤول.');
+    closeTransferModal();
+    return true;
+
+  } catch (err) {
+    console.error('❌ submitTransferRequest error:', err);
+    alert('خطأ: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    return false;
+  }
+}
+
+function closeTransferModal() {
+  const modal = document.getElementById('transferRsvpModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════
 //   Notifications Creation
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ إشعار للـAdmin عند تأكيد حضور
- */
 async function createAdminNotification(event, person) {
   const personName = getPersonFullName(person);
 
@@ -479,9 +742,6 @@ async function createAdminNotification(event, person) {
   }
 }
 
-/**
- * ⚡ إشعار للـAdmin عند التراجع عن طلب الإلغاء
- */
 async function createAdminReconfirmNotification(event, person) {
   const personName = getPersonFullName(person);
 
@@ -503,9 +763,6 @@ async function createAdminReconfirmNotification(event, person) {
   }
 }
 
-/**
- * ⚡ إشعار للـAdmin بطلب إلغاء (مش إلغاء فعلي)
- */
 async function createCancelRequestNotification(event, person, occurrenceDate, reason) {
   const personName = getPersonFullName(person);
   const eventDate = formatDate(occurrenceDate);
@@ -532,14 +789,10 @@ async function createCancelRequestNotification(event, person, occurrenceDate, re
   }
 }
 
-/**
- * ⚡ 3 إشعارات عند الموافقة على الإلغاء
- */
 async function createCancelNotifications(event, person, occurrenceDate, reason) {
   const personName = getPersonFullName(person);
   const eventDate = formatDate(occurrenceDate);
 
-  // ═══ 1. للـ Admin (مع السبب) ═══
   const adminNotif = {
     Type: 'person_cancelled_admin',
     Title: `📢 تم إلغاء حضور`,
@@ -560,7 +813,6 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
     console.warn('admin cancel notification error:', err.message);
   }
 
-  // ═══ 2. للزملاء في نفس الحدث (بدون سبب) ═══
   try {
     const regsSnap = await getDocs(query(
       collection(db, 'eventRegistrations'),
@@ -594,7 +846,6 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
     console.warn('member cancel notification error:', err.message);
   }
 
-  // ═══ 3. للبث العام (بدون سبب) ═══
   const publicNotif = {
     Type: 'person_cancelled_public',
     Title: `🎟️ مكان متاح!`,
@@ -602,7 +853,7 @@ async function createCancelNotifications(event, person, occurrenceDate, reason) 
     RelatedEventID: event.id,
     RelatedPersonID: person.id,
     TargetType: 'all',
-    ActionURL: `my-attendance.html?event=${event.id}`,
+    ActionURL: `my-events.html?event=${event.id}`,
     SentBy: 'system',
     SentAt: new Date().toISOString(),
     ReadBy: [],
@@ -675,253 +926,12 @@ window.closeCancelModal = closeCancelModal;
 window.performCancel = performCancel;
 window.approveCancel = approveCancel;
 window.rejectCancel = rejectCancel;
-window.getRsvpPerson = () => rsvpPerson;
-window.getRegistration = getRegistration;
-window.getRegistrationStatus = getRegistrationStatus;
-
-// ═══════════════════════════════════════════════════════
-//   Transfer Request (طلب نقل)
-// ═══════════════════════════════════════════════════════
-
-/**
- * ⚡ يفتح Modal طلب النقل
- */
-async function openTransferModal(fromEventId, fromEventTitle) {
-  if (!rsvpPerson) {
-    alert('❌ لا يوجد ملف شخصي مرتبط بحسابك');
-    return;
-  }
-
-  // ⚡ تأكد إن الشخص مؤكد في الحدث الأصلي
-  const fromReg = await getRegistration(fromEventId);
-  if (!fromReg || fromReg.Status !== 'confirmed') {
-    alert('❌ يجب أن يكون حضورك مؤكدًا في الحدث الأصلي أولاً');
-    return;
-  }
-
-  // ⚡ اجلب كل الأحداث النشطة (ما عدا الحدث الأصلي)
-  let allEvents = [];
-  try {
-    const snap = await getDocs(collection(db, 'events'));
-    allEvents = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(e => String(e.Status || '').toLowerCase() === 'active')
-      .filter(e => e.id !== fromEventId);
-  } catch (err) {
-    console.error('❌ Load events for transfer:', err);
-    alert('خطأ في تحميل الأحداث: ' + err.message);
-    return;
-  }
-
-  // ⚡ استثني الأحداث اللي الشخص مؤكد فيها بالفعل
-  const myRegs = {};
-  try {
-    const q = query(
-      collection(db, 'eventRegistrations'),
-      where('PersonID', '==', rsvpPerson.id)
-    );
-    const snap = await getDocs(q);
-    snap.docs.forEach(d => {
-      const r = d.data();
-      if (r.EventID) myRegs[r.EventID] = r.Status;
-    });
-  } catch (e) {}
-
-  const availableEvents = allEvents.filter(e => {
-    const status = myRegs[e.id];
-    return status !== 'confirmed' && status !== 'cancel_requested';
-  });
-
-  if (availableEvents.length === 0) {
-    alert('❌ لا يوجد أحداث أخرى متاحة للنقل إليها');
-    return;
-  }
-
-  // ⚡ عرض الأحداث بشكل منظم حسب النوع
-  const eventTypes = {};
-  try {
-    const typesSnap = await getDocs(collection(db, 'eventTypes'));
-    typesSnap.docs.forEach(d => {
-      eventTypes[d.id] = { id: d.id, ...d.data() };
-    });
-  } catch (e) {}
-
-  const optionsHtml = availableEvents.map(e => {
-    const type = eventTypes[e.EventTypeID];
-    const typeIcon = type ? (type.Icon || '📅') : '📅';
-    const typeName = type ? type.Name : '';
-
-    const type_e = String(e.Type || 'once').toLowerCase();
-    let dateStr = '';
-    if (type_e === 'weekly') {
-      const days = {Sunday:'الأحد',Monday:'الاثنين',Tuesday:'الثلاثاء',Wednesday:'الأربعاء',Thursday:'الخميس',Friday:'الجمعة',Saturday:'السبت'};
-      dateStr = 'كل ' + (days[e.DayOfWeek] || '');
-    } else if (e.Date) {
-      dateStr = e.Date;
-    }
-
-    return `<option value="${e.id}">${typeIcon} ${escapeHtml(e.Title || '')}${typeName ? ' — ' + escapeHtml(typeName) : ''} (${dateStr} ${e.Time || ''})</option>`;
-  }).join('');
-
-  // ⚡ افتح Modal
-  let modal = document.getElementById('transferRsvpModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'transferRsvpModal';
-    modal.className = 'modal-overlay';
-    document.body.appendChild(modal);
-  }
-
-  modal.innerHTML = `
-    <div class="modal-content" style="max-width:560px;">
-      <div class="modal-header">
-        <h2>🔄 طلب نقل الحضور</h2>
-        <button class="modal-close" onclick="closeTransferModal()">✕</button>
-      </div>
-
-      <div class="modal-body">
-
-        <div class="transfer-info-box">
-          <div class="transfer-info-row">
-            <span class="transfer-info-label">من:</span>
-            <span class="transfer-info-value">${escapeHtml(fromEventTitle)}</span>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <label>إلى الحدث *</label>
-          <select id="transferToEvent" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;">
-            <option value="">-- اختر الحدث --</option>
-            ${optionsHtml}
-          </select>
-        </div>
-
-        <div class="form-row">
-          <label>السبب (اختياري):</label>
-          <textarea id="transferReason" rows="3" placeholder="مثال: ظرف عائلي، تغيير في الخطة..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;"></textarea>
-        </div>
-
-        <div class="transfer-warning">
-          <p class="transfer-warning-title">⚠️ مهم</p>
-          <ul class="transfer-warning-list">
-            <li>• الطلب هيتحوّل للمسؤول (Admin/Owner) للمراجعة</li>
-            <li>• لو وافق: ينقل تسجيلك من الحدث الأصلي للجديد</li>
-            <li>• لو رفض: تسجيلك في الحدث الأصلي يبقى زي ما هو</li>
-          </ul>
-        </div>
-
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeTransferModal()">إلغاء</button>
-        <button class="btn-primary" id="confirmTransferBtn">🔄 إرسال الطلب</button>
-      </div>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
-
-  document.getElementById('confirmTransferBtn').onclick = async () => {
-    const toEventId = document.getElementById('transferToEvent')?.value;
-    const reason = document.getElementById('transferReason')?.value.trim() || '';
-
-    if (!toEventId) {
-      alert('⚠️ اختر الحدث اللي عايز تنقل إليه');
-      return;
-    }
-
-    await submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason);
-  };
-}
-
-/**
- * ⚡ إرسال طلب النقل
- */
-async function submitTransferRequest(fromEventId, fromEventTitle, toEventId, reason) {
-  const btn = document.getElementById('confirmTransferBtn');
-  const originalText = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
-
-  try {
-    // ⚡ اجلب الحدث الجديد
-    const toEventDoc = await getDoc(doc(db, 'events', toEventId));
-    if (!toEventDoc.exists()) {
-      alert('❌ الحدث الجديد غير موجود');
-      if (btn) { btn.disabled = false; btn.textContent = originalText; }
-      return;
-    }
-    const toEvent = { id: toEventDoc.id, ...toEventDoc.data() };
-
-    // ⚡ احصل على تاريخ الحدثين
-    const fromEventDoc = await getDoc(doc(db, 'events', fromEventId));
-    const fromEvent = fromEventDoc.exists() ? fromEventDoc.data() : {};
-
-    // ⚡ أنشئ الطلب
-    const reqData = {
-      RequesterPersonID: rsvpPerson.id,
-      RequesterName: getPersonFullName(rsvpPerson),
-      RequesterEmail: rsvpUser.email,
-
-      FromEventID: fromEventId,
-      FromEventTitle: fromEventTitle,
-      FromDate: fromEvent.Date || '',
-
-      ToEventID: toEventId,
-      ToEventTitle: toEvent.Title || '',
-      ToDate: toEvent.Date || '',
-
-      Reason: reason,
-      Status: 'pending',
-
-      CreatedAt: new Date().toISOString(),
-      ApprovedAt: null,
-      ApprovedBy: null,
-      RejectedAt: null,
-      RejectedBy: null
-    };
-
-    const reqRef = await addDoc(collection(db, 'massChangeRequests'), reqData);
-
-    // ⚡ إشعار للـAdmin
-    try {
-      await addDoc(collection(db, 'notifications'), {
-        Type: 'transfer_request',
-        Title: `🔄 طلب نقل حضور`,
-        Body: `${getPersonFullName(rsvpPerson)} طلب نقل حضوره:\nمن: ${fromEventTitle}\nإلى: ${toEvent.Title || ''}\n\nالسبب: ${reason || 'لم يُذكر'}`,
-        RelatedEventID: toEventId,
-        RelatedPersonID: rsvpPerson.id,
-        RelatedRequestID: reqRef.id,
-        TargetType: 'admins',
-        SentBy: 'system',
-        SentAt: new Date().toISOString(),
-        ReadBy: [],
-        CreatedAt: new Date().toISOString()
-      });
-    } catch (e) {
-      console.warn('Admin notification error:', e);
-    }
-
-    alert('✅ تم إرسال طلب النقل بنجاح\n\nسيتم مراجعته من المسؤول.');
-    closeTransferModal();
-    return true;
-
-  } catch (err) {
-    console.error('❌ submitTransferRequest error:', err);
-    alert('خطأ: ' + err.message);
-    if (btn) { btn.disabled = false; btn.textContent = originalText; }
-    return false;
-  }
-}
-
-function closeTransferModal() {
-  const modal = document.getElementById('transferRsvpModal');
-  if (modal) modal.style.display = 'none';
-}
-
-// ═══ Expose ═══
 window.openTransferModal = openTransferModal;
 window.closeTransferModal = closeTransferModal;
 window.submitTransferRequest = submitTransferRequest;
+window.getRsvpPerson = () => rsvpPerson;
+window.getRegistration = getRegistration;
+window.getRegistrationStatus = getRegistrationStatus;
 
 // ═══ Auto-init ═══
 document.addEventListener('DOMContentLoaded', () => {
