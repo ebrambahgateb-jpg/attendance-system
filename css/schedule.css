@@ -949,3 +949,242 @@
   background: #d1fae5;
   color: #065f46;
 }
+
+/* ═══════════════════════════════════════════
+   Templates (الأنماط)
+   ═══════════════════════════════════════════ */
+
+.sch-template-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.sch-template-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sch-template-events-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.sch-template-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+
+.sch-template-day-accordion {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.sch-template-day-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  transition: background 0.2s;
+}
+
+.sch-template-day-btn:hover { background: var(--bg); }
+
+.sch-tpl-day-icon { font-size: 16px; }
+
+.sch-tpl-day-label { flex: 1; text-align: right; }
+
+.sch-tpl-day-count {
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.sch-tpl-day-arrow {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sch-template-day-content {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sch-tpl-day-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.sch-tpl-event-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  border-right: 3px solid var(--primary);
+}
+
+.sch-tpl-event-header {
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.sch-tpl-event-info {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.sch-template-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* ═══ Template Modal (Accordion Editor) ═══ */
+
+.tpl-days-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.tpl-days-section h4 {
+  font-size: 15px;
+  color: var(--text);
+  margin: 0 0 6px 0;
+}
+
+.tpl-days-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tpl-day-editor {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.tpl-day-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tpl-day-editor-header > span:first-child {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.tpl-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tpl-day-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.tpl-event-editor {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-right: 3px solid var(--primary);
+}
+
+.tpl-event-row {
+  display: grid;
+  gap: 8px;
+}
+
+.tpl-event-row-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.tpl-event-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tpl-event-field label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.tpl-event-field input,
+.tpl-event-field select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.tpl-event-remove {
+  align-self: flex-start;
+}
+
+@media (max-width: 600px) {
+  .tpl-event-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
