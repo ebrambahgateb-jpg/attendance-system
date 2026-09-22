@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي
-//   ⚡ محدّث: دعم RegistrationScope = optional
+//   ⚡ محدّث: عرض المؤكدين فقط للـUser + كل الحالات للـAdmin
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -414,6 +414,26 @@ function renderWeekEventCard(event) {
   const isWeekly = String(event.Type || '').toLowerCase() === 'weekly';
 
   const stats = getEventAttendeesStats(event);
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+  let statsHtml = '';
+  if (isAdminView) {
+    if (scope === 'optional') {
+      statsHtml = `<div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.confirmed} مسجّل</span>
+      </div>`;
+    } else {
+      statsHtml = `<div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.committed}</span>
+        <span class="sch-stat-confirmed">✅ ${stats.confirmed}</span>
+      </div>`;
+    }
+  } else {
+    statsHtml = `<div class="sch-event-stats">
+      <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+    </div>`;
+  }
 
   return `
     <div class="sch-week-event" onclick="openEventAttendeesModal('${event.id}')">
@@ -426,10 +446,7 @@ function renderWeekEventCard(event) {
         <span>🕐 ${event.Time || '-'} - ${endTime}</span>
         <span>📍 ${escapeHtml(locInfo)}</span>
       </div>
-      <div class="sch-event-stats">
-        <span class="sch-stat-committed">👥 ${stats.committed}</span>
-        <span class="sch-stat-confirmed">✅ ${stats.confirmed}</span>
-      </div>
+      ${statsHtml}
     </div>
   `;
 }
@@ -507,6 +524,8 @@ window.openDayEventsModal = function(dateISO) {
   const dayLabel = dayName ? dayName.label : '';
   const dateFormatted = `${dayLabel} ${date.getDate()} ${MONTHS_AR[date.getMonth()]} ${date.getFullYear()}`;
 
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+
   let modal = document.getElementById('dayEventsModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -543,14 +562,24 @@ window.openDayEventsModal = function(dateISO) {
         scopeBadge = '<span class="sch-scope-badge all">🌍 للكل</span>';
       }
 
-      const statsHtml = scope === 'optional'
-        ? `<div class="sch-event-stats">
+      // ⚡ إحصائيات حسب الصلاحية
+      let statsHtml = '';
+      if (isAdminView) {
+        if (scope === 'optional') {
+          statsHtml = `<div class="sch-event-stats">
             <span class="sch-stat-committed">👥 ${stats.confirmed} مسجّل</span>
-          </div>`
-        : `<div class="sch-event-stats">
+          </div>`;
+        } else {
+          statsHtml = `<div class="sch-event-stats">
             <span class="sch-stat-committed">👥 ${stats.committed} ملتزم</span>
             <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
           </div>`;
+        }
+      } else {
+        statsHtml = `<div class="sch-event-stats">
+          <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+        </div>`;
+      }
 
       return `
         <div class="sch-day-event-card" onclick="closeDayEventsModal(); openEventAttendeesModal('${e.id}')">
@@ -594,6 +623,7 @@ window.closeDayEventsModal = function() {
 
 // ═══════════════════════════════════════════════════════
 //   Event Attendees Modal
+//   ⚡ Admin/Owner: كل الحالات / User/Scanner: المؤكدين بس
 // ═══════════════════════════════════════════════════════
 
 window.openEventAttendeesModal = function(eventId) {
@@ -603,14 +633,18 @@ window.openEventAttendeesModal = function(eventId) {
     return;
   }
 
+  // ⚡ هل المستخدم Admin/Owner؟
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+
   const attendees = getEventAttendees(event);
   const stats = getEventAttendeesStats(event);
   const scope = String(event.RegistrationScope || 'all').toLowerCase();
 
+  // ⚡ لو User/Scanner: عرض المؤكدين بس
   const confirmedList = attendees.filter(a => a.rsvpStatus === 'confirmed');
-  const pendingList = attendees.filter(a => a.rsvpStatus === 'pending');
-  const cancelRequestedList = attendees.filter(a => a.rsvpStatus === 'cancel_requested');
-  const cancelledList = attendees.filter(a => a.rsvpStatus === 'cancelled');
+  const pendingList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'pending') : [];
+  const cancelRequestedList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'cancel_requested') : [];
+  const cancelledList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'cancelled') : [];
 
   const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
   const eventTypeIcon = eventType ? (eventType.Icon || '📅') : '📅';
@@ -646,47 +680,60 @@ window.openEventAttendeesModal = function(eventId) {
     document.body.appendChild(modal);
   }
 
-  // ⚡ إحصائيات حسب الـscope
+  // ⚡ إحصائيات حسب الصلاحية + scope
   let statsBoxHtml = '';
-  if (scope === 'optional') {
-    statsBoxHtml = `
-      <div class="att-stats-box" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="att-stat-item confirmed">
-          <span class="att-stat-number">${stats.confirmed}</span>
-          <span class="att-stat-label">✅ مسجّل</span>
+  if (isAdminView) {
+    // ⚡ Admin/Owner: كل الحالات
+    if (scope === 'optional') {
+      statsBoxHtml = `
+        <div class="att-stats-box" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="att-stat-item confirmed">
+            <span class="att-stat-number">${stats.confirmed}</span>
+            <span class="att-stat-label">✅ مسجّل</span>
+          </div>
+          <div class="att-stat-item cancel-req">
+            <span class="att-stat-number">${stats.cancelRequested}</span>
+            <span class="att-stat-label">🔄 طلب إلغاء</span>
+          </div>
+          <div class="att-stat-item cancelled">
+            <span class="att-stat-number">${stats.cancelled}</span>
+            <span class="att-stat-label">❌ ملغي</span>
+          </div>
         </div>
-        <div class="att-stat-item cancel-req">
-          <span class="att-stat-number">${stats.cancelRequested}</span>
-          <span class="att-stat-label">🔄 طلب إلغاء</span>
+      `;
+    } else {
+      statsBoxHtml = `
+        <div class="att-stats-box">
+          <div class="att-stat-item">
+            <span class="att-stat-number">${stats.committed}</span>
+            <span class="att-stat-label">👥 ملتزم</span>
+          </div>
+          <div class="att-stat-item confirmed">
+            <span class="att-stat-number">${stats.confirmed}</span>
+            <span class="att-stat-label">✅ مؤكد</span>
+          </div>
+          <div class="att-stat-item pending">
+            <span class="att-stat-number">${stats.pending}</span>
+            <span class="att-stat-label">⏳ انتظار</span>
+          </div>
+          <div class="att-stat-item cancel-req">
+            <span class="att-stat-number">${stats.cancelRequested}</span>
+            <span class="att-stat-label">🔄 طلب إلغاء</span>
+          </div>
+          <div class="att-stat-item cancelled">
+            <span class="att-stat-number">${stats.cancelled}</span>
+            <span class="att-stat-label">❌ ملغي</span>
+          </div>
         </div>
-        <div class="att-stat-item cancelled">
-          <span class="att-stat-number">${stats.cancelled}</span>
-          <span class="att-stat-label">❌ ملغي</span>
-        </div>
-      </div>
-    `;
+      `;
+    }
   } else {
+    // ⚡ User/Scanner: المؤكدين بس
     statsBoxHtml = `
-      <div class="att-stats-box">
-        <div class="att-stat-item">
-          <span class="att-stat-number">${stats.committed}</span>
-          <span class="att-stat-label">👥 ملتزم</span>
-        </div>
+      <div class="att-stats-box" style="grid-template-columns: repeat(1, 1fr);">
         <div class="att-stat-item confirmed">
           <span class="att-stat-number">${stats.confirmed}</span>
-          <span class="att-stat-label">✅ مؤكد</span>
-        </div>
-        <div class="att-stat-item pending">
-          <span class="att-stat-number">${stats.pending}</span>
-          <span class="att-stat-label">⏳ انتظار</span>
-        </div>
-        <div class="att-stat-item cancel-req">
-          <span class="att-stat-number">${stats.cancelRequested}</span>
-          <span class="att-stat-label">🔄 طلب إلغاء</span>
-        </div>
-        <div class="att-stat-item cancelled">
-          <span class="att-stat-number">${stats.cancelled}</span>
-          <span class="att-stat-label">❌ ملغي</span>
+          <span class="att-stat-label">✅ مؤكد الحضور</span>
         </div>
       </div>
     `;
@@ -712,11 +759,18 @@ window.openEventAttendeesModal = function(eventId) {
         ${statsBoxHtml}
 
         ${renderAttendeesGroup('✅ المؤكدين', confirmedList, 'confirmed')}
-        ${scope !== 'optional' ? renderAttendeesGroup('⏳ في انتظار التأكيد', pendingList, 'pending') : ''}
-        ${renderAttendeesGroup('🔄 طلبات إلغاء', cancelRequestedList, 'cancel-requested')}
-        ${renderAttendeesGroup('❌ الملغيين', cancelledList, 'cancelled')}
+        ${isAdminView && scope !== 'optional' ? renderAttendeesGroup('⏳ في انتظار التأكيد', pendingList, 'pending') : ''}
+        ${isAdminView ? renderAttendeesGroup('🔄 طلبات إلغاء', cancelRequestedList, 'cancel-requested') : ''}
+        ${isAdminView ? renderAttendeesGroup('❌ الملغيين', cancelledList, 'cancelled') : ''}
 
-        ${attendees.length === 0 ? `
+        ${confirmedList.length === 0 && !isAdminView ? `
+          <div class="att-empty">
+            <div class="att-empty-icon">👥</div>
+            <p>لا يوجد مسجّلين بعد</p>
+          </div>
+        ` : ''}
+
+        ${attendees.length === 0 && isAdminView ? `
           <div class="att-empty">
             <div class="att-empty-icon">👥</div>
             <p>${scope === 'optional' ? 'لا يوجد مسجّلين بعد' : 'لا يوجد ملتزمين بهذا الحدث'}</p>
@@ -784,7 +838,7 @@ window.closeAttendeesModal = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Get Event Attendees (⚡ مع دعم optional)
+//   Get Event Attendees
 // ═══════════════════════════════════════════════════════
 
 function getEventAttendeesStats(event) {
@@ -818,13 +872,11 @@ function getEventAttendees(event) {
   let personIds = [];
 
   if (scope === 'optional') {
-    // ⚡ الاختياري: نعرض اللي سجّلوا بس (confirmed/cancel_requested/cancelled)
     personIds = registrations.map(r => r.PersonID).filter(id => schPeople[id]);
   } else if (scope === 'specific') {
     const ids = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
     personIds = ids.filter(id => schPeople[id]);
   } else {
-    // all → كل الناس النشطين
     personIds = Object.keys(schPeople).filter(id => {
       const p = schPeople[id];
       return String(p.Status || 'active').toLowerCase() === 'active';
