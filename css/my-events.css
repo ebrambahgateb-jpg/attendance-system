@@ -413,3 +413,21 @@
     padding: 14px;
   }
 }
+
+/* ═══ Optional Status Banner ═══ */
+.me-status-banner.optional {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+
+/* ═══ Optional Card Border ═══ */
+.me-card-optional {
+  border-right: 4px solid #10b981;
+}
+
+/* ═══ Optional Count Badge ═══ */
+.me-section-count.optional {
+  background: #d1fae5;
+  color: #065f46;
+}
