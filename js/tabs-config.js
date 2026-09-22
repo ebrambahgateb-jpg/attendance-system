@@ -116,7 +116,7 @@ export const TABS_REGISTRY = [
     icon: '📦',
     workspaces: ['Owner', 'Admin'],
     ownerOnly: false,
-    handler: null,
+    handler: 'loadArchiveLazy',
     isPage: false
   },
   {
