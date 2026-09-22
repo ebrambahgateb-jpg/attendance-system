@@ -211,6 +211,11 @@
   color: #9d174d;
 }
 
+.reg-badge.reg-optional {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 /* ═══ Card Body ═══ */
 .event-card-body {
   padding: 14px 16px;
