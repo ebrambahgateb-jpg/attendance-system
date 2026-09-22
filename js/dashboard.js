@@ -722,6 +722,11 @@ function loadArchiveLazy(area) {
   else showLoadError(area, 'الأرشيف');
 }
 
+function loadReportsLazy(area) {
+  if (typeof window.loadReportsPage === 'function') window.loadReportsPage(area);
+  else showLoadError(area, 'التقارير');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -878,6 +883,7 @@ window.loadProfileLazy = loadProfileLazy;
 window.loadMyEventsLazy = loadMyEventsLazy;
 window.loadScheduleLazy = loadScheduleLazy;
 window.loadArchiveLazy = loadArchiveLazy;
+window.loadReportsLazy = loadReportsLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
