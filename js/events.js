@@ -260,7 +260,6 @@ function renderEventsGrid() {
       ? `<span class="cancel-count">${canceledOccurrences.length} موعد ملغي</span>`
       : '';
 
-    // ⚡ قواعد التسجيل — 3 حالات
     const regScope = String(event.RegistrationScope || 'all').toLowerCase();
     const regPersonIds = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
     let regInfo = '';
@@ -742,7 +741,6 @@ async function saveEvent() {
     }
   }
 
-  // ⚡ قواعد التسجيل
   let regScope = 'all';
   let regPersonIds = [];
   const regRadio = document.querySelector('input[name="regScope"]:checked');
@@ -809,6 +807,18 @@ async function saveEvent() {
         UpdatedAt: new Date().toISOString()
       });
       alert('✅ تم التعديل بنجاح');
+
+      // ⚡ سجل التعديل
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'event_updated',
+          type: 'event',
+          title: `تعديل حدث: ${title}`,
+          description: `تم تعديل بيانات الحدث`,
+          relatedID: currentEditId,
+          relatedTitle: title
+        });
+      }
     } else {
       const user = JSON.parse(localStorage.getItem('currentUser'));
       const docRef = await addDoc(collection(db, 'events'), {
@@ -840,6 +850,18 @@ async function saveEvent() {
       }
 
       alert('✅ تمت الإضافة بنجاح' + (notifType !== 'none' ? '\n\n🔔 تم إرسال الإشعارات' : ''));
+
+      // ⚡ سجل الإضافة
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'event_added',
+          type: 'event',
+          title: `إضافة حدث: ${title}`,
+          description: `النوع: ${type === 'weekly' ? 'أسبوعي' : 'مرة واحدة'} — ${time} - ${endTime}`,
+          relatedID: docRef.id,
+          relatedTitle: title
+        });
+      }
     }
 
     closeEventModal();
@@ -900,8 +922,22 @@ async function archiveEvent(eventId) {
   try {
     await updateDoc(doc(db, 'events', eventId), {
       Status: 'archived',
-      ArchivedAt: new Date().toISOString()
+      ArchivedAt: new Date().toISOString(),
+      ArchivedBy: JSON.parse(localStorage.getItem('currentUser'))?.email || ''
     });
+
+    // ⚡ سجل الأرشفة
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'event_archived',
+        type: 'event',
+        title: `أرشفة حدث: ${event.Title}`,
+        description: `تم أرشفة الحدث`,
+        relatedID: eventId,
+        relatedTitle: event.Title
+      });
+    }
+
     alert('✅ تمت الأرشفة');
     await loadEventsPage(document.getElementById('contentArea'), currentMode);
   } catch (err) {
@@ -916,6 +952,18 @@ async function confirmDeleteEvent(eventId) {
   if (!confirm(`⚠️ هل أنت متأكد من حذف "${event.Title}"؟`)) return;
 
   try {
+    // ⚡ سجل الحذف قبل ما نحذف
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'event_deleted',
+        type: 'event',
+        title: `حذف حدث: ${event.Title}`,
+        description: `تم حذف الحدث نهائيًا`,
+        relatedID: eventId,
+        relatedTitle: event.Title
+      });
+    }
+
     await deleteDoc(doc(db, 'events', eventId));
     alert('✅ تم الحذف');
     await loadEventsPage(document.getElementById('contentArea'), currentMode);
@@ -1022,6 +1070,19 @@ async function cancelOccurrence(eventId, dateStr) {
       CanceledOccurrences: canceled
     });
     event.CanceledOccurrences = canceled;
+
+    // ⚡ سجل الإلغاء
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'occurrence_cancelled',
+        type: 'event',
+        title: `إلغاء موعد: ${event.Title}`,
+        description: `تم إلغاء موعد ${formatDate(dateStr)}`,
+        relatedID: eventId,
+        relatedTitle: event.Title
+      });
+    }
+
     alert('✅ تم الإلغاء');
     closeOccurrencesModal();
     viewOccurrences(eventId);
@@ -1042,6 +1103,19 @@ async function restoreOccurrence(eventId, dateStr) {
       CanceledOccurrences: canceled
     });
     event.CanceledOccurrences = canceled;
+
+    // ⚡ سجل الاستعادة
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'occurrence_restored',
+        type: 'event',
+        title: `استعادة موعد: ${event.Title}`,
+        description: `تم استعادة موعد ${formatDate(dateStr)}`,
+        relatedID: eventId,
+        relatedTitle: event.Title
+      });
+    }
+
     alert('✅ تمت الاستعادة');
     closeOccurrencesModal();
     viewOccurrences(eventId);
