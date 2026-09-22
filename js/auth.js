@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Authentication (Firebase Auth)
+//   ⚡ محدّث: Auto-sync للصورة من Google
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -130,6 +131,11 @@ async function checkUserInFirestore(firebaseUser) {
       }
     }
 
+    // ═══ ⚡ Auto-sync صورة Google ═══
+    if (personId && firebaseUser.photoURL) {
+      await syncGooglePhoto(personId, firebaseUser.photoURL);
+    }
+
     // ═══ الحالة 4: الأدوار ═══
     const roles = getRolesFromAccount(account);
 
@@ -157,21 +163,53 @@ async function checkUserInFirestore(firebaseUser) {
     // ═══ الحالة 5: التحقق من workspace محفوظ ═══
     const savedWorkspace = localStorage.getItem('currentWorkspace');
 
-    // ═══ دور واحد → ادخل مباشرة ═══
     if (roles.length === 1) {
       goToDashboard(roles[0]);
       return;
     }
 
-    // ═══ أكثر من دور → اعرض اختيار الواجهة ═══
-    // ⚡ لو المستخدم عنده workspace محفوظ وما زال متاح، اقترح عليه الاختيار
-    // (لأنه ممكن يكون عايز يغيّر الواجهة)
     showWorkspaceSelection(roles);
 
   } catch (error) {
     console.error('❌ Firestore check error:', error);
     showMessage('خطأ في الاتصال بقاعدة البيانات', 'error');
     if (googleSignInBtn) googleSignInBtn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Sync Google Photo
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ يزامن صورة Google مع الشخص (لو ما عندهوش صورة)
+ * @param {string} personId
+ * @param {string} googlePhotoURL
+ */
+async function syncGooglePhoto(personId, googlePhotoURL) {
+  try {
+    const personRef = doc(db, COLLECTIONS.PEOPLE, personId);
+    const personSnap = await getDoc(personRef);
+
+    if (!personSnap.exists()) return;
+
+    const person = personSnap.data();
+
+    // ⚡ لو الشخص عنده صورة مخصصة، ما نلمسهاش
+    if (person.PhotoURL && String(person.PhotoURL).trim() !== '') {
+      return;
+    }
+
+    // ⚡ احفظ صورة Google
+    await updateDoc(personRef, {
+      PhotoURL: googlePhotoURL,
+      PhotoSource: 'google',
+      PhotoSyncedAt: new Date().toISOString()
+    });
+
+    console.log('✅ Google photo synced for person:', personId);
+  } catch (err) {
+    console.warn('⚠️ syncGooglePhoto error:', err.message);
   }
 }
 
@@ -269,7 +307,6 @@ function showWorkspaceSelection(roles) {
 
   rolesList.innerHTML = '';
 
-  // ⚡ خريطة الواجهات
   const workspaceMap = {
     'Owner':   { label: 'واجهة المالك',  icon: '👑', desc: 'إدارة كاملة للنظام' },
     'Admin':   { label: 'واجهة المدير',  icon: '⚙️', desc: 'إدارة كاملة ما عدا الحسابات والإعدادات' },
@@ -277,7 +314,6 @@ function showWorkspaceSelection(roles) {
     'User':    { label: 'واجهة المستخدم', icon: '🎭', desc: 'حسابي، حضوري، الأحداث' }
   };
 
-  // ⚡ اضبط عنوان الشاشة
   const titleEl = document.querySelector('#roleScreen h2');
   if (titleEl) titleEl.textContent = 'اختر الواجهة';
 
@@ -332,7 +368,6 @@ onAuthStateChanged(auth, async (firebaseUser) => {
   if (firebaseUser) {
     console.log('👤 Already signed in:', firebaseUser.email);
 
-    // ⚡ تحقق لو المستخدم عنده بيانات محفوظة + workspace
     const saved = localStorage.getItem('currentUser');
     if (saved) {
       try {
