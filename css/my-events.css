@@ -431,3 +431,28 @@
   background: #d1fae5;
   color: #065f46;
 }
+
+/* ═══ Transfer Button ═══ */
+.me-btn-transfer {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.me-btn-transfer:hover {
+  background: #1e40af;
+  color: #fff;
+  border-color: #1e40af;
+}
+
+/* ═══ Request Card (in my-requests) ═══ */
+.me-request-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
