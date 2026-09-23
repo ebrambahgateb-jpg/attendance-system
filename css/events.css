@@ -23,11 +23,15 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 4px 8px 10px 8px;
+  margin: 0 -8px;
   flex: 1;
   min-width: 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scroll-padding: 8px;
+  scroll-snap-type: x proximity;
+  position: relative;
 }
 
 .events-filters::-webkit-scrollbar {
@@ -37,6 +41,10 @@
 .events-filters::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 2px;
+}
+
+.events-filters::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .filter-btn {
@@ -52,6 +60,7 @@
   white-space: nowrap;
   transition: all 0.2s;
   flex-shrink: 0;
+  scroll-snap-align: start;
 }
 
 .filter-btn:hover {
@@ -523,7 +532,10 @@
   text-align: center;
 }
 
-/* ═══ Responsive ═══ */
+/* ═══════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════ */
+
 @media (max-width: 768px) {
   .events-header {
     flex-direction: column;
@@ -533,6 +545,13 @@
   .events-header .btn-primary {
     width: 100%;
     padding: 14px;
+  }
+
+  /* ⚡ الفلاتر على الموبايل — padding كافي */
+  .events-filters {
+    padding: 4px 12px 10px 12px;
+    margin: 0 -12px;
+    scroll-padding: 12px;
   }
 
   .events-stats {
@@ -588,9 +607,16 @@
 }
 
 @media (max-width: 480px) {
+  /* ⚡ الفلاتر على الموبايل الصغير — padding أكبر */
+  .events-filters {
+    padding: 4px 14px 12px 14px;
+    margin: 0 -14px;
+    scroll-padding: 14px;
+  }
+
   .filter-btn {
     font-size: 12px;
-    padding: 6px 12px;
+    padding: 7px 14px;
   }
 
   .event-stat-value {
