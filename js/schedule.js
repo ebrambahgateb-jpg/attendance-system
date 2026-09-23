@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
+//   ⚡ محدّث: Properties (نص + صور متعددة)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -40,6 +41,15 @@ let schCurrentDate = new Date();
 
 let currentTemplateId = null;
 let templateDaysState = {};
+
+// ⚡ Properties State (للـModal)
+let currentTemplateProps = {
+  text: '',
+  images: []  // [{ url, hash, uploadedAt }]
+};
+
+// ═══ Constants ═══
+const MAX_TEMPLATE_IMAGES = 10;
 
 // ═══ أيام الأسبوع ═══
 const DAYS_OF_WEEK = [
@@ -1058,6 +1068,7 @@ function renderRequestCard(req, showActions) {
 
 function renderTemplatesView(container) {
   const isOwner = schWorkspace === 'Owner';
+  const isViewer = !isOwner && ['User', 'Admin', 'Scanner'].includes(schWorkspace);
 
   container.innerHTML = `
     <div class="sch-templates-header">
@@ -1075,7 +1086,7 @@ function renderTemplatesView(container) {
       </div>
     ` : `
       <div class="sch-templates-list">
-        ${schTemplates.map(t => renderTemplateCard(t, isOwner)).join('')}
+        ${schTemplates.map(t => renderTemplateCard(t, isOwner, isViewer)).join('')}
       </div>
     `}
   `;
@@ -1092,7 +1103,7 @@ function normalizeSchedule(schedule) {
   return normalized;
 }
 
-function renderTemplateCard(template, isOwner) {
+function renderTemplateCard(template, isOwner, isViewer) {
   const isActive = schSettings.ActiveMassTemplateID === template.id;
   const schedule = normalizeSchedule(template.Schedule);
 
@@ -1101,6 +1112,12 @@ function renderTemplateCard(template, isOwner) {
     const dayEvents = schedule[d.value] || [];
     totalEvents += dayEvents.length;
   });
+
+  // ⚡ Properties
+  const props = template.Properties || {};
+  const hasText = !!(props.Text || '').trim();
+  const hasImages = Array.isArray(props.Images) && props.Images.length > 0;
+  const hasProps = hasText || hasImages;
 
   return `
     <div class="sch-template-card ${isActive ? 'active' : ''}">
@@ -1113,6 +1130,7 @@ function renderTemplateCard(template, isOwner) {
               ${template.Status === 'active' ? '✅ مفعّل' : '⏸️ معطّل'}
             </span>
             <span class="sch-template-events-count">📋 ${totalEvents} حدث</span>
+            ${hasProps ? `<span class="sch-template-props-badge">📖 خصائص</span>` : ''}
           </div>
         </div>
       </div>
@@ -1150,14 +1168,21 @@ function renderTemplateCard(template, isOwner) {
         }).join('')}
       </div>
 
-      ${isOwner ? `
+      ${isOwner || isViewer ? `
         <div class="sch-template-actions">
-          ${!isActive ? `<button class="btn-small" onclick="setActiveTemplate('${template.id}')">⭐ تفعيل كنمط</button>` : ''}
-          <button class="btn-small" onclick="editTemplate('${template.id}')">✏️ تعديل</button>
-          <button class="btn-small" onclick="toggleTemplateStatus('${template.id}')">
-            ${template.Status === 'active' ? '⏸️ تعطيل' : '✅ تفعيل'}
-          </button>
-          <button class="btn-small danger" onclick="deleteTemplate('${template.id}')">🗑️ حذف</button>
+          ${hasProps ? `
+            <button class="btn-small" onclick="viewTemplateProperties('${template.id}')">
+              📖 عرض الخصائص
+            </button>
+          ` : ''}
+          ${isOwner ? `
+            ${!isActive ? `<button class="btn-small" onclick="setActiveTemplate('${template.id}')">⭐ تفعيل كنمط</button>` : ''}
+            <button class="btn-small" onclick="editTemplate('${template.id}')">✏️ تعديل</button>
+            <button class="btn-small" onclick="toggleTemplateStatus('${template.id}')">
+              ${template.Status === 'active' ? '⏸️ تعطيل' : '✅ تفعيل'}
+            </button>
+            <button class="btn-small danger" onclick="deleteTemplate('${template.id}')">🗑️ حذف</button>
+          ` : ''}
         </div>
       ` : ''}
     </div>
@@ -1181,6 +1206,270 @@ window.toggleTemplateDay = function(templateId, dayValue) {
   const isOpen = content.style.display !== 'none';
   content.style.display = isOpen ? 'none' : 'block';
   if (arrow) arrow.textContent = isOpen ? '▾' : '▴';
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Template Properties — Render (in Modal)
+// ═══════════════════════════════════════════════════════
+
+function renderTemplatePropertiesSection(template) {
+  const props = template?.Properties || {};
+  const text = props.Text || '';
+  const images = Array.isArray(props.Images) ? props.Images : [];
+
+  // ⚡ خزّن في الـState
+  currentTemplateProps = {
+    text: text,
+    images: [...images]
+  };
+
+  return `
+    <div class="tpl-props-section">
+      <h4>📖 خصائص النمط</h4>
+      <p class="hint">
+        دي معلومات هيشوفها المستخدمين و الأدمن و السكانر عن النمط.
+        تقدر تكتب نص و/أو ترفع صور.
+      </p>
+
+      <!-- ═══ نص ═══ -->
+      <div class="form-row">
+        <label>نص الشرح (اختياري)</label>
+        <textarea id="tplPropsText" rows="6" placeholder="اكتب شرح مفصل عن النمط...">${escapeHtml(text)}</textarea>
+      </div>
+
+      <!-- ═══ صور ═══ -->
+      <div class="form-row">
+        <label>صور (حتى ${MAX_TEMPLATE_IMAGES} صور)</label>
+
+        <div id="tplPropsImagesList" class="tpl-props-images-list">
+          ${renderTemplatePropsImages()}
+        </div>
+
+        <div class="tpl-props-images-actions">
+          <button type="button" class="btn-secondary" onclick="uploadTemplatePropImage()">
+            📤 رفع صورة
+          </button>
+          ${currentTemplateProps.images.length > 0 ? `
+            <button type="button" class="btn-secondary danger" onclick="clearAllTemplatePropImages()">
+              🗑️ مسح كل الصور
+            </button>
+          ` : ''}
+        </div>
+
+        <p class="hint">
+          عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function renderTemplatePropsImages() {
+  const images = currentTemplateProps.images || [];
+
+  if (images.length === 0) {
+    return `<div class="tpl-props-images-empty">لا يوجد صور</div>`;
+  }
+
+  return images.map((img, idx) => `
+    <div class="tpl-props-image-item">
+      <img src="${escapeHtml(img.url)}" alt="" class="tpl-props-image-thumb" />
+      <button type="button" class="tpl-props-image-remove" onclick="removeTemplatePropImage(${idx})" title="مسح">🗑️</button>
+    </div>
+  `).join('');
+}
+
+window.uploadTemplatePropImage = async function() {
+  // ⚡ تحقق من الحد الأقصى
+  if (currentTemplateProps.images.length >= MAX_TEMPLATE_IMAGES) {
+    alert(`⚠️ الحد الأقصى ${MAX_TEMPLATE_IMAGES} صور`);
+    return;
+  }
+
+  // ⚡ استخدم pickImage من upload.js
+  if (typeof window.pickImage !== 'function') {
+    alert('⚠️ خدمة رفع الصور غير متوفرة');
+    return;
+  }
+
+  const file = await window.pickImage();
+  if (!file) return;
+
+  // ⚡ اعرض loading
+  const container = document.getElementById('tplPropsImagesList');
+  const originalHtml = container ? container.innerHTML : '';
+  if (container) {
+    container.innerHTML = '<div class="tpl-props-images-loading">⏳ جاري الرفع...</div>';
+  }
+
+  try {
+    // ⚡ استخدم uploadPersonPhoto
+    if (typeof window.uploadPersonPhoto !== 'function') {
+      throw new Error('خدمة الرفع غير متوفرة');
+    }
+
+    const result = await window.uploadPersonPhoto(file);
+
+    // ⚡ ضيف الصورة
+    currentTemplateProps.images.push({
+      url: result.url,
+      hash: result.hash,
+      uploadedAt: new Date().toISOString()
+    });
+
+    // ⚡ أعد رسم الصور
+    refreshTemplatePropsImages();
+
+    console.log('✅ Image uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
+
+  } catch (err) {
+    console.error('❌ Upload error:', err);
+    alert('❌ فشل الرفع: ' + err.message);
+    if (container) container.innerHTML = originalHtml;
+  }
+};
+
+window.removeTemplatePropImage = function(idx) {
+  if (!confirm('⚠️ مسح هذه الصورة؟')) return;
+
+  currentTemplateProps.images.splice(idx, 1);
+  refreshTemplatePropsImages();
+};
+
+window.clearAllTemplatePropImages = function() {
+  if (!confirm('⚠️ مسح كل الصور؟')) return;
+
+  currentTemplateProps.images = [];
+  refreshTemplatePropsImages();
+};
+
+function refreshTemplatePropsImages() {
+  const container = document.getElementById('tplPropsImagesList');
+  if (container) {
+    container.innerHTML = renderTemplatePropsImages();
+  }
+
+  // ⚡ حدّث زرار "مسح الكل" + العدّاد
+  const actionsContainer = document.querySelector('.tpl-props-images-actions');
+  if (actionsContainer) {
+    const hasImages = currentTemplateProps.images.length > 0;
+    const existingClearBtn = actionsContainer.querySelector('.clear-all-btn');
+
+    if (hasImages && !existingClearBtn) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'btn-secondary danger clear-all-btn';
+      clearBtn.onclick = window.clearAllTemplatePropImages;
+      clearBtn.innerHTML = '🗑️ مسح كل الصور';
+      actionsContainer.appendChild(clearBtn);
+    } else if (!hasImages && existingClearBtn) {
+      existingClearBtn.remove();
+    }
+  }
+
+  // ⚡ حدّث العدّاد
+  const hintEl = document.querySelector('.tpl-props-section .hint:last-child');
+  if (hintEl && hintEl.innerHTML.includes('عدد الصور')) {
+    hintEl.innerHTML = `عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ View Template Properties — Modal (Read-only)
+// ═══════════════════════════════════════════════════════
+
+window.viewTemplateProperties = function(templateId) {
+  const template = schTemplates.find(t => t.id === templateId);
+  if (!template) {
+    alert('النمط غير موجود');
+    return;
+  }
+
+  const props = template.Properties || {};
+  const text = (props.Text || '').trim();
+  const images = Array.isArray(props.Images) ? props.Images : [];
+
+  if (!text && images.length === 0) {
+    alert('لا توجد خصائص لهذا النمط');
+    return;
+  }
+
+  let modal = document.getElementById('templatePropsViewModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'templatePropsViewModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  let contentHtml = '';
+
+  // ⚡ الصور
+  if (images.length > 0) {
+    contentHtml += `
+      <div class="tpl-props-view-images">
+        ${images.map(img => `
+          <div class="tpl-props-view-image">
+            <img src="${escapeHtml(img.url)}" alt="" onclick="openImageFullscreen('${escapeHtml(img.url)}')" />
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // ⚡ النص
+  if (text) {
+    contentHtml += `
+      <div class="tpl-props-view-text">
+        ${escapeHtml(text).replace(/\n/g, '<br>')}
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:800px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>📖 خصائص النمط — ${escapeHtml(template.Name || '')}</h2>
+        <button class="modal-close" onclick="closeTemplatePropsView()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+        ${contentHtml}
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTemplatePropsView()">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+window.closeTemplatePropsView = function() {
+  const modal = document.getElementById('templatePropsViewModal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.openImageFullscreen = function(url) {
+  let modal = document.getElementById('imgFullscreenModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'imgFullscreenModal';
+    modal.className = 'modal-overlay img-fullscreen-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="img-fullscreen-content" onclick="closeImageFullscreen()">
+      <img src="${escapeHtml(url)}" alt="" />
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+window.closeImageFullscreen = function() {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (modal) modal.style.display = 'none';
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1215,7 +1504,7 @@ function renderTemplateModal(modal, template) {
   const isEdit = !!template;
 
   modal.innerHTML = `
-    <div class="modal-content modal-large" style="max-width:800px;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-content modal-large" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column;">
       <div class="modal-header">
         <h2>${isEdit ? '✏️ تعديل نمط' : '➕ نمط جديد'}</h2>
         <button class="modal-close" onclick="closeTemplateModal()">✕</button>
@@ -1238,6 +1527,12 @@ function renderTemplateModal(modal, template) {
           <label for="tplStatus">مفعّل</label>
         </div>
 
+        <!-- ═══ Properties ═══ -->
+        <div id="tplPropsContainer">
+          ${renderTemplatePropertiesSection(template)}
+        </div>
+
+        <!-- ═══ Days Schedule ═══ -->
         <div class="tpl-days-section">
           <h4>📅 جدول الأيام</h4>
           <p class="hint">أضف الأحداث لكل يوم. لو اليوم فاضي، يبقى مفيش أحداث.</p>
@@ -1374,12 +1669,16 @@ window.closeTemplateModal = function() {
   if (modal) modal.style.display = 'none';
   currentTemplateId = null;
   templateDaysState = {};
+  currentTemplateProps = { text: '', images: [] };
 };
 
 window.saveTemplate = async function() {
   const name = document.getElementById('tplName')?.value.trim();
   const description = document.getElementById('tplDescription')?.value.trim() || '';
   const status = document.getElementById('tplStatus')?.checked ? 'active' : 'inactive';
+
+  // ⚡ Properties
+  const propsText = document.getElementById('tplPropsText')?.value.trim() || '';
 
   if (!name) { alert('⚠️ اسم النمط مطلوب'); return; }
 
@@ -1399,6 +1698,11 @@ window.saveTemplate = async function() {
     Description: description,
     Status: status,
     Schedule: templateDaysState,
+    Properties: {
+      Text: propsText,
+      Images: currentTemplateProps.images || [],
+      UpdatedAt: new Date().toISOString()
+    },
     UpdatedAt: new Date().toISOString()
   };
 
@@ -1898,7 +2202,6 @@ window.approveRequest = async function(reqId) {
       console.warn('Notification error:', e);
     }
 
-    // ⚡ سجل الموافقة
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'transfer_approved',
@@ -1959,7 +2262,6 @@ window.rejectRequest = async function(reqId) {
       console.warn('Notification error:', e);
     }
 
-    // ⚡ سجل الرفض
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'transfer_rejected',
