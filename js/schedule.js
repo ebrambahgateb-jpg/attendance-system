@@ -57,7 +57,7 @@ window.imgFsCurrentIndex = 0;
 window.imgFsTouchStartX = 0;
 
 // ═══ Constants ═══
-const MAX_TEMPLATE_IMAGES = 10;
+const MAX_TEMPLATE_IMAGES = 20;
 
 // ═══ أيام الأسبوع ═══
 const DAYS_OF_WEEK = [
