@@ -47,14 +47,14 @@ let currentTemplateProps = {
   images: []
 };
 
-// ═══ Slider State ═══
-let tplSliderImages = [];
-let tplSliderCurrentIndex = 0;
+// ═══ Slider State (exposed to window for inline onclick) ═══
+window.tplSliderImages = [];
+window.tplSliderCurrentIndex = 0;
 
-// ═══ Fullscreen Slider State ═══
-let imgFsImages = [];
-let imgFsCurrentIndex = 0;
-let imgFsTouchStartX = 0;
+// ═══ Fullscreen Slider State (exposed to window) ═══
+window.imgFsImages = [];
+window.imgFsCurrentIndex = 0;
+window.imgFsTouchStartX = 0;
 
 // ═══ Constants ═══
 const MAX_TEMPLATE_IMAGES = 10;
@@ -1451,7 +1451,7 @@ window.viewTemplateProperties = function(templateId) {
             <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">◀</button>
           ` : ''}
 
-          <div class="tpl-slider-image-wrapper" onclick="openImageFullscreenByIndex(tplSliderCurrentIndex)">
+                   <div class="tpl-slider-image-wrapper" onclick="window.openImageFullscreenByIndex(window.tplSliderCurrentIndex || 0)">
             <img id="tplSliderImg" src="${escapeHtml(images[0].url)}" alt="" />
           </div>
 
@@ -1499,11 +1499,36 @@ window.viewTemplateProperties = function(templateId) {
     </div>
   `;
 
-  modal.style.display = 'flex';
+   modal.style.display = 'flex';
 
   // ⚡ Init slider
   if (images.length > 0) {
-    tplSliderInit(images);
+    window.tplSliderInit(images);
+
+    // ⚡ Swipe on slider
+    setTimeout(() => {
+      const sliderMain = document.querySelector('.tpl-slider-main');
+      if (sliderMain) {
+        let startX = 0;
+
+        sliderMain.addEventListener('touchstart', (e) => {
+          startX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        sliderMain.addEventListener('touchend', (e) => {
+          const endX = e.changedTouches[0].screenX;
+          const diff = startX - endX;
+
+          if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+              window.tplSliderNext();
+            } else {
+              window.tplSliderPrev();
+            }
+          }
+        }, { passive: true });
+      }
+    }, 50);
   }
 };
 
@@ -1512,65 +1537,64 @@ window.closeTemplatePropsView = function() {
   if (modal) modal.style.display = 'none';
 
   // ⚡ Cleanup
-  tplSliderImages = [];
-  tplSliderCurrentIndex = 0;
+  window.tplSliderImages = [];
+  window.tplSliderCurrentIndex = 0;
 };
 
 // ═══════════════════════════════════════════════════════
 //   ⚡ Template Properties — Slider Logic
 // ═══════════════════════════════════════════════════════
 
-function tplSliderInit(images) {
-  tplSliderImages = images || [];
-  tplSliderCurrentIndex = 0;
-  tplSliderRender();
-}
+window.tplSliderInit = function(images) {
+  window.tplSliderImages = images || [];
+  window.tplSliderCurrentIndex = 0;
+  window.tplSliderRender();
+};
 
-function tplSliderRender() {
+window.tplSliderRender = function() {
   const img = document.getElementById('tplSliderImg');
   const counter = document.getElementById('tplSliderCounter');
   const dots = document.querySelectorAll('.tpl-slider-dot');
 
   if (!img) return;
 
-  if (tplSliderImages[tplSliderCurrentIndex]) {
-    img.src = tplSliderImages[tplSliderCurrentIndex].url;
+  if (window.tplSliderImages[window.tplSliderCurrentIndex]) {
+    img.src = window.tplSliderImages[window.tplSliderCurrentIndex].url;
   }
 
   if (counter) {
-    counter.textContent = `${tplSliderCurrentIndex + 1} / ${tplSliderImages.length}`;
+    counter.textContent = `${window.tplSliderCurrentIndex + 1} / ${window.tplSliderImages.length}`;
   }
 
   dots.forEach((dot, i) => {
-    dot.classList.toggle('active', i === tplSliderCurrentIndex);
+    dot.classList.toggle('active', i === window.tplSliderCurrentIndex);
   });
-}
+};
 
 window.tplSliderPrev = function() {
-  if (tplSliderImages.length <= 1) return;
+  if (window.tplSliderImages.length <= 1) return;
 
-  tplSliderCurrentIndex = (tplSliderCurrentIndex - 1 + tplSliderImages.length) % tplSliderImages.length;
-  tplSliderRender();
+  window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex - 1 + window.tplSliderImages.length) % window.tplSliderImages.length;
+  window.tplSliderRender();
 };
 
 window.tplSliderNext = function() {
-  if (tplSliderImages.length <= 1) return;
+  if (window.tplSliderImages.length <= 1) return;
 
-  tplSliderCurrentIndex = (tplSliderCurrentIndex + 1) % tplSliderImages.length;
-  tplSliderRender();
+  window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex + 1) % window.tplSliderImages.length;
+  window.tplSliderRender();
 };
 
 window.tplSliderGoTo = function(index) {
-  if (index < 0 || index >= tplSliderImages.length) return;
-  tplSliderCurrentIndex = index;
-  tplSliderRender();
+  if (index < 0 || index >= window.tplSliderImages.length) return;
+  window.tplSliderCurrentIndex = index;
+  window.tplSliderRender();
 };
 
 window.openImageFullscreenByIndex = function(index) {
-  if (!tplSliderImages[index]) return;
-  openImageFullscreenAt(index);
+  if (!window.tplSliderImages[index]) return;
+  window.openImageFullscreenAt(index);
 };
-
 // ═══════════════════════════════════════════════════════
 //   ⚡ Enhanced Image Fullscreen (with navigation)
 // ═══════════════════════════════════════════════════════
@@ -1581,8 +1605,8 @@ window.openImageFullscreen = function(url) {
 };
 
 window.openImageFullscreenAt = function(index) {
-  imgFsImages = [...tplSliderImages];
-  imgFsCurrentIndex = index;
+  window.imgFsImages = [...window.tplSliderImages];
+  window.imgFsCurrentIndex = index;
 
   let modal = document.getElementById('imgFullscreenModal');
   if (!modal) {
@@ -1602,10 +1626,10 @@ window.renderFullscreen = function() {
   const modal = document.getElementById('imgFullscreenModal');
   if (!modal) return;
 
-  const img = imgFsImages[imgFsCurrentIndex];
+  const img = window.imgFsImages[window.imgFsCurrentIndex];
   if (!img) return;
 
-  const hasMultiple = imgFsImages.length > 1;
+  const hasMultiple = window.imgFsImages.length > 1;
 
   modal.innerHTML = `
     <button class="img-fs-close" onclick="closeImageFullscreen()" aria-label="إغلاق">✕</button>
@@ -1622,9 +1646,9 @@ window.renderFullscreen = function() {
       <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">▶</button>
     ` : ''}
 
-    ${hasMultiple ? `
+       ${hasMultiple ? `
       <div class="img-fs-counter">
-        ${imgFsCurrentIndex + 1} / ${imgFsImages.length}
+        ${window.imgFsCurrentIndex + 1} / ${window.imgFsImages.length}
       </div>
     ` : ''}
   `;
@@ -1638,14 +1662,14 @@ window.renderFullscreen = function() {
 };
 
 window.imgFsPrev = function() {
-  if (imgFsImages.length <= 1) return;
-  imgFsCurrentIndex = (imgFsCurrentIndex - 1 + imgFsImages.length) % imgFsImages.length;
+  if (window.imgFsImages.length <= 1) return;
+  window.imgFsCurrentIndex = (window.imgFsCurrentIndex - 1 + window.imgFsImages.length) % window.imgFsImages.length;
   window.renderFullscreen();
 };
 
 window.imgFsNext = function() {
-  if (imgFsImages.length <= 1) return;
-  imgFsCurrentIndex = (imgFsCurrentIndex + 1) % imgFsImages.length;
+  if (window.imgFsImages.length <= 1) return;
+  window.imgFsCurrentIndex = (window.imgFsCurrentIndex + 1) % window.imgFsImages.length;
   window.renderFullscreen();
 };
 
@@ -1663,12 +1687,12 @@ window.imgFsKeyHandler = function(e) {
 };
 
 window.handleFsTouchStart = function(e) {
-  imgFsTouchStartX = e.changedTouches[0].screenX;
+  window.imgFsTouchStartX = e.changedTouches[0].screenX;
 };
 
 window.handleFsTouchEnd = function(e) {
   const touchEndX = e.changedTouches[0].screenX;
-  const diff = imgFsTouchStartX - touchEndX;
+  const diff = window.imgFsTouchStartX - touchEndX;
 
   if (Math.abs(diff) > 50) {
     if (diff > 0) {
