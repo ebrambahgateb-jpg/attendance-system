@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Accounts Management (إدارة الحسابات)
+//   ⚡ محدّث: Ignore List عند الحذف
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -26,6 +27,9 @@ let filteredAccounts = [];
 let peopleData = {};
 let currentEditId = null;
 
+// ═══ Constants ═══
+const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
+
 // ═══ الأدوار المتاحة ═══
 const ROLES = [
   { value: 'Owner',   label: 'Owner (مالك)',   icon: '👑' },
@@ -33,6 +37,46 @@ const ROLES = [
   { value: 'Scanner', label: 'Scanner (ماسح)', icon: '📷' },
   { value: 'User',    label: 'User (مستخدم)',  icon: '👤' }
 ];
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Sync Ignore List Helper
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ إضافة بريد لقائمة التجاهل (عشان ما يرجعش من المزامنة)
+ */
+async function addEmailToIgnoreList(email, reason = '') {
+  if (!email) return { ok: false, message: 'Email required' };
+
+  const emailLower = String(email).toLowerCase().trim();
+
+  try {
+    const response = await fetch(SYNC_WEBAPP_URL, {
+      method: 'POST',
+      mode: 'cors',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'addToIgnoreList',
+        email: emailLower,
+        reason: reason
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status);
+    }
+
+    const text = await response.text();
+    const data = JSON.parse(text);
+
+    console.log(`✅ Added to ignore list: ${emailLower}`, data);
+    return data;
+  } catch (err) {
+    console.warn('⚠️ addEmailToIgnoreList error:', err.message);
+    return { ok: false, message: err.message };
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 //   Load Accounts Page
@@ -49,13 +93,11 @@ async function loadAccountsPage(area) {
 
     accountsData = accountsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Map للأشخاص
     peopleData = {};
     peopleSnap.docs.forEach(d => {
       peopleData[d.id] = { id: d.id, ...d.data() };
     });
 
-    // ترتيب: Owner → Admin → Scanner → User
     const roleOrder = { owner: 0, admin: 1, scanner: 2, user: 3 };
     accountsData.sort((a, b) => {
       const aRole = String(a.Role || '').split(',')[0].trim().toLowerCase();
@@ -84,7 +126,6 @@ async function loadAccountsPage(area) {
 // ═══════════════════════════════════════════════════════
 
 function renderAccountsPage(area) {
-  // إحصائيات
   const stats = {
     total: accountsData.length,
     owners: accountsData.filter(a => getRolesArray(a.Role).includes('Owner')).length,
@@ -97,7 +138,6 @@ function renderAccountsPage(area) {
   area.innerHTML = `
     <div class="acc-container">
 
-      <!-- Header -->
       <div class="acc-header">
         <div class="acc-search">
           <input type="text" id="accSearchInput" placeholder="🔍 ابحث بالبريد، الاسم..." />
@@ -105,7 +145,6 @@ function renderAccountsPage(area) {
         <button class="btn-primary" onclick="openAccountModal()">➕ إضافة حساب</button>
       </div>
 
-      <!-- Stats -->
       <div class="acc-stats">
         <div class="acc-stat">
           <span class="acc-stat-value">${stats.total}</span>
@@ -133,7 +172,6 @@ function renderAccountsPage(area) {
         </div>
       </div>
 
-      <!-- Table -->
       <div class="acc-table-wrapper">
         <table class="acc-table">
           <thead>
@@ -150,7 +188,6 @@ function renderAccountsPage(area) {
         </table>
       </div>
 
-      <!-- Empty -->
       <div id="accEmptyState" class="acc-empty" style="display:none;">
         <div class="acc-empty-icon">🔑</div>
         <h3>لا يوجد حسابات</h3>
@@ -191,19 +228,16 @@ function renderAccountsTable() {
     const isActive = status === 'active';
     const roles = getRolesArray(acc.Role);
 
-    // الشخص المرتبط
     const person = acc.PersonID ? peopleData[acc.PersonID] : null;
     const personName = person
       ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ')
       : '';
 
-    // الصورة
     const initial = (acc.Email || '?').charAt(0).toUpperCase();
     const photoHtml = person?.PhotoURL
       ? `<img src="${person.PhotoURL}" class="acc-avatar" alt="" />`
       : `<div class="acc-avatar-placeholder">${initial}</div>`;
 
-    // شارات الأدوار
     const rolesHtml = roles.length > 0
       ? roles.map(r => {
           const roleInfo = ROLES.find(x => x.value === r);
@@ -280,10 +314,8 @@ function openAccountModal(accountId) {
   const acc = accountId ? accountsData.find(a => a.id === accountId) : null;
   const isEdit = !!acc;
 
-  // الأدوار الحالية للحساب
   const currentRoles = acc ? getRolesArray(acc.Role) : [];
 
-  // قائمة الأشخاص
   const peopleList = Object.values(peopleData).sort((a, b) => {
     const aName = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
     const bName = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
@@ -422,12 +454,10 @@ async function saveAccount() {
   const isActive = document.getElementById('acc_Active')?.checked;
   const personId = document.getElementById('acc_PersonID')?.value || '';
 
-  // الأدوار المختارة
   const selectedRoles = Array.from(
     document.querySelectorAll('input[name="acc_Roles"]:checked')
   ).map(c => c.value);
 
-  // Validation
   if (!email) {
     alert('البريد الإلكتروني مطلوب');
     return;
@@ -438,7 +468,6 @@ async function saveAccount() {
     return;
   }
 
-  // ترتيب الأدوار: Owner → Admin → Scanner → User
   const roleOrder = { Owner: 0, Admin: 1, Scanner: 2, User: 3 };
   selectedRoles.sort((a, b) => (roleOrder[a] ?? 4) - (roleOrder[b] ?? 4));
 
@@ -447,7 +476,6 @@ async function saveAccount() {
 
   try {
     if (currentEditId) {
-      // ⚡ تعديل
       const accRef = doc(db, COLLECTIONS.ACCOUNTS, currentEditId);
       await updateDoc(accRef, {
         Role: roleString,
@@ -456,10 +484,25 @@ async function saveAccount() {
         UpdatedAt: new Date().toISOString()
       });
 
+      // ⚡ لو كان في Ignore List، شيله
+      try {
+        await fetch(SYNC_WEBAPP_URL, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'removeFromIgnoreList',
+            email: email
+          })
+        });
+        console.log('✅ Removed from ignore list (if existed):', email);
+      } catch (e) {
+        console.warn('⚠️ removeFromIgnoreList error:', e.message);
+      }
+
       alert('✅ تم التعديل بنجاح');
     } else {
-      // ⚡ إضافة جديدة
-      // تحقق من عدم وجود حساب بنفس البريد
       const existingQuery = query(
         collection(db, COLLECTIONS.ACCOUNTS),
         where('Email', '==', email)
@@ -471,7 +514,6 @@ async function saveAccount() {
         return;
       }
 
-      // ⚡ لو فيه شخص بنفس البريد، اربطه تلقائيًا
       let finalPersonId = personId;
       if (!finalPersonId) {
         const foundPerson = Object.values(peopleData).find(p =>
@@ -486,10 +528,28 @@ async function saveAccount() {
         PersonID: finalPersonId || '',
         Status: status,
         CreatedAt: new Date().toISOString(),
-        UID: '' // يُملأ عند أول دخول
+        UID: ''
       };
 
       await addDoc(collection(db, COLLECTIONS.ACCOUNTS), accountData);
+
+      // ⚡ شيله من Ignore List لو كان موجود
+      try {
+        await fetch(SYNC_WEBAPP_URL, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'removeFromIgnoreList',
+            email: email
+          })
+        });
+        console.log('✅ Removed from ignore list (if existed):', email);
+      } catch (e) {
+        console.warn('⚠️ removeFromIgnoreList error:', e.message);
+      }
+
       alert('✅ تمت الإضافة بنجاح\n\nملاحظة: سيتم ربط UID تلقائيًا عند أول تسجيل دخول.');
     }
 
@@ -544,7 +604,6 @@ async function confirmDeleteAccount(accountId) {
   const acc = accountsData.find(a => a.id === accountId);
   if (!acc) return;
 
-  // ⚡ تحذير خاص لو الحساب Owner
   const isOwner = getRolesArray(acc.Role).includes('Owner');
   const warning = isOwner
     ? '\n\n⚠️ تحذير: هذا حساب Owner! حذفه قد يسبب فقدان السيطرة على النظام.'
@@ -555,9 +614,16 @@ async function confirmDeleteAccount(accountId) {
   }
 
   try {
+    // ⚡ 1. أضف للـIgnore List قبل الحذف
+    if (acc.Email) {
+      console.log(`📝 Adding to ignore list: ${acc.Email}`);
+      await addEmailToIgnoreList(acc.Email, 'account_deleted_by_admin');
+    }
+
+    // ⚡ 2. احذف الحساب
     await deleteDoc(doc(db, COLLECTIONS.ACCOUNTS, accountId));
 
-    alert('✅ تم الحذف بنجاح');
+    alert('✅ تم الحذف بنجاح\n\n📌 لن يعود الحساب من المزامنة التلقائية.');
 
     const area = document.getElementById('contentArea');
     await loadAccountsPage(area);
@@ -600,3 +666,4 @@ window.saveAccount = saveAccount;
 window.editAccount = editAccount;
 window.toggleAccountStatus = toggleAccountStatus;
 window.confirmDeleteAccount = confirmDeleteAccount;
+window.addEmailToIgnoreList = addEmailToIgnoreList;
