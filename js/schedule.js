@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
-//   ⚡ محدّث: Properties (نص + صور متعددة) + Active Template Banner
+//   ⚡ محدّث: Properties (نص + صور) + Active Template Banner + Image Slider
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -46,6 +46,15 @@ let currentTemplateProps = {
   text: '',
   images: []
 };
+
+// ═══ Slider State ═══
+let tplSliderImages = [];
+let tplSliderCurrentIndex = 0;
+
+// ═══ Fullscreen Slider State ═══
+let imgFsImages = [];
+let imgFsCurrentIndex = 0;
+let imgFsTouchStartX = 0;
 
 // ═══ Constants ═══
 const MAX_TEMPLATE_IMAGES = 10;
@@ -1404,7 +1413,7 @@ function refreshTemplatePropsImages() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   View Template Properties — Modal (Read-only)
+//   ⚡ View Template Properties — Modal (with Slider)
 // ═══════════════════════════════════════════════════════
 
 window.viewTemplateProperties = function(templateId) {
@@ -1433,18 +1442,40 @@ window.viewTemplateProperties = function(templateId) {
 
   let contentHtml = '';
 
+  // ═══ Slider للصور ═══
   if (images.length > 0) {
     contentHtml += `
-      <div class="tpl-props-view-images">
-        ${images.map(img => `
-          <div class="tpl-props-view-image">
-            <img src="${escapeHtml(img.url)}" alt="" onclick="openImageFullscreen('${escapeHtml(img.url)}')" />
+      <div class="tpl-props-slider" id="tplPropsSlider">
+        <div class="tpl-slider-main">
+          ${images.length > 1 ? `
+            <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">◀</button>
+          ` : ''}
+
+          <div class="tpl-slider-image-wrapper" onclick="openImageFullscreenByIndex(tplSliderCurrentIndex)">
+            <img id="tplSliderImg" src="${escapeHtml(images[0].url)}" alt="" />
           </div>
-        `).join('')}
+
+          ${images.length > 1 ? `
+            <button class="tpl-slider-nav tpl-slider-next" onclick="tplSliderNext()" aria-label="التالي">▶</button>
+          ` : ''}
+        </div>
+
+        ${images.length > 1 ? `
+          <div class="tpl-slider-dots" id="tplSliderDots">
+            ${images.map((_, i) => `
+              <button class="tpl-slider-dot ${i === 0 ? 'active' : ''}" onclick="tplSliderGoTo(${i})" aria-label="صورة ${i + 1}"></button>
+            `).join('')}
+          </div>
+
+          <div class="tpl-slider-counter" id="tplSliderCounter">
+            1 / ${images.length}
+          </div>
+        ` : ''}
       </div>
     `;
   }
 
+  // ═══ النص ═══
   if (text) {
     contentHtml += `
       <div class="tpl-props-view-text">
@@ -1469,14 +1500,90 @@ window.viewTemplateProperties = function(templateId) {
   `;
 
   modal.style.display = 'flex';
+
+  // ⚡ Init slider
+  if (images.length > 0) {
+    tplSliderInit(images);
+  }
 };
 
 window.closeTemplatePropsView = function() {
   const modal = document.getElementById('templatePropsViewModal');
   if (modal) modal.style.display = 'none';
+
+  // ⚡ Cleanup
+  tplSliderImages = [];
+  tplSliderCurrentIndex = 0;
 };
 
+// ═══════════════════════════════════════════════════════
+//   ⚡ Template Properties — Slider Logic
+// ═══════════════════════════════════════════════════════
+
+function tplSliderInit(images) {
+  tplSliderImages = images || [];
+  tplSliderCurrentIndex = 0;
+  tplSliderRender();
+}
+
+function tplSliderRender() {
+  const img = document.getElementById('tplSliderImg');
+  const counter = document.getElementById('tplSliderCounter');
+  const dots = document.querySelectorAll('.tpl-slider-dot');
+
+  if (!img) return;
+
+  if (tplSliderImages[tplSliderCurrentIndex]) {
+    img.src = tplSliderImages[tplSliderCurrentIndex].url;
+  }
+
+  if (counter) {
+    counter.textContent = `${tplSliderCurrentIndex + 1} / ${tplSliderImages.length}`;
+  }
+
+  dots.forEach((dot, i) => {
+    dot.classList.toggle('active', i === tplSliderCurrentIndex);
+  });
+}
+
+window.tplSliderPrev = function() {
+  if (tplSliderImages.length <= 1) return;
+
+  tplSliderCurrentIndex = (tplSliderCurrentIndex - 1 + tplSliderImages.length) % tplSliderImages.length;
+  tplSliderRender();
+};
+
+window.tplSliderNext = function() {
+  if (tplSliderImages.length <= 1) return;
+
+  tplSliderCurrentIndex = (tplSliderCurrentIndex + 1) % tplSliderImages.length;
+  tplSliderRender();
+};
+
+window.tplSliderGoTo = function(index) {
+  if (index < 0 || index >= tplSliderImages.length) return;
+  tplSliderCurrentIndex = index;
+  tplSliderRender();
+};
+
+window.openImageFullscreenByIndex = function(index) {
+  if (!tplSliderImages[index]) return;
+  openImageFullscreenAt(index);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Enhanced Image Fullscreen (with navigation)
+// ═══════════════════════════════════════════════════════
+
 window.openImageFullscreen = function(url) {
+  const idx = tplSliderImages.findIndex(i => i.url === url);
+  openImageFullscreenAt(idx >= 0 ? idx : 0);
+};
+
+function openImageFullscreenAt(index) {
+  imgFsImages = [...tplSliderImages];
+  imgFsCurrentIndex = index;
+
   let modal = document.getElementById('imgFullscreenModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -1485,18 +1592,100 @@ window.openImageFullscreen = function(url) {
     document.body.appendChild(modal);
   }
 
+  renderFullscreen();
+  modal.style.display = 'flex';
+
+  document.addEventListener('keydown', imgFsKeyHandler);
+}
+
+function renderFullscreen() {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (!modal) return;
+
+  const img = imgFsImages[imgFsCurrentIndex];
+  if (!img) return;
+
+  const hasMultiple = imgFsImages.length > 1;
+
   modal.innerHTML = `
-    <div class="img-fullscreen-content" onclick="closeImageFullscreen()">
-      <img src="${escapeHtml(url)}" alt="" />
+    <button class="img-fs-close" onclick="closeImageFullscreen()" aria-label="إغلاق">✕</button>
+
+    ${hasMultiple ? `
+      <button class="img-fs-nav img-fs-prev" onclick="imgFsPrev()" aria-label="السابق">◀</button>
+    ` : ''}
+
+    <div class="img-fs-image-wrapper" id="imgFsWrapper">
+      <img src="${escapeHtml(img.url)}" alt="" />
     </div>
+
+    ${hasMultiple ? `
+      <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">▶</button>
+    ` : ''}
+
+    ${hasMultiple ? `
+      <div class="img-fs-counter">
+        ${imgFsCurrentIndex + 1} / ${imgFsImages.length}
+      </div>
+    ` : ''}
   `;
 
-  modal.style.display = 'flex';
+  // ⚡ Swipe listeners
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper && hasMultiple) {
+    wrapper.addEventListener('touchstart', handleFsTouchStart, { passive: true });
+    wrapper.addEventListener('touchend', handleFsTouchEnd, { passive: true });
+  }
+}
+
+window.imgFsPrev = function() {
+  if (imgFsImages.length <= 1) return;
+  imgFsCurrentIndex = (imgFsCurrentIndex - 1 + imgFsImages.length) % imgFsImages.length;
+  renderFullscreen();
 };
+
+window.imgFsNext = function() {
+  if (imgFsImages.length <= 1) return;
+  imgFsCurrentIndex = (imgFsCurrentIndex + 1) % imgFsImages.length;
+  renderFullscreen();
+};
+
+function imgFsKeyHandler(e) {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (!modal || modal.style.display === 'none') return;
+
+  if (e.key === 'Escape') {
+    closeImageFullscreen();
+  } else if (e.key === 'ArrowLeft') {
+    // ⚡ RTL: السهم الأيسر = التالي
+    imgFsNext();
+  } else if (e.key === 'ArrowRight') {
+    // ⚡ RTL: السهم الأيمن = السابق
+    imgFsPrev();
+  }
+}
+
+function handleFsTouchStart(e) {
+  imgFsTouchStartX = e.changedTouches[0].screenX;
+}
+
+function handleFsTouchEnd(e) {
+  const touchEndX = e.changedTouches[0].screenX;
+  const diff = imgFsTouchStartX - touchEndX;
+
+  if (Math.abs(diff) > 50) {
+    if (diff > 0) {
+      imgFsNext();
+    } else {
+      imgFsPrev();
+    }
+  }
+}
 
 window.closeImageFullscreen = function() {
   const modal = document.getElementById('imgFullscreenModal');
   if (modal) modal.style.display = 'none';
+
+  document.removeEventListener('keydown', imgFsKeyHandler);
 };
 
 // ═══════════════════════════════════════════════════════
