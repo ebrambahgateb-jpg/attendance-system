@@ -21,17 +21,19 @@
 
 .events-filters {
   display: flex;
+  flex-wrap: nowrap;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px 8px 10px 8px;
   margin: 0 -8px;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scroll-padding: 8px;
   scroll-snap-type: x proximity;
-  position: relative;
 }
 
 .events-filters::-webkit-scrollbar {
@@ -547,11 +549,31 @@
     padding: 14px;
   }
 
-  /* ⚡ الفلاتر على الموبايل — padding كافي */
+  /* ⚡ الفلاتر على الموبايل — scroll أفقي مضمون */
   .events-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     padding: 4px 12px 10px 12px;
     margin: 0 -12px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
     scroll-padding: 12px;
+    scrollbar-width: none;
+  }
+
+  .events-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-btn {
+    flex-shrink: 0;
+    scroll-snap-align: start;
   }
 
   .events-stats {
@@ -607,14 +629,22 @@
 }
 
 @media (max-width: 480px) {
-  /* ⚡ الفلاتر على الموبايل الصغير — padding أكبر */
+  /* ⚡ الفلاتر على الموبايل الصغير */
   .events-filters {
     padding: 4px 14px 12px 14px;
     margin: 0 -14px;
     scroll-padding: 14px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .events-filters::-webkit-scrollbar {
+    display: none;
   }
 
   .filter-btn {
+    flex-shrink: 0;
     font-size: 12px;
     padding: 7px 14px;
   }
