@@ -1585,11 +1585,15 @@ html[data-theme="dark"] .sch-active-template-icon {
 
 .tpl-slider-image-wrapper img {
   max-width: 100%;
-  max-height: 480px;
+  max-height: 600px;
   object-fit: contain;
   border-radius: 10px;
   display: block;
   transition: opacity 0.3s;
+  /* ⚡ تحسين وضوح الصورة */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: high-quality;
 }
 
 /* ═══ Navigation Buttons ═══ */
@@ -1759,14 +1763,17 @@ html[data-theme="dark"] .sch-active-template-icon {
 
 .img-fs-image-wrapper img {
   max-width: 100%;
-  max-height: 90vh;
+  max-height: 95vh;
   object-fit: contain;
   border-radius: 8px;
   user-select: none;
   pointer-events: none;
   animation: imgFsFade 0.25s ease;
+  /* ⚡ تحسين وضوح الصورة */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: high-quality;
 }
-
 @keyframes imgFsFade {
   from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: scale(1); }
