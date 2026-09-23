@@ -8,10 +8,10 @@ const IMGBB_API_KEY = 'e222a3609a80a1de3ccb555dabcc355e';
 const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
 
 // ═══ Compression Defaults ═══
-const DEFAULT_MAX_WIDTH = 500;
-const DEFAULT_MAX_HEIGHT = 500;
-const DEFAULT_QUALITY = 0.85;
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const DEFAULT_MAX_WIDTH = 1920;
+const DEFAULT_MAX_HEIGHT = 1920;
+const DEFAULT_QUALITY = 0.95;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB (بدل 2 MB)
 
 // ═══ Allowed Types ═══
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
