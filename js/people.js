@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   People Management (Firestore) + Auto Accounts
-//   ⚡ محدّث: Upload Widget + PhotoHash (منع التكرار)
+//   ⚡ محدّث: Upload Widget + PhotoHash + Ignore List
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -26,8 +26,9 @@ let currentEditId = null;
 let currentPhotoURL = '';
 let currentPhotoHash = '';
 
-// ═══ Constant ═══
+// ═══ Constants ═══
 const DEFAULT_ROLE = 'User';
+const SYNC_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLCcBwNOBx-74HLJIVOu0r8TjpD1z9SkeKL_5LJWFLe9-Lw2Z-ee8NMZy27x2RFiju/exec';
 
 // ═══════════════════════════════════════════════════════
 //   Helpers
@@ -118,6 +119,46 @@ function getFacebookDisplay(value) {
   url = url.replace(/^m\./, '');
 
   return url;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Sync Ignore List Helper
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ إضافة بريد لقائمة التجاهل (عشان ما يرجعش من المزامنة)
+ */
+async function addEmailToIgnoreList(email, reason = '') {
+  if (!email) return { ok: false, message: 'Email required' };
+
+  const emailLower = String(email).toLowerCase().trim();
+
+  try {
+    const response = await fetch(SYNC_WEBAPP_URL, {
+      method: 'POST',
+      mode: 'cors',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'addToIgnoreList',
+        email: emailLower,
+        reason: reason
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status);
+    }
+
+    const text = await response.text();
+    const data = JSON.parse(text);
+
+    console.log(`✅ Added to ignore list: ${emailLower}`, data);
+    return data;
+  } catch (err) {
+    console.warn('⚠️ addEmailToIgnoreList error:', err.message);
+    return { ok: false, message: err.message };
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -384,7 +425,6 @@ function openPersonModal(personId) {
   const person = personId ? peopleData.find(p => p.id === personId) : null;
   const isEdit = !!person;
 
-  // ⚡ خزّن الصورة والـhash الحاليين
   currentPhotoURL = person?.PhotoURL || '';
   currentPhotoHash = person?.PhotoHash || '';
 
@@ -498,21 +538,18 @@ function openPersonModal(personId) {
 
   modal.style.display = 'flex';
 
-  // ⚡ Render Upload Widget بعد ما الـModal يفتح
   setTimeout(() => {
     if (typeof window.renderUploadWidget === 'function') {
       window.renderUploadWidget(
         'photoUploadContainer',
         currentPhotoURL,
         (result) => {
-          // ⚡ result = { url, hash, isDuplicate }
           currentPhotoURL = result.url;
           currentPhotoHash = result.hash || '';
           console.log('✅ Photo uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
         },
         () => {
           currentPhotoURL = '';
-          // ⚡ مهم: لا نمسح currentPhotoHash — عشان نقدر نطابق لو رفعها تاني
           console.log('🗑️ Photo removed (hash kept for matching)');
         },
         {
@@ -563,7 +600,6 @@ async function savePerson() {
 
   const status = isActive ? 'active' : 'inactive';
 
-  // ⚡ الصورة من currentPhotoURL + hash من currentPhotoHash
   const photoURL = currentPhotoURL || '';
   const photoHash = currentPhotoHash || '';
 
@@ -616,6 +652,25 @@ async function savePerson() {
       }
     } else {
       accountMessage = '\n\n⚠️ لا يوجد بريد — لم يتم إنشاء حساب.';
+    }
+
+    // ⚡ لو كان الشخص موجود في Ignore List، شيله
+    if (email && !isNew) {
+      try {
+        await fetch(SYNC_WEBAPP_URL, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'removeFromIgnoreList',
+            email: email.toLowerCase().trim()
+          })
+        });
+        console.log('✅ Removed from ignore list (if existed):', email);
+      } catch (e) {
+        console.warn('⚠️ removeFromIgnoreList error:', e.message);
+      }
     }
 
     alert(
@@ -694,8 +749,16 @@ async function confirmDeletePerson(personId) {
   if (!confirm(`⚠️ هل أنت متأكد من حذف "${fullName}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
 
   try {
+    // ⚡ 1. أضف للـIgnore List قبل الحذف
+    if (person.Email) {
+      console.log(`📝 Adding to ignore list: ${person.Email}`);
+      await addEmailToIgnoreList(person.Email, 'deleted_by_admin');
+    }
+
+    // ⚡ 2. احذف الشخص
     await deleteDoc(doc(db, COLLECTIONS.PEOPLE, personId));
-    alert('✅ تم الحذف بنجاح\n\nملاحظة: الحساب المرتبط لم يُحذف.');
+
+    alert('✅ تم الحذف بنجاح\n\n📌 لن يعود الشخص من المزامنة التلقائية.\n📌 الحساب المرتبط لم يُحذف.');
     const area = document.getElementById('contentArea');
     await loadPeoplePage(area);
   } catch (err) {
@@ -1160,3 +1223,4 @@ window.confirmRegenerateQRDetails = confirmRegenerateQRDetails;
 window.viewPersonDetails = viewPersonDetails;
 window.closePersonDetails = closePersonDetails;
 window.downloadPersonQR = downloadPersonQR;
+window.addEmailToIgnoreList = addEmailToIgnoreList;
