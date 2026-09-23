@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   Upload Utility — ImgBB
-//   ⚡ ضغط + رفع + معاينة الصور
+//   Upload Utility — ImgBB + Duplicate Prevention
+//   ⚡ ضغط + رفع + كشف تكرار نفس الصورة
 // ═══════════════════════════════════════════════════════
 
 // ═══ Constants ═══
@@ -17,17 +17,45 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Compress Image (Before upload)
+//   ⚡ SHA-256 Hash
 // ═══════════════════════════════════════════════════════
 
 /**
- * ⚡ ضغط الصورة قبل الرفع
- * @param {File} file - الملف الأصلي
- * @param {number} maxWidth - أقصى عرض (px)
- * @param {number} maxHeight - أقصى ارتفاع (px)
- * @param {number} quality - جودة الصورة (0.1 → 1)
- * @returns {Promise<Blob>} - الـBlob المضغوط
+ * ⚡ حساب SHA-256 hash للملف
+ * @param {File|Blob} file
+ * @returns {Promise<string>} - hex string
  */
+async function getFileHash(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (err) {
+    console.warn('⚠️ getFileHash error:', err);
+    // ⚡ Fallback: hash بسيط (لو crypto.subtle مش مدعوم)
+    return fallbackHash(file);
+  }
+}
+
+/**
+ * ⚡ Fallback hash (لو crypto.subtle مش متاح)
+ */
+function fallbackHash(file) {
+  const str = `${file.name}_${file.size}_${file.lastModified || Date.now()}`;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return 'fb_' + Math.abs(hash).toString(16);
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Compress Image
+// ═══════════════════════════════════════════════════════
+
 async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEFAULT_MAX_HEIGHT, quality = DEFAULT_QUALITY) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -38,14 +66,12 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
       img.onload = () => {
         let { width, height } = img;
 
-        // ⚡ احسب الأبعاد الجديدة (حفظ النسبة)
         if (width > maxWidth || height > maxHeight) {
           const ratio = Math.min(maxWidth / width, maxHeight / height);
           width = Math.round(width * ratio);
           height = Math.round(height * ratio);
         }
 
-        // ⚡ ارسم الصورة على Canvas
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -55,7 +81,6 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // ⚡ حوّل لـBlob
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -82,12 +107,6 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
 //   ⚡ Upload to ImgBB
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ رفع الصورة لـImgBB
- * @param {Blob|File} blob - الصورة (بعد الضغط)
- * @param {string} name - اسم الصورة (اختياري)
- * @returns {Promise<{url: string, thumb: string, deleteUrl: string}>}
- */
 async function uploadToImgBB(blob, name = '') {
   const formData = new FormData();
   formData.append('image', blob);
@@ -118,15 +137,17 @@ async function uploadToImgBB(blob, name = '') {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Main Upload Function (Compress + Upload)
+//   ⚡ Main Upload Function (with Duplicate Check)
 // ═══════════════════════════════════════════════════════
 
 /**
- * ⚡ رفع صورة شخص (ضغط + رفع)
+ * ⚡ رفع صورة شخص (ضغط + رفع + فحص التكرار)
  * @param {File} file - الملف الأصلي
- * @returns {Promise<string>} - رابط الصورة
+ * @param {string} previousHash - hash الصورة السابقة (اختياري)
+ * @param {string} previousURL - URL الصورة السابقة (اختياري)
+ * @returns {Promise<{url: string, hash: string, isDuplicate: boolean}>}
  */
-async function uploadPersonPhoto(file) {
+async function uploadPersonPhoto(file, previousHash = '', previousURL = '') {
   // ⚡ 1. تحقق من النوع
   if (!ALLOWED_TYPES.includes(file.type)) {
     throw new Error('صيغة الصورة غير مدعومة. استخدم JPG أو PNG أو WebP');
@@ -137,23 +158,39 @@ async function uploadPersonPhoto(file) {
     throw new Error(`حجم الصورة أكبر من ${MAX_FILE_SIZE / 1024 / 1024} MB`);
   }
 
-  // ⚡ 3. اضغط الصورة
+  // ⚡ 3. احسب الـhash
+  const hash = await getFileHash(file);
+
+  // ⚡ 4. تحقق من التكرار (نفس الشخص)
+  if (previousHash && previousURL && hash === previousHash) {
+    console.log('♻️ Same photo detected — reusing cached URL');
+    return {
+      url: previousURL,
+      hash: hash,
+      isDuplicate: true
+    };
+  }
+
+  // ⚡ 5. اضغط الصورة
   const compressed = await compressImage(file);
 
-  // ⚡ 4. ارفع
+  // ⚡ 6. ارفع
   const result = await uploadToImgBB(compressed, `person_${Date.now()}`);
 
-  return result.url;
+  return {
+    url: result.url,
+    thumb: result.thumb,
+    deleteUrl: result.deleteUrl,
+    imgbbId: result.id,
+    hash: hash,
+    isDuplicate: false
+  };
 }
 
 // ═══════════════════════════════════════════════════════
 //   ⚡ File Picker Helper
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ فتح File Picker
- * @returns {Promise<File|null>}
- */
 function pickImage() {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -177,14 +214,19 @@ function pickImage() {
  * ⚡ يبني HTML component لرفع الصورة
  * @param {string} containerId - ID الـcontainer
  * @param {string} currentUrl - رابط الصورة الحالية (اختياري)
- * @param {Function} onUpload - دالة تُستدعى بعد الرفع (url) => {}
+ * @param {Function} onUpload - دالة تُستدعى بعد الرفع ({url, hash}) => {}
  * @param {Function} onRemove - دالة تُستدعى بعد المسح () => {}
+ * @param {Object} options - خيارات إضافية: { currentHash, currentURL }
  */
-function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRemove = null) {
+function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRemove = null, options = {}) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
   const hasPhoto = !!currentUrl;
+
+  // ⚡ احفظ options في dataset
+  container.dataset.currentHash = options.currentHash || '';
+  container.dataset.currentURL = options.currentURL || currentUrl || '';
 
   container.innerHTML = `
     <div class="upload-widget">
@@ -224,20 +266,32 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
   const uploadBtn = document.getElementById(`${containerId}-upload-btn`);
   const removeBtn = document.getElementById(`${containerId}-remove-btn`);
   const preview = document.getElementById(`${containerId}-preview`);
-  const loading = document.getElementById(`${containerId}-loading`);
 
   if (uploadBtn) {
     uploadBtn.onclick = async () => {
       const file = await pickImage();
       if (!file) return;
 
-      // ⚡ عرض الـloading
+      const loading = document.getElementById(`${containerId}-loading`);
       if (loading) loading.style.display = 'flex';
       uploadBtn.disabled = true;
       if (removeBtn) removeBtn.disabled = true;
 
       try {
-        const url = await uploadPersonPhoto(file);
+        // ⚡ استخدم الـhash والـURL المحفوظين
+        const prevHash = container.dataset.currentHash || '';
+        const prevURL = container.dataset.currentURL || '';
+
+        const result = await uploadPersonPhoto(file, prevHash, prevURL);
+
+        // ⚡ حدّث الـdataset بالـhash الجديد
+        container.dataset.currentHash = result.hash;
+        container.dataset.currentURL = result.url;
+
+        // ⚡ لو كانت نسخة مكررة، اعرض رسالة
+        if (result.isDuplicate) {
+          console.log('♻️ Used cached photo URL');
+        }
 
         // ⚡ حدّث الـPreview
         if (preview) {
@@ -245,37 +299,45 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
           const img = preview.querySelector('.upload-img');
 
           if (img) {
-            img.src = url;
+            img.src = result.url;
           } else {
             if (placeholder) placeholder.remove();
             const newImg = document.createElement('img');
-            newImg.src = url;
+            newImg.src = result.url;
             newImg.className = 'upload-img';
             newImg.id = `${containerId}-img`;
             preview.insertBefore(newImg, loading);
           }
         }
 
-        // ⚡ غيّر الزرار لـ"تغيير" + ضيف مسح
-        uploadBtn.innerHTML = '📤 تغيير الصورة';
-        if (!document.getElementById(`${containerId}-remove-btn`)) {
+        // ⚡ ضيف زرار مسح لو مش موجود
+        let currentRemoveBtn = document.getElementById(`${containerId}-remove-btn`);
+        if (!currentRemoveBtn) {
           const actionsDiv = document.querySelector(`#${containerId} .upload-actions`);
           if (actionsDiv) {
-            const removeBtnNew = document.createElement('button');
-            removeBtnNew.type = 'button';
-            removeBtnNew.className = 'btn-secondary upload-btn';
-            removeBtnNew.id = `${containerId}-remove-btn`;
-            removeBtnNew.innerHTML = '🗑️ مسح';
-            actionsDiv.appendChild(removeBtnNew);
-            removeBtnNew.onclick = () => handleRemove(containerId, onRemove, preview, uploadBtn);
+            currentRemoveBtn = document.createElement('button');
+            currentRemoveBtn.type = 'button';
+            currentRemoveBtn.className = 'btn-secondary upload-btn';
+            currentRemoveBtn.id = `${containerId}-remove-btn`;
+            currentRemoveBtn.innerHTML = '🗑️ مسح';
+            actionsDiv.appendChild(currentRemoveBtn);
           }
-        } else {
-          const rb = document.getElementById(`${containerId}-remove-btn`);
-          if (rb) rb.onclick = () => handleRemove(containerId, onRemove, preview, uploadBtn);
+        }
+
+        uploadBtn.innerHTML = '📤 تغيير الصورة';
+
+        // ⚡ اربط زرار المسح
+        if (currentRemoveBtn) {
+          currentRemoveBtn.onclick = () => {
+            if (typeof onRemove === 'function') onRemove();
+            handleRemove(containerId, preview, uploadBtn, onUpload);
+          };
         }
 
         // ⚡ استدعي الـcallback
-        if (typeof onUpload === 'function') onUpload(url);
+        if (typeof onUpload === 'function') {
+          onUpload({ url: result.url, hash: result.hash, isDuplicate: result.isDuplicate });
+        }
 
       } catch (err) {
         console.error('❌ Upload error:', err);
@@ -290,12 +352,24 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
 
   // ═══ Remove Button ═══
   if (removeBtn) {
-    removeBtn.onclick = () => handleRemove(containerId, onRemove, preview, uploadBtn);
+    removeBtn.onclick = () => {
+      if (typeof onRemove === 'function') onRemove();
+      handleRemove(containerId, preview, uploadBtn, onUpload);
+    };
   }
 }
 
-function handleRemove(containerId, onRemove, preview, uploadBtn) {
+/**
+ * ⚡ مسح الصورة من الـUI (بدون مسح الـhash)
+ */
+function handleRemove(containerId, preview, uploadBtn, onUpload) {
   if (!confirm('⚠️ هل تريد مسح الصورة؟')) return;
+
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // ⚡ نمسح الـURL بس من الـdataset (نسيب الـhash عشان نقدر نطابق لو رفعها تاني)
+  container.dataset.currentURL = '';
 
   // ⚡ استبدل الصورة بـplaceholder
   if (preview) {
@@ -315,60 +389,70 @@ function handleRemove(containerId, onRemove, preview, uploadBtn) {
   const rb = document.getElementById(`${containerId}-remove-btn`);
   if (rb) rb.remove();
 
-  // ⚡ رجّع النص الأصلي
-  if (uploadBtn) uploadBtn.innerHTML = '📤 رفع صورة';
+  // ⚡ رجّع نص الزرار الأصلي
+  if (uploadBtn) {
+    uploadBtn.innerHTML = '📤 رفع صورة';
 
-  // ⚡ استدعي الـcallback
-  if (typeof onRemove === 'function') onRemove();
-
-  // ⚡ أعد ربط زرار الرفع (عشان الـloading اتغير)
-  const newPreview = document.getElementById(`${containerId}-preview`);
-  const newLoading = document.getElementById(`${containerId}-loading`);
-  if (uploadBtn && newPreview) {
+    // ⚡ أعد ربط زرار الرفع
     uploadBtn.onclick = async () => {
       const file = await pickImage();
       if (!file) return;
 
-      if (newLoading) newLoading.style.display = 'flex';
+      const loading = document.getElementById(`${containerId}-loading`);
+      if (loading) loading.style.display = 'flex';
       uploadBtn.disabled = true;
 
       try {
-        const url = await uploadPersonPhoto(file);
+        const prevHash = container.dataset.currentHash || '';
+        const prevURL = container.dataset.currentURL || '';
 
-        newPreview.innerHTML = `
-          <img src="${url}" alt="Preview" class="upload-img" id="${containerId}-img" />
-          <div class="upload-loading" id="${containerId}-loading" style="display:none;">
-            <div class="upload-spinner"></div>
-            <span>جاري الرفع...</span>
-          </div>
-        `;
+        const result = await uploadPersonPhoto(file, prevHash, prevURL);
+
+        // ⚡ حدّث
+        container.dataset.currentHash = result.hash;
+        container.dataset.currentURL = result.url;
+
+        if (result.isDuplicate) {
+          console.log('♻️ Used cached photo URL (reused)');
+        }
+
+        // ⚡ ارسم الصورة
+        const newPreview = document.getElementById(`${containerId}-preview`);
+        if (newPreview) {
+          newPreview.innerHTML = `
+            <img src="${result.url}" alt="Preview" class="upload-img" />
+            <div class="upload-loading" id="${containerId}-loading" style="display:none;">
+              <div class="upload-spinner"></div>
+              <span>جاري الرفع...</span>
+            </div>
+          `;
+        }
 
         uploadBtn.innerHTML = '📤 تغيير الصورة';
 
-        // ⚡ ضيف زرار المسح من جديد
+        // ⚡ ضيف زرار مسح
         const actionsDiv = document.querySelector(`#${containerId} .upload-actions`);
         if (actionsDiv) {
-          const removeBtnNew = document.createElement('button');
-          removeBtnNew.type = 'button';
-          removeBtnNew.className = 'btn-secondary upload-btn';
-          removeBtnNew.id = `${containerId}-remove-btn`;
-          removeBtnNew.innerHTML = '🗑️ مسح';
+          const newRemoveBtn = document.createElement('button');
+          newRemoveBtn.type = 'button';
+          newRemoveBtn.className = 'btn-secondary upload-btn';
+          newRemoveBtn.id = `${containerId}-remove-btn`;
+          newRemoveBtn.innerHTML = '🗑️ مسح';
 
-          removeBtnNew.onclick = () => {
+          newRemoveBtn.onclick = () => {
             const p = document.getElementById(`${containerId}-preview`);
-            handleRemove(containerId, onRemove, p, uploadBtn);
+            // ⚡ استدعي onRemove (لو موجود) عشان نمسح الـURL من الـDB
+            if (typeof window._uploadOnRemove?.[containerId] === 'function') {
+              window._uploadOnRemove[containerId]();
+            }
+            handleRemove(containerId, p, uploadBtn, onUpload);
           };
 
-          actionsDiv.appendChild(removeBtnNew);
+          actionsDiv.appendChild(newRemoveBtn);
         }
 
-        if (typeof window._uploadCallbacks === 'undefined') window._uploadCallbacks = {};
-        // ⚡ نستخدم نفس callback الأصلي
-        // (لأننا محتاجين نحفظهم — بس ده سهل، نستخدم closure)
-
-        // ⚡ نستخدم callback متخزن
-        if (containerId && window._uploadCallbacks?.[containerId]?.onUpload) {
-          window._uploadCallbacks[containerId].onUpload(url);
+        if (typeof onUpload === 'function') {
+          onUpload({ url: result.url, hash: result.hash, isDuplicate: result.isDuplicate });
         }
 
       } catch (err) {
@@ -390,4 +474,5 @@ window.compressImage = compressImage;
 window.uploadToImgBB = uploadToImgBB;
 window.uploadPersonPhoto = uploadPersonPhoto;
 window.pickImage = pickImage;
+window.getFileHash = getFileHash;
 window.renderUploadWidget = renderUploadWidget;
