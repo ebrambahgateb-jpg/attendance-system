@@ -1577,10 +1577,10 @@ window.openImageFullscreenByIndex = function(index) {
 
 window.openImageFullscreen = function(url) {
   const idx = tplSliderImages.findIndex(i => i.url === url);
-  openImageFullscreenAt(idx >= 0 ? idx : 0);
+  window.openImageFullscreenAt(idx >= 0 ? idx : 0);
 };
 
-function openImageFullscreenAt(index) {
+window.openImageFullscreenAt = function(index) {
   imgFsImages = [...tplSliderImages];
   imgFsCurrentIndex = index;
 
@@ -1592,13 +1592,13 @@ function openImageFullscreenAt(index) {
     document.body.appendChild(modal);
   }
 
-  renderFullscreen();
+  window.renderFullscreen();
   modal.style.display = 'flex';
 
-  document.addEventListener('keydown', imgFsKeyHandler);
-}
+  document.addEventListener('keydown', window.imgFsKeyHandler);
+};
 
-function renderFullscreen() {
+window.renderFullscreen = function() {
   const modal = document.getElementById('imgFullscreenModal');
   if (!modal) return;
 
@@ -1632,60 +1632,58 @@ function renderFullscreen() {
   // ⚡ Swipe listeners
   const wrapper = document.getElementById('imgFsWrapper');
   if (wrapper && hasMultiple) {
-    wrapper.addEventListener('touchstart', handleFsTouchStart, { passive: true });
-    wrapper.addEventListener('touchend', handleFsTouchEnd, { passive: true });
+    wrapper.addEventListener('touchstart', window.handleFsTouchStart, { passive: true });
+    wrapper.addEventListener('touchend', window.handleFsTouchEnd, { passive: true });
   }
-}
+};
 
 window.imgFsPrev = function() {
   if (imgFsImages.length <= 1) return;
   imgFsCurrentIndex = (imgFsCurrentIndex - 1 + imgFsImages.length) % imgFsImages.length;
-  renderFullscreen();
+  window.renderFullscreen();
 };
 
 window.imgFsNext = function() {
   if (imgFsImages.length <= 1) return;
   imgFsCurrentIndex = (imgFsCurrentIndex + 1) % imgFsImages.length;
-  renderFullscreen();
+  window.renderFullscreen();
 };
 
-function imgFsKeyHandler(e) {
+window.imgFsKeyHandler = function(e) {
   const modal = document.getElementById('imgFullscreenModal');
   if (!modal || modal.style.display === 'none') return;
 
   if (e.key === 'Escape') {
-    closeImageFullscreen();
+    window.closeImageFullscreen();
   } else if (e.key === 'ArrowLeft') {
-    // ⚡ RTL: السهم الأيسر = التالي
-    imgFsNext();
+    window.imgFsNext();
   } else if (e.key === 'ArrowRight') {
-    // ⚡ RTL: السهم الأيمن = السابق
-    imgFsPrev();
+    window.imgFsPrev();
   }
-}
+};
 
-function handleFsTouchStart(e) {
+window.handleFsTouchStart = function(e) {
   imgFsTouchStartX = e.changedTouches[0].screenX;
-}
+};
 
-function handleFsTouchEnd(e) {
+window.handleFsTouchEnd = function(e) {
   const touchEndX = e.changedTouches[0].screenX;
   const diff = imgFsTouchStartX - touchEndX;
 
   if (Math.abs(diff) > 50) {
     if (diff > 0) {
-      imgFsNext();
+      window.imgFsNext();
     } else {
-      imgFsPrev();
+      window.imgFsPrev();
     }
   }
-}
+};
 
 window.closeImageFullscreen = function() {
   const modal = document.getElementById('imgFullscreenModal');
   if (modal) modal.style.display = 'none';
 
-  document.removeEventListener('keydown', imgFsKeyHandler);
+  document.removeEventListener('keydown', window.imgFsKeyHandler);
 };
 
 // ═══════════════════════════════════════════════════════
