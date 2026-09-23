@@ -16,7 +16,7 @@ import {
 } from './firebase-config.js';
 
 import {
-  EDITABLE_TABS,
+  TABS_REGISTRY,
   OWNER_ONLY_TABS
 } from './tabs-config.js';
 
@@ -35,11 +35,14 @@ const EDITABLE_ROLES = [
   { role: 'Scanner', label: '📷 Scanner' }
 ];
 
-// ⚡ حساب الافتراضي محليًا (لأنه مش موجود في tabs-config الجديد)
+// ⚡ التابات القابلة للاختيار (كل التابات ما عدا ownerOnly)
+const SELECTABLE_TABS = TABS_REGISTRY.filter(t => !t.ownerOnly);
+
+// ⚡ حساب الافتراضي محليًا
 const DEFAULT_TAB_PERMISSIONS = {
-  User:    EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('User')).map(t => t.id),
-  Admin:   EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Admin')).map(t => t.id),
-  Scanner: EDITABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Scanner')).map(t => t.id)
+  User:    SELECTABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('User')).map(t => t.id),
+  Admin:   SELECTABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Admin')).map(t => t.id),
+  Scanner: SELECTABLE_TABS.filter(t => t.workspaces && t.workspaces.includes('Scanner')).map(t => t.id)
 };
 
 // ═══════════════════════════════════════════════════════
@@ -201,7 +204,7 @@ function renderSettingsPage(area) {
         <div class="settings-group sync-group">
           <h3>🔄 مزامنة Google Form</h3>
           <p class="hint">
-            استخدم النموذج لإضافة أعضاء جدد. يمكنك المزامنة الآن أو انتظار المزامنة التلقائية (كل ساعة).
+            استخدم النموذج لإضافة أعضاء جدد. يمكنك المزامنة الآن يدويًا.
           </p>
 
           <div class="sync-info-box" id="syncInfoBox">
@@ -365,7 +368,7 @@ function renderTabPermissions() {
       <div class="settings-group">
         <h3>${label}</h3>
         <div class="tab-permissions-grid">
-          ${EDITABLE_TABS.map(tab => {
+          ${SELECTABLE_TABS.map(tab => {
             const isChecked = allowedTabs.includes(tab.id);
 
             return `
@@ -390,7 +393,7 @@ function renderTabPermissions() {
       <h3>👑 Owner</h3>
       <p class="hint">Owner يمتلك كل التابات دائمًا (غير قابل للتعديل)</p>
       <div class="tab-permissions-grid">
-        ${EDITABLE_TABS.map(tab => `
+        ${SELECTABLE_TABS.map(tab => `
           <label class="tab-permission-item disabled">
             <input type="checkbox" checked disabled />
             <span class="tab-icon">${tab.icon}</span>
@@ -570,7 +573,8 @@ window.syncGoogleFormNow = async function() {
     localStorage.setItem('lastSyncResult', JSON.stringify({
       added: data.added || 0,
       updated: data.updated || 0,
-      skipped: data.skipped || 0
+      skipped: data.skipped || 0,
+      ignored: data.ignored || 0
     }));
 
     await loadSyncInfo();
@@ -599,6 +603,12 @@ window.syncGoogleFormNow = async function() {
             <span class="sync-result-icon">⏭️</span>
             <span>متجاهل: <strong>${data.skipped || 0}</strong></span>
           </div>
+          ${data.ignored ? `
+            <div class="sync-result-item">
+              <span class="sync-result-icon">🚫</span>
+              <span>في قائمة التجاهل: <strong>${data.ignored}</strong></span>
+            </div>
+          ` : ''}
         </div>
       `;
     }
