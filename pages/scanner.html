@@ -7,9 +7,26 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="../css/style.css" />
   <link rel="stylesheet" href="../css/scanner.css" />
+  <link rel="stylesheet" href="../css/dark-mode.css" />
 
   <!-- html5-qrcode library -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Dark Mode (inline — قبل أي حاجة عشان نمنع الفلاش) -->
+  <script>
+    (function() {
+      try {
+        var saved = localStorage.getItem('darkModePreference');
+        var theme = saved;
+        if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          theme = 'dark';
+        }
+        if (theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="scanner-body">
 
@@ -20,6 +37,9 @@
       <h1>📷 الماسح</h1>
     </div>
     <div class="scanner-header-right">
+      <button class="dark-mode-toggle" id="darkModeToggle" type="button" title="الوضع الليلي" aria-label="الوضع الليلي">
+        <span class="dm-icon">🌙</span>
+      </button>
       <span class="system-status" id="systemStatus">●</span>
     </div>
   </header>
@@ -79,6 +99,7 @@
 
   <!-- Firebase SDK + Modules -->
   <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/dark-mode.js"></script>
   <script type="module" src="../js/scanner.js"></script>
 </body>
 </html>
