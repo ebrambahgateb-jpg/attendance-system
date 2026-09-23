@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
-//   ⚡ محدّث: Properties (نص + صور متعددة)
+//   ⚡ محدّث: Properties (نص + صور متعددة) + Active Template Banner
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -42,10 +42,9 @@ let schCurrentDate = new Date();
 let currentTemplateId = null;
 let templateDaysState = {};
 
-// ⚡ Properties State (للـModal)
 let currentTemplateProps = {
   text: '',
-  images: []  // [{ url, hash, uploadedAt }]
+  images: []
 };
 
 // ═══ Constants ═══
@@ -221,13 +220,55 @@ function renderActiveTab() {
 
 function renderGridView(container) {
   const headerHtml = renderGridHeader();
+  const bannerHtml = renderActiveTemplateBanner();
   const bodyHtml = schViewMode === 'week' ? renderWeekView() : renderMonthView();
 
   container.innerHTML = `
     ${headerHtml}
+    ${bannerHtml}
     ${bodyHtml}
   `;
 }
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Active Template Banner
+// ═══════════════════════════════════════════════════════
+
+function renderActiveTemplateBanner() {
+  const activeTemplateId = schSettings.ActiveMassTemplateID;
+
+  if (!activeTemplateId) return '';
+
+  const activeTemplate = schTemplates.find(t => t.id === activeTemplateId);
+  if (!activeTemplate) return '';
+
+  const props = activeTemplate.Properties || {};
+  const hasText = !!(props.Text || '').trim();
+  const hasImages = Array.isArray(props.Images) && props.Images.length > 0;
+  const hasProps = hasText || hasImages;
+
+  return `
+    <div class="sch-active-template-banner">
+      <div class="sch-active-template-info">
+        <span class="sch-active-template-icon">📖</span>
+        <div class="sch-active-template-text">
+          <div class="sch-active-template-label">النمط الحالي</div>
+          <div class="sch-active-template-name">${escapeHtml(activeTemplate.Name || '')}</div>
+        </div>
+      </div>
+
+      ${hasProps ? `
+        <button class="btn-secondary sch-active-template-btn" onclick="viewTemplateProperties('${activeTemplate.id}')">
+          📖 عرض الخصائص
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Grid Header
+// ═══════════════════════════════════════════════════════
 
 function renderGridHeader() {
   const title = schViewMode === 'week'
@@ -1113,7 +1154,6 @@ function renderTemplateCard(template, isOwner, isViewer) {
     totalEvents += dayEvents.length;
   });
 
-  // ⚡ Properties
   const props = template.Properties || {};
   const hasText = !!(props.Text || '').trim();
   const hasImages = Array.isArray(props.Images) && props.Images.length > 0;
@@ -1209,7 +1249,7 @@ window.toggleTemplateDay = function(templateId, dayValue) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Template Properties — Render (in Modal)
+//   Template Properties — Editor (in Modal)
 // ═══════════════════════════════════════════════════════
 
 function renderTemplatePropertiesSection(template) {
@@ -1217,7 +1257,6 @@ function renderTemplatePropertiesSection(template) {
   const text = props.Text || '';
   const images = Array.isArray(props.Images) ? props.Images : [];
 
-  // ⚡ خزّن في الـState
   currentTemplateProps = {
     text: text,
     images: [...images]
@@ -1231,13 +1270,11 @@ function renderTemplatePropertiesSection(template) {
         تقدر تكتب نص و/أو ترفع صور.
       </p>
 
-      <!-- ═══ نص ═══ -->
       <div class="form-row">
         <label>نص الشرح (اختياري)</label>
         <textarea id="tplPropsText" rows="6" placeholder="اكتب شرح مفصل عن النمط...">${escapeHtml(text)}</textarea>
       </div>
 
-      <!-- ═══ صور ═══ -->
       <div class="form-row">
         <label>صور (حتى ${MAX_TEMPLATE_IMAGES} صور)</label>
 
@@ -1280,13 +1317,11 @@ function renderTemplatePropsImages() {
 }
 
 window.uploadTemplatePropImage = async function() {
-  // ⚡ تحقق من الحد الأقصى
   if (currentTemplateProps.images.length >= MAX_TEMPLATE_IMAGES) {
     alert(`⚠️ الحد الأقصى ${MAX_TEMPLATE_IMAGES} صور`);
     return;
   }
 
-  // ⚡ استخدم pickImage من upload.js
   if (typeof window.pickImage !== 'function') {
     alert('⚠️ خدمة رفع الصور غير متوفرة');
     return;
@@ -1295,7 +1330,6 @@ window.uploadTemplatePropImage = async function() {
   const file = await window.pickImage();
   if (!file) return;
 
-  // ⚡ اعرض loading
   const container = document.getElementById('tplPropsImagesList');
   const originalHtml = container ? container.innerHTML : '';
   if (container) {
@@ -1303,21 +1337,18 @@ window.uploadTemplatePropImage = async function() {
   }
 
   try {
-    // ⚡ استخدم uploadPersonPhoto
     if (typeof window.uploadPersonPhoto !== 'function') {
       throw new Error('خدمة الرفع غير متوفرة');
     }
 
     const result = await window.uploadPersonPhoto(file);
 
-    // ⚡ ضيف الصورة
     currentTemplateProps.images.push({
       url: result.url,
       hash: result.hash,
       uploadedAt: new Date().toISOString()
     });
 
-    // ⚡ أعد رسم الصور
     refreshTemplatePropsImages();
 
     console.log('✅ Image uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
@@ -1349,7 +1380,6 @@ function refreshTemplatePropsImages() {
     container.innerHTML = renderTemplatePropsImages();
   }
 
-  // ⚡ حدّث زرار "مسح الكل" + العدّاد
   const actionsContainer = document.querySelector('.tpl-props-images-actions');
   if (actionsContainer) {
     const hasImages = currentTemplateProps.images.length > 0;
@@ -1367,7 +1397,6 @@ function refreshTemplatePropsImages() {
     }
   }
 
-  // ⚡ حدّث العدّاد
   const hintEl = document.querySelector('.tpl-props-section .hint:last-child');
   if (hintEl && hintEl.innerHTML.includes('عدد الصور')) {
     hintEl.innerHTML = `عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}`;
@@ -1375,7 +1404,7 @@ function refreshTemplatePropsImages() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ View Template Properties — Modal (Read-only)
+//   View Template Properties — Modal (Read-only)
 // ═══════════════════════════════════════════════════════
 
 window.viewTemplateProperties = function(templateId) {
@@ -1404,7 +1433,6 @@ window.viewTemplateProperties = function(templateId) {
 
   let contentHtml = '';
 
-  // ⚡ الصور
   if (images.length > 0) {
     contentHtml += `
       <div class="tpl-props-view-images">
@@ -1417,7 +1445,6 @@ window.viewTemplateProperties = function(templateId) {
     `;
   }
 
-  // ⚡ النص
   if (text) {
     contentHtml += `
       <div class="tpl-props-view-text">
@@ -1527,12 +1554,10 @@ function renderTemplateModal(modal, template) {
           <label for="tplStatus">مفعّل</label>
         </div>
 
-        <!-- ═══ Properties ═══ -->
         <div id="tplPropsContainer">
           ${renderTemplatePropertiesSection(template)}
         </div>
 
-        <!-- ═══ Days Schedule ═══ -->
         <div class="tpl-days-section">
           <h4>📅 جدول الأيام</h4>
           <p class="hint">أضف الأحداث لكل يوم. لو اليوم فاضي، يبقى مفيش أحداث.</p>
@@ -1677,7 +1702,6 @@ window.saveTemplate = async function() {
   const description = document.getElementById('tplDescription')?.value.trim() || '';
   const status = document.getElementById('tplStatus')?.checked ? 'active' : 'inactive';
 
-  // ⚡ Properties
   const propsText = document.getElementById('tplPropsText')?.value.trim() || '';
 
   if (!name) { alert('⚠️ اسم النمط مطلوب'); return; }
