@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   People Management (Firestore) + Auto Accounts
-//   ⚡ محدّث: Upload Widget للصور
+//   ⚡ محدّث: Upload Widget + PhotoHash (منع التكرار)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -23,7 +23,8 @@ import {
 let peopleData = [];
 let filteredPeople = [];
 let currentEditId = null;
-let currentPhotoURL = '';  // ⚡ الصورة الحالية في الـModal
+let currentPhotoURL = '';
+let currentPhotoHash = '';
 
 // ═══ Constant ═══
 const DEFAULT_ROLE = 'User';
@@ -383,8 +384,9 @@ function openPersonModal(personId) {
   const person = personId ? peopleData.find(p => p.id === personId) : null;
   const isEdit = !!person;
 
-  // ⚡ خزّن الصورة الحالية
+  // ⚡ خزّن الصورة والـhash الحاليين
   currentPhotoURL = person?.PhotoURL || '';
+  currentPhotoHash = person?.PhotoHash || '';
 
   let modal = document.getElementById('personModal');
   if (!modal) {
@@ -474,7 +476,6 @@ function openPersonModal(personId) {
 
         <div class="modal-section">
           <h4 class="modal-section-title">الصورة</h4>
-          <!-- ⚡ Upload Widget -->
           <div id="photoUploadContainer"></div>
         </div>
 
@@ -503,13 +504,20 @@ function openPersonModal(personId) {
       window.renderUploadWidget(
         'photoUploadContainer',
         currentPhotoURL,
-        (url) => {
-          currentPhotoURL = url;
-          console.log('✅ Photo uploaded:', url);
+        (result) => {
+          // ⚡ result = { url, hash, isDuplicate }
+          currentPhotoURL = result.url;
+          currentPhotoHash = result.hash || '';
+          console.log('✅ Photo uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
         },
         () => {
           currentPhotoURL = '';
-          console.log('🗑️ Photo removed');
+          // ⚡ مهم: لا نمسح currentPhotoHash — عشان نقدر نطابق لو رفعها تاني
+          console.log('🗑️ Photo removed (hash kept for matching)');
+        },
+        {
+          currentHash: currentPhotoHash || '',
+          currentURL: currentPhotoURL || ''
         }
       );
     } else {
@@ -528,6 +536,7 @@ function closePersonModal() {
   if (modal) modal.style.display = 'none';
   currentEditId = null;
   currentPhotoURL = '';
+  currentPhotoHash = '';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -554,8 +563,9 @@ async function savePerson() {
 
   const status = isActive ? 'active' : 'inactive';
 
-  // ⚡ الصورة من currentPhotoURL (اللي بيتحدث من الـUpload Widget)
+  // ⚡ الصورة من currentPhotoURL + hash من currentPhotoHash
   const photoURL = currentPhotoURL || '';
+  const photoHash = currentPhotoHash || '';
 
   const personData = {
     FirstName: firstName,
@@ -570,6 +580,7 @@ async function savePerson() {
     Email: email,
     Facebook: facebook,
     PhotoURL: photoURL,
+    PhotoHash: photoHash,
     Status: status,
     UpdatedAt: new Date().toISOString()
   };
