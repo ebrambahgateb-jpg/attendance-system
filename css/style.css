@@ -85,7 +85,8 @@ body:has(.bg-image.has-image) .bg-overlay {
 }
 
 /* ═══ لما مفيش صورة → نلغي الـOverlay وندي gradient جميل ═══ */
-body:not(:has(.bg-image.has-image)) {
+/* ⚡ اللوجين بس — مش للداشبورد */
+body:not(.dashboard-body):not(:has(.bg-image.has-image)) {
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
 }
 
