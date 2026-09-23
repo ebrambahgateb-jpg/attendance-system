@@ -964,3 +964,270 @@ html.theme-transitioning * {
     color: #000 !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Overrides — Badges & Colored Elements in Dark Mode
+   ⚡ لازم يكون في آخر الملف عشان ياخد الأولوية
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════
+   1. Status Badges (People / Attendance / Events)
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .status-badge.active {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.45) !important;
+}
+
+html[data-theme="dark"] .status-badge.inactive {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+}
+
+html[data-theme="dark"] .status-badge.archived {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.4) !important;
+}
+
+html[data-theme="dark"] .status-badge.pending {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+}
+
+/* ═══ Person Details Modal — Status ═══ */
+
+html[data-theme="dark"] .pd-status-badge.active {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.45) !important;
+}
+
+html[data-theme="dark"] .pd-status-badge.inactive {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+}
+
+/* ═══════════════════════════════════════════
+   2. Account Role Badges
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .acc-role-badge.role-owner {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.5) !important;
+}
+
+html[data-theme="dark"] .acc-role-badge.role-admin {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.5) !important;
+}
+
+html[data-theme="dark"] .acc-role-badge.role-scanner {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.5) !important;
+}
+
+html[data-theme="dark"] .acc-role-badge.role-user {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.4) !important;
+}
+
+html[data-theme="dark"] .acc-role-badge.role-none {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+}
+
+/* ═══ Role Checkbox Items (Modal) ═══ */
+
+html[data-theme="dark"] .role-checkbox-item:has(input:checked) {
+  border-color: #60a5fa !important;
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+html[data-theme="dark"] .role-checkbox-item.role-owner:has(input:checked) {
+  border-color: #fbbf24 !important;
+  background: rgba(245, 158, 11, 0.15) !important;
+}
+
+html[data-theme="dark"] .role-checkbox-item.role-admin:has(input:checked) {
+  border-color: #60a5fa !important;
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+html[data-theme="dark"] .role-checkbox-item.role-scanner:has(input:checked) {
+  border-color: #4ade80 !important;
+  background: rgba(34, 197, 94, 0.15) !important;
+}
+
+/* ═══════════════════════════════════════════
+   3. Events — Type & Reg Badges
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .type-badge.weekly {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.4) !important;
+}
+
+html[data-theme="dark"] .type-badge.once {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+}
+
+html[data-theme="dark"] .reg-badge.reg-all {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important;
+  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+}
+
+html[data-theme="dark"] .reg-badge.reg-specific {
+  background: rgba(236, 72, 153, 0.25) !important;
+  color: #f9a8d4 !important;
+  border: 1px solid rgba(236, 72, 153, 0.4) !important;
+}
+
+html[data-theme="dark"] .reg-badge.reg-optional {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+}
+
+html[data-theme="dark"] .cancel-count {
+  color: #f87171 !important;
+}
+
+/* ═══════════════════════════════════════════
+   4. Schedule — Scope Badges & Stats
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .sch-scope-badge.all {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important;
+  border: 1px solid rgba(99, 102, 241, 0.4) !important;
+}
+
+html[data-theme="dark"] .sch-scope-badge.specific {
+  background: rgba(236, 72, 153, 0.25) !important;
+  color: #f9a8d4 !important;
+  border: 1px solid rgba(236, 72, 153, 0.4) !important;
+}
+
+html[data-theme="dark"] .sch-scope-badge.optional {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+}
+
+html[data-theme="dark"] .sch-stat-committed {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important;
+}
+
+html[data-theme="dark"] .sch-stat-confirmed {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #4ade80 !important;
+}
+
+/* ═══════════════════════════════════════════
+   5. Person Details — Attendance Icon
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .pd-attendance-icon {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #4ade80 !important;
+}
+
+/* ═══ Person Name Link ═══ */
+
+html[data-theme="dark"] .person-name-link {
+  color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .person-name-link:hover {
+  color: #60a5fa !important;
+}
+
+/* ═══════════════════════════════════════════
+   6. Event Location Radio Option (Checked)
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .location-mode-option:has(input:checked) {
+  border-color: #60a5fa !important;
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* ═══════════════════════════════════════════
+   7. QR Containers (keep white for scanning)
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .qr-container,
+html[data-theme="dark"] .pd-qr-box {
+  background: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════
+   8. Events — Empty State, Stats
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .events-empty {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .event-stat {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .event-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .event-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════
+   9. Modal — Person Avatar Placeholder
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .person-avatar-placeholder,
+html[data-theme="dark"] .acc-avatar-placeholder,
+html[data-theme="dark"] .pd-photo-placeholder {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════
+   10. Accounts — Stat Values
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .acc-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .acc-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════
+   11. People — Stat Values
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .people-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .people-stat-label {
+  color: var(--text-muted) !important;
+}
