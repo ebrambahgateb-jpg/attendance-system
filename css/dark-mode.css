@@ -45,6 +45,11 @@ body {
   transition: background-color var(--dm-transition), color var(--dm-transition);
 }
 
+/* ⚡ DASHBOARD OVERRIDE — strongest */
+body.dashboard-body {
+  background: var(--bg) !important;
+  background-image: none !important;
+}
 /* ═══ Headers ═══ */
 html[data-theme="dark"] h1,
 html[data-theme="dark"] h2,
