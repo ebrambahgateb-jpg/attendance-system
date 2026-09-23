@@ -93,8 +93,14 @@ async function loadTabPermissions() {
 
 /**
  * ⚡ فلتر التابات حسب الواجهة + الصلاحيات المحفوظة
- * - Owner: كل التابات (بدون فلترة)
- * - User/Admin/Scanner: التابات المسموح بيها في TabPermissions
+ * 
+ * ⚡ القاعدة الجديدة:
+ *   - Owner: كل التابات (بدون فلترة)
+ *   - User / Admin / Scanner: TabPermissions هي المرجع الوحيد
+ *     (بدون فلترة بـworkspaces — عشان نسمح لأي تاب إنه يظهر لأي دور)
+ * 
+ * ⚡ Important: العارض الفقط للتقديرات:
+ *   - OWNER_ONLY_TAB_IDS (accounts, settings) ممنوعة على غير Owner دائمًا
  */
 function getTabsForRole() {
   const ws = currentWorkspace;
@@ -104,24 +110,21 @@ function getTabsForRole() {
     return TABS_REGISTRY;
   }
 
-  // ⚡ Admin/Owner-only tabs → Owner بس
+  // ⚡ باقي الأدوار: TabPermissions هي المرجع
   const allowedTabIds = getPermissionsForRole(ws);
 
+  // ⚡ لو مفيش صلاحيات محددة → fallback
+  if (!allowedTabIds || allowedTabIds.length === 0) {
+    return [getTabById('dashboard')].filter(Boolean);
+  }
+
   return TABS_REGISTRY.filter(tab => {
-    // ⚡ لازم يكون في الواجهة الحالية
-    const wsMatch = tab.workspaces && tab.workspaces.includes(ws);
-    if (!wsMatch) return false;
-
-    // ⚡ Owner-only tabs → مش مسموح
+    // ⚡ Owner-only tabs → ممنوعة على غير Owner
     if (tab.ownerOnly) return false;
+    if (OWNER_ONLY_TAB_IDS.includes(tab.id)) return false;
 
-    // ⚡ فلترة حسب TabPermissions
-    if (allowedTabIds && allowedTabIds.length >= 0) {
-      return allowedTabIds.includes(tab.id);
-    }
-
-    // ⚡ لو TabPermissions مش موجودة → نستخدم الافتراضي (كل التابات في workspaces)
-    return true;
+    // ⚡ الـTabPermissions هي المرجع الوحيد — بدون wsMatch
+    return allowedTabIds.includes(tab.id);
   });
 }
 
