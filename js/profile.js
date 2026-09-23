@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Profile Page (صفحة حسابي)
-//   ⚡ محدّث: Upload Widget للصورة
+//   ⚡ محدّث: Upload Widget + PhotoHash (منع التكرار)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -26,6 +26,7 @@ let profileSettings = {};
 let isEditMode = false;
 let isViewingOther = false;
 let currentProfilePhotoURL = '';
+let currentProfilePhotoHash = '';
 
 // ═══════════════════════════════════════════════════════
 //   Load Profile Page
@@ -96,8 +97,9 @@ async function loadProfilePage(area) {
       }
     }
 
-    // ⚡ خزّن الصورة الحالية
+    // ⚡ خزّن الصورة والـhash الحاليين
     currentProfilePhotoURL = profilePerson?.PhotoURL || '';
+    currentProfilePhotoHash = profilePerson?.PhotoHash || '';
 
     renderProfilePage(area);
 
@@ -497,13 +499,20 @@ window.openPhotoUploadModal = function() {
       window.renderUploadWidget(
         'profilePhotoUploadContainer',
         currentProfilePhotoURL,
-        (url) => {
-          currentProfilePhotoURL = url;
-          console.log('✅ Photo uploaded:', url);
+        (result) => {
+          // ⚡ result = { url, hash, isDuplicate }
+          currentProfilePhotoURL = result.url;
+          currentProfilePhotoHash = result.hash || '';
+          console.log('✅ Photo uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
         },
         () => {
           currentProfilePhotoURL = '';
-          console.log('🗑️ Photo removed');
+          // ⚡ لا نمسح الـhash عشان نقدر نطابق
+          console.log('🗑️ Photo removed (hash kept)');
+        },
+        {
+          currentHash: currentProfilePhotoHash || '',
+          currentURL: currentProfilePhotoURL || ''
         }
       );
     }
@@ -522,10 +531,12 @@ window.saveProfilePhoto = async function() {
     const personRef = doc(db, COLLECTIONS.PEOPLE, profilePerson.id);
     await updateDoc(personRef, {
       PhotoURL: currentProfilePhotoURL,
+      PhotoHash: currentProfilePhotoHash,
       UpdatedAt: new Date().toISOString()
     });
 
     profilePerson.PhotoURL = currentProfilePhotoURL;
+    profilePerson.PhotoHash = currentProfilePhotoHash;
 
     alert('✅ تم حفظ الصورة بنجاح');
     closePhotoUploadModal();
