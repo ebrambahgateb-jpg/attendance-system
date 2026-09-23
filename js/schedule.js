@@ -1339,25 +1339,50 @@ window.uploadTemplatePropImage = async function() {
   const file = await window.pickImage();
   if (!file) return;
 
+  // ⚡ تحقق من النوع
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    alert('❌ صيغة الصورة غير مدعومة');
+    return;
+  }
+
+  // ⚡ حدود ملفات أكبر
+  const MAX_TEMPLATE_PROP_SIZE = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_TEMPLATE_PROP_SIZE) {
+    alert('❌ حجم الصورة أكبر من 10 MB');
+    return;
+  }
+
   const container = document.getElementById('tplPropsImagesList');
   const originalHtml = container ? container.innerHTML : '';
   if (container) {
     container.innerHTML = '<div class="tpl-props-images-loading">⏳ جاري الرفع...</div>';
   }
 
-  try {
-    if (typeof window.uploadPersonPhoto !== 'function') {
+   try {
+    if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
       throw new Error('خدمة الرفع غير متوفرة');
     }
 
-    const result = await window.uploadPersonPhoto(file);
+    // ⚡ ضغط بجودة أعلى لخصائص النمط
+    const compressed = await window.compressImage(
+      file,
+      2400,   // maxWidth
+      2400,   // maxHeight
+      0.98    // quality (أعلى جودة ممكنة)
+    );
+
+    // ⚡ احسب الـ hash
+    const hash = await window.getFileHash(file);
+
+    // ⚡ ارفع
+    const result = await window.uploadToImgBB(compressed, `template_prop_${Date.now()}`);
 
     currentTemplateProps.images.push({
       url: result.url,
-      hash: result.hash,
+      hash: hash,
       uploadedAt: new Date().toISOString()
     });
-
     refreshTemplatePropsImages();
 
     console.log('✅ Image uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
