@@ -138,20 +138,16 @@ function renderSettingsPage(area) {
 
         <div class="settings-group">
           <h3>اللوجو</h3>
-          <div class="logo-preview">
-            <img id="logoPreview" src="" alt="" style="display:none;" />
-          </div>
-          <input type="text" id="set_ThemeLogoUrl" placeholder="https://..." />
-          <button class="btn-secondary" onclick="clearLogo()">مسح اللوجو</button>
+          <p class="hint">اللوجو المفضل: صورة مربعة (PNG / JPG / WebP) — بحد أقصى 5 MB</p>
+          <div id="logoUploadContainer"></div>
+          <input type="hidden" id="set_ThemeLogoUrl" />
         </div>
 
         <div class="settings-group">
           <h3>صورة الخلفية</h3>
-          <div class="logo-preview">
-            <img id="bgPreview" src="" alt="" style="display:none;max-height:150px;" />
-          </div>
-          <input type="text" id="set_ThemeBgImageUrl" placeholder="https://..." />
-          <button class="btn-secondary" onclick="clearBgImage()">مسح الخلفية</button>
+          <p class="hint">صورة الخلفية: يفضل 1920×1080 (PNG / JPG / WebP) — بحد أقصى 5 MB</p>
+          <div id="bgUploadContainer"></div>
+          <input type="hidden" id="set_ThemeBgImageUrl" />
         </div>
       </div>
 
@@ -300,7 +296,7 @@ function fillSettingsForm() {
   const textKeys = ['SystemName','OrganizationName','Language','TimeZone',
                     'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
                     'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
-                    'RequiredFields','MaxPhotoSize','ThemeLogoUrl','ThemeBgImageUrl'];
+                    'RequiredFields','MaxPhotoSize'];
 
   textKeys.forEach(key => {
     const el = document.getElementById('set_' + key);
@@ -308,6 +304,13 @@ function fillSettingsForm() {
       el.value = settingsData[key];
     }
   });
+
+  // ⚡ القيم المخزنة في hidden inputs (لأن الـWidget بيقرا منهم)
+  const logoInput = document.getElementById('set_ThemeLogoUrl');
+  if (logoInput) logoInput.value = settingsData.ThemeLogoUrl || '';
+
+  const bgInput = document.getElementById('set_ThemeBgImageUrl');
+  if (bgInput) bgInput.value = settingsData.ThemeBgImageUrl || '';
 
   const boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
                     'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
@@ -321,17 +324,210 @@ function fillSettingsForm() {
     }
   });
 
-  const logoPreview = document.getElementById('logoPreview');
-  if (logoPreview && settingsData.ThemeLogoUrl) {
-    logoPreview.src = settingsData.ThemeLogoUrl;
-    logoPreview.style.display = 'block';
+  // ⚡ Init Upload Widgets للوجو والخلفية
+  initThemeUploadWidgets();
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Theme Upload Widgets
+// ═══════════════════════════════════════════════════════
+
+function initThemeUploadWidgets() {
+  // ═══ اللوجو ═══
+  const logoContainer = document.getElementById('logoUploadContainer');
+  if (logoContainer) {
+    renderSimpleUploadWidget(
+      'logoUploadContainer',
+      settingsData.ThemeLogoUrl || '',
+      async (file) => {
+        // ⚡ ضغط + رفع اللوجو
+        if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
+          throw new Error('خدمة الرفع غير متوفرة');
+        }
+
+        const compressed = await window.compressImage(file, 500, 500, 0.9);
+        const result = await window.uploadToImgBB(compressed, `logo_${Date.now()}`);
+
+        settingsData.ThemeLogoUrl = result.url;
+        const hiddenInput = document.getElementById('set_ThemeLogoUrl');
+        if (hiddenInput) hiddenInput.value = result.url;
+
+        return result.url;
+      },
+      () => {
+        // ⚡ مسح اللوجو
+        settingsData.ThemeLogoUrl = '';
+        const hiddenInput = document.getElementById('set_ThemeLogoUrl');
+        if (hiddenInput) hiddenInput.value = '';
+      }
+    );
   }
 
-  const bgPreview = document.getElementById('bgPreview');
-  if (bgPreview && settingsData.ThemeBgImageUrl) {
-    bgPreview.src = settingsData.ThemeBgImageUrl;
-    bgPreview.style.display = 'block';
+  // ═══ الخلفية ═══
+  const bgContainer = document.getElementById('bgUploadContainer');
+  if (bgContainer) {
+    renderSimpleUploadWidget(
+      'bgUploadContainer',
+      settingsData.ThemeBgImageUrl || '',
+      async (file) => {
+        // ⚡ ضغط + رفع الخلفية
+        if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
+          throw new Error('خدمة الرفع غير متوفرة');
+        }
+
+        const compressed = await window.compressImage(file, 1920, 1080, 0.85);
+        const result = await window.uploadToImgBB(compressed, `background_${Date.now()}`);
+
+        settingsData.ThemeBgImageUrl = result.url;
+        const hiddenInput = document.getElementById('set_ThemeBgImageUrl');
+        if (hiddenInput) hiddenInput.value = result.url;
+
+        return result.url;
+      },
+      () => {
+        // ⚡ مسح الخلفية
+        settingsData.ThemeBgImageUrl = '';
+        const hiddenInput = document.getElementById('set_ThemeBgImageUrl');
+        if (hiddenInput) hiddenInput.value = '';
+      },
+      { isBanner: true }
+    );
   }
+}
+
+// ═══ Upload Widget بسيط ═══
+function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const isBanner = options.isBanner || false;
+  const hasImage = !!currentUrl;
+
+  container.innerHTML = `
+    <div class="simple-upload-widget ${isBanner ? 'simple-upload-banner' : ''}">
+      <div class="simple-upload-preview" id="${containerId}-preview">
+        ${hasImage
+          ? `<img src="${currentUrl}" alt="" class="simple-upload-img" />`
+          : `<div class="simple-upload-empty">
+              <span class="simple-upload-icon">${isBanner ? '🖼️' : '📷'}</span>
+              <span>لا توجد صورة</span>
+             </div>`
+        }
+        <div class="simple-upload-loading" id="${containerId}-loading" style="display:none;">
+          <div class="upload-spinner"></div>
+          <span>جاري الرفع...</span>
+        </div>
+      </div>
+
+      <div class="simple-upload-actions">
+        <button type="button" class="btn-primary simple-upload-btn" id="${containerId}-upload">
+          📤 ${hasImage ? 'تغيير' : 'رفع صورة'}
+        </button>
+        ${hasImage ? `
+          <button type="button" class="btn-secondary simple-upload-btn" id="${containerId}-remove">
+            🗑️ مسح
+          </button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  const uploadBtn = document.getElementById(`${containerId}-upload`);
+  const removeBtn = document.getElementById(`${containerId}-remove`);
+  const preview = document.getElementById(`${containerId}-preview`);
+  const loading = document.getElementById(`${containerId}-loading`);
+
+  if (uploadBtn) {
+    uploadBtn.onclick = async () => {
+      if (typeof window.pickImage !== 'function') {
+        alert('⚠️ خدمة رفع الصور غير متوفرة');
+        return;
+      }
+
+      const file = await window.pickImage();
+      if (!file) return;
+
+      if (loading) loading.style.display = 'flex';
+      uploadBtn.disabled = true;
+      if (removeBtn) removeBtn.disabled = true;
+
+      try {
+        const url = await onUpload(file);
+
+        // ⚡ حدّث الـPreview
+        if (preview) {
+          const img = preview.querySelector('.simple-upload-img');
+          const empty = preview.querySelector('.simple-upload-empty');
+
+          if (img) {
+            img.src = url;
+          } else {
+            if (empty) empty.remove();
+            const newImg = document.createElement('img');
+            newImg.src = url;
+            newImg.className = 'simple-upload-img';
+            preview.insertBefore(newImg, loading);
+          }
+        }
+
+        // ⚡ غيّر النص لـ"تغيير"
+        uploadBtn.innerHTML = '📤 تغيير';
+
+        // ⚡ ضيف زرار المسح لو مش موجود
+        if (!document.getElementById(`${containerId}-remove`)) {
+          const actionsDiv = document.querySelector(`#${containerId} .simple-upload-actions`);
+          if (actionsDiv) {
+            const newRemoveBtn = document.createElement('button');
+            newRemoveBtn.type = 'button';
+            newRemoveBtn.className = 'btn-secondary simple-upload-btn';
+            newRemoveBtn.id = `${containerId}-remove`;
+            newRemoveBtn.innerHTML = '🗑️ مسح';
+            newRemoveBtn.onclick = () => handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner);
+            actionsDiv.appendChild(newRemoveBtn);
+          }
+        }
+
+      } catch (err) {
+        console.error('❌ Upload error:', err);
+        alert('❌ فشل الرفع: ' + err.message);
+      } finally {
+        if (loading) loading.style.display = 'none';
+        uploadBtn.disabled = false;
+        if (removeBtn) removeBtn.disabled = false;
+      }
+    };
+  }
+
+  if (removeBtn) {
+    removeBtn.onclick = () => handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner);
+  }
+}
+
+function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner) {
+  if (!confirm('⚠️ مسح الصورة؟')) return;
+
+  if (typeof onRemove === 'function') onRemove();
+
+  // ⚡ رجّع الـPreview للـPlaceholder
+  if (preview) {
+    preview.innerHTML = `
+      <div class="simple-upload-empty">
+        <span class="simple-upload-icon">${isBanner ? '🖼️' : '📷'}</span>
+        <span>لا توجد صورة</span>
+      </div>
+      <div class="simple-upload-loading" id="${containerId}-loading" style="display:none;">
+        <div class="upload-spinner"></div>
+        <span>جاري الرفع...</span>
+      </div>
+    `;
+  }
+
+  // ⚡ شيل زرار المسح
+  const rb = document.getElementById(`${containerId}-remove`);
+  if (rb) rb.remove();
+
+  // ⚡ رجّع الزرار لـ"رفع صورة"
+  if (uploadBtn) uploadBtn.innerHTML = '📤 رفع صورة';
 }
 
 // ═══ Setup Events ═══
@@ -360,7 +556,6 @@ function renderTabPermissions() {
 
   let html = '';
 
-  // ═══ الواجهات القابلة للتعديل ═══
   EDITABLE_ROLES.forEach(({ role, label }) => {
     const allowedTabs = perms[role] || DEFAULT_TAB_PERMISSIONS[role] || [];
 
@@ -387,7 +582,6 @@ function renderTabPermissions() {
     `;
   });
 
-  // ═══ Owner (للعرض فقط) ═══
   html += `
     <div class="settings-group owner-tabs-group">
       <h3>👑 Owner</h3>
@@ -443,7 +637,6 @@ window.saveTabPermissions = async function(event) {
       }
     });
 
-    // ⚡ Validation
     EDITABLE_ROLES.forEach(({ role }) => {
       if (!newPerms[role] || !newPerms[role].includes('dashboard')) {
         newPerms[role] = ['dashboard', ...(newPerms[role] || [])];
@@ -637,34 +830,15 @@ window.openGoogleForm = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Clear Logo/Bg
-// ═══════════════════════════════════════════════════════
-
-window.clearLogo = function() {
-  settingsData.ThemeLogoUrl = '';
-  const input = document.getElementById('set_ThemeLogoUrl');
-  if (input) input.value = '';
-  const preview = document.getElementById('logoPreview');
-  if (preview) { preview.src = ''; preview.style.display = 'none'; }
-};
-
-window.clearBgImage = function() {
-  settingsData.ThemeBgImageUrl = '';
-  const input = document.getElementById('set_ThemeBgImageUrl');
-  if (input) input.value = '';
-  const preview = document.getElementById('bgPreview');
-  if (preview) { preview.src = ''; preview.style.display = 'none'; }
-};
-
-// ═══════════════════════════════════════════════════════
 //   Save All Settings
 // ═══════════════════════════════════════════════════════
 
 window.saveAllSettings = async function(event) {
+  // ⚡ شيلنا ThemeLogoUrl و ThemeBgImageUrl (بقوا hidden)
   const textKeys = ['SystemName','OrganizationName','Language','TimeZone',
                     'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
                     'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
-                    'RequiredFields','MaxPhotoSize','ThemeLogoUrl','ThemeBgImageUrl'];
+                    'RequiredFields','MaxPhotoSize'];
 
   const boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
                     'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
@@ -676,6 +850,10 @@ window.saveAllSettings = async function(event) {
     const el = document.getElementById('set_' + key);
     if (el) payload[key] = el.value;
   });
+
+  // ⚡ اللوجو والخلفية من settingsData (لأنهم hidden inputs)
+  payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
+  payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
 
   boolKeys.forEach(key => {
     const el = document.getElementById('set_' + key);
