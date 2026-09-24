@@ -143,6 +143,61 @@ function renderSettingsPage(area) {
           <input type="hidden" id="set_ThemeLogoUrl" />
         </div>
 
+        <!-- ═══ ⚡ إعدادات عرض اللوجو ═══ -->
+        <div class="settings-group">
+          <h3>⚙️ إعدادات عرض اللوجو</h3>
+
+          <div class="form-row">
+            <label>حجم اللوجو في الـ Sidebar</label>
+            <div class="logo-size-slider-wrap">
+              <input type="range" id="set_LogoSizeSidebar"
+                     min="30" max="150" step="2" value="48"
+                     class="logo-size-slider" />
+              <span class="logo-size-value" id="logoSizeSidebarValue">48px</span>
+            </div>
+            <p class="hint">اسحب المؤشر لتغيير الحجم (30 - 150 بكسل)</p>
+          </div>
+
+          <div class="form-row">
+            <label>حجم اللوجو في صفحة تسجيل الدخول</label>
+            <div class="logo-size-slider-wrap">
+              <input type="range" id="set_LogoSizeLogin"
+                     min="30" max="150" step="2" value="90"
+                     class="logo-size-slider" />
+              <span class="logo-size-value" id="logoSizeLoginValue">90px</span>
+            </div>
+            <p class="hint">اسحب المؤشر لتغيير الحجم (30 - 150 بكسل)</p>
+          </div>
+
+          <div class="form-row">
+            <label>شكل اللوجو</label>
+            <select id="set_LogoShape">
+              <option value="square">🔲 مربع (زوايا مدوّرة)</option>
+              <option value="circle">⭕ دائري</option>
+              <option value="rounded">▢ مستطيل (زوايا كبيرة)</option>
+              <option value="original">🖼️ الشكل الأصلي</option>
+            </select>
+          </div>
+
+          <div class="logo-preview-box">
+            <h4 class="logo-preview-title">معاينة</h4>
+            <div class="logo-preview-samples">
+              <div class="logo-preview-sample">
+                <div class="logo-preview-sidebar-bg">
+                  <div id="logoPreviewSidebar" class="logo-preview-icon"></div>
+                </div>
+                <span class="logo-preview-label">Sidebar</span>
+              </div>
+              <div class="logo-preview-sample">
+                <div class="logo-preview-login-bg">
+                  <div id="logoPreviewLogin" class="logo-preview-icon"></div>
+                </div>
+                <span class="logo-preview-label">Login</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="settings-group">
           <h3>صورة الخلفية</h3>
           <p class="hint">صورة الخلفية: يفضل 1920×1080 (PNG / JPG / WebP) — بحد أقصى 5 MB</p>
@@ -305,7 +360,7 @@ function fillSettingsForm() {
     }
   });
 
-  // ⚡ القيم المخزنة في hidden inputs (لأن الـWidget بيقرا منهم)
+  // ⚡ القيم المخزنة في hidden inputs
   const logoInput = document.getElementById('set_ThemeLogoUrl');
   if (logoInput) logoInput.value = settingsData.ThemeLogoUrl || '';
 
@@ -324,8 +379,95 @@ function fillSettingsForm() {
     }
   });
 
-  // ⚡ Init Upload Widgets للوجو والخلفية
+  // ⚡ Init Upload Widgets
   initThemeUploadWidgets();
+
+  // ⚡ Init Logo Display Settings
+  initLogoDisplaySettings();
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Logo Display Settings
+// ═══════════════════════════════════════════════════════
+
+function initLogoDisplaySettings() {
+  const sidebarSlider = document.getElementById('set_LogoSizeSidebar');
+  const sidebarValue = document.getElementById('logoSizeSidebarValue');
+  const loginSlider = document.getElementById('set_LogoSizeLogin');
+  const loginValue = document.getElementById('logoSizeLoginValue');
+  const shapeSelect = document.getElementById('set_LogoShape');
+
+  const sidebarSize = Number(settingsData.LogoSizeSidebar) || 48;
+  const loginSize = Number(settingsData.LogoSizeLogin) || 90;
+  const shape = settingsData.LogoShape || 'square';
+
+  if (sidebarSlider) sidebarSlider.value = sidebarSize;
+  if (sidebarValue) sidebarValue.textContent = `${sidebarSize}px`;
+  if (loginSlider) loginSlider.value = loginSize;
+  if (loginValue) loginValue.textContent = `${loginSize}px`;
+  if (shapeSelect) shapeSelect.value = shape;
+
+  if (sidebarSlider) {
+    sidebarSlider.addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      settingsData.LogoSizeSidebar = val;
+      if (sidebarValue) sidebarValue.textContent = `${val}px`;
+      updateLogoPreview();
+    });
+  }
+
+  if (loginSlider) {
+    loginSlider.addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      settingsData.LogoSizeLogin = val;
+      if (loginValue) loginValue.textContent = `${val}px`;
+      updateLogoPreview();
+    });
+  }
+
+  if (shapeSelect) {
+    shapeSelect.addEventListener('change', (e) => {
+      settingsData.LogoShape = e.target.value;
+      updateLogoPreview();
+    });
+  }
+
+  updateLogoPreview();
+}
+
+function updateLogoPreview() {
+  const sidebarPreview = document.getElementById('logoPreviewSidebar');
+  const loginPreview = document.getElementById('logoPreviewLogin');
+
+  const logoUrl = settingsData.ThemeLogoUrl || '';
+  const sidebarSize = Number(settingsData.LogoSizeSidebar) || 48;
+  const loginSize = Number(settingsData.LogoSizeLogin) || 90;
+  const shape = settingsData.LogoShape || 'square';
+
+  const borderRadius = {
+    square: '10px',
+    circle: '50%',
+    rounded: '16px',
+    original: '0'
+  }[shape] || '10px';
+
+  if (sidebarPreview) {
+    const previewSize = Math.min(sidebarSize, 100);
+    if (logoUrl) {
+      sidebarPreview.innerHTML = `<img src="${logoUrl}" style="width:${previewSize}px;height:${previewSize}px;border-radius:${borderRadius};object-fit:contain;" />`;
+    } else {
+      sidebarPreview.innerHTML = `<div style="width:${previewSize}px;height:${previewSize}px;border-radius:${borderRadius};background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">LOGO</div>`;
+    }
+  }
+
+  if (loginPreview) {
+    const previewSize = Math.min(loginSize, 120);
+    if (logoUrl) {
+      loginPreview.innerHTML = `<img src="${logoUrl}" style="width:${previewSize}px;height:${previewSize}px;border-radius:${borderRadius};object-fit:contain;" />`;
+    } else {
+      loginPreview.innerHTML = `<div style="width:${previewSize}px;height:${previewSize}px;border-radius:${borderRadius};background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">LOGO</div>`;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -340,7 +482,6 @@ function initThemeUploadWidgets() {
       'logoUploadContainer',
       settingsData.ThemeLogoUrl || '',
       async (file) => {
-        // ⚡ ضغط + رفع اللوجو
         if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
           throw new Error('خدمة الرفع غير متوفرة');
         }
@@ -352,13 +493,18 @@ function initThemeUploadWidgets() {
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = result.url;
 
+        // ⚡ حدّث المعاينة
+        updateLogoPreview();
+
         return result.url;
       },
       () => {
-        // ⚡ مسح اللوجو
         settingsData.ThemeLogoUrl = '';
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = '';
+
+        // ⚡ حدّث المعاينة
+        updateLogoPreview();
       }
     );
   }
@@ -370,7 +516,6 @@ function initThemeUploadWidgets() {
       'bgUploadContainer',
       settingsData.ThemeBgImageUrl || '',
       async (file) => {
-        // ⚡ ضغط + رفع الخلفية
         if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
           throw new Error('خدمة الرفع غير متوفرة');
         }
@@ -385,7 +530,6 @@ function initThemeUploadWidgets() {
         return result.url;
       },
       () => {
-        // ⚡ مسح الخلفية
         settingsData.ThemeBgImageUrl = '';
         const hiddenInput = document.getElementById('set_ThemeBgImageUrl');
         if (hiddenInput) hiddenInput.value = '';
@@ -454,7 +598,6 @@ function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, o
       try {
         const url = await onUpload(file);
 
-        // ⚡ حدّث الـPreview
         if (preview) {
           const img = preview.querySelector('.simple-upload-img');
           const empty = preview.querySelector('.simple-upload-empty');
@@ -470,10 +613,8 @@ function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, o
           }
         }
 
-        // ⚡ غيّر النص لـ"تغيير"
         uploadBtn.innerHTML = '📤 تغيير';
 
-        // ⚡ ضيف زرار المسح لو مش موجود
         if (!document.getElementById(`${containerId}-remove`)) {
           const actionsDiv = document.querySelector(`#${containerId} .simple-upload-actions`);
           if (actionsDiv) {
@@ -508,7 +649,6 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
 
   if (typeof onRemove === 'function') onRemove();
 
-  // ⚡ رجّع الـPreview للـPlaceholder
   if (preview) {
     preview.innerHTML = `
       <div class="simple-upload-empty">
@@ -522,11 +662,9 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
     `;
   }
 
-  // ⚡ شيل زرار المسح
   const rb = document.getElementById(`${containerId}-remove`);
   if (rb) rb.remove();
 
-  // ⚡ رجّع الزرار لـ"رفع صورة"
   if (uploadBtn) uploadBtn.innerHTML = '📤 رفع صورة';
 }
 
@@ -834,7 +972,6 @@ window.openGoogleForm = function() {
 // ═══════════════════════════════════════════════════════
 
 window.saveAllSettings = async function(event) {
-  // ⚡ شيلنا ThemeLogoUrl و ThemeBgImageUrl (بقوا hidden)
   const textKeys = ['SystemName','OrganizationName','Language','TimeZone',
                     'ThemePrimary','ThemeAccent','ThemeBg','ThemeSidebarBg',
                     'OpenBeforeMinutes','CloseAfterMinutes','ResultDisplayDuration',
@@ -851,9 +988,14 @@ window.saveAllSettings = async function(event) {
     if (el) payload[key] = el.value;
   });
 
-  // ⚡ اللوجو والخلفية من settingsData (لأنهم hidden inputs)
+  // ⚡ اللوجو والخلفية من settingsData
   payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
   payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
+
+  // ⚡ إعدادات عرض اللوجو
+  payload.LogoSizeSidebar = Number(settingsData.LogoSizeSidebar) || 48;
+  payload.LogoSizeLogin = Number(settingsData.LogoSizeLogin) || 90;
+  payload.LogoShape = settingsData.LogoShape || 'square';
 
   boolKeys.forEach(key => {
     const el = document.getElementById('set_' + key);
@@ -905,7 +1047,10 @@ window.resetThemeToDefault = async function() {
     ThemeBg: DEFAULT_THEME.bg,
     ThemeSidebarBg: DEFAULT_THEME.sidebarBg,
     ThemeLogoUrl: '',
-    ThemeBgImageUrl: ''
+    ThemeBgImageUrl: '',
+    LogoSizeSidebar: 48,
+    LogoSizeLogin: 90,
+    LogoShape: 'square'
   };
 
   try {
@@ -959,7 +1104,12 @@ function extractTheme(s) {
     sidebarText: DEFAULT_THEME.sidebarText,
     sidebarActive: DEFAULT_THEME.sidebarActive,
     logoUrl: s.ThemeLogoUrl || '',
-    bgImageUrl: s.ThemeBgImageUrl || ''
+    bgImageUrl: s.ThemeBgImageUrl || '',
+
+    // ⚡ إعدادات عرض اللوجو
+    logoSizeSidebar: Number(s.LogoSizeSidebar) || 48,
+    logoSizeLogin: Number(s.LogoSizeLogin) || 90,
+    logoShape: s.LogoShape || 'square'
   };
 }
 
@@ -990,9 +1140,28 @@ function saveTheme(theme) {
     document.body.style.background = t.bg;
   }
 
+  // ⚡ اللوجو — الحجم والشكل
+  const logoSize = Number(t.logoSizeSidebar) || 48;
+  const logoShape = t.logoShape || 'square';
+
+  const borderRadius = {
+    square: '10px',
+    circle: '50%',
+    rounded: '16px',
+    original: '0'
+  }[logoShape] || '10px';
+
   document.querySelectorAll('.app-logo').forEach(img => {
-    if (t.logoUrl) { img.src = t.logoUrl; img.style.display = 'block'; }
-    else { img.style.display = 'none'; }
+    if (t.logoUrl) {
+      img.src = t.logoUrl;
+      img.style.display = 'block';
+      img.style.width = logoSize + 'px';
+      img.style.height = logoSize + 'px';
+      img.style.borderRadius = borderRadius;
+      img.style.objectFit = 'contain';
+    } else {
+      img.style.display = 'none';
+    }
   });
 }
 
