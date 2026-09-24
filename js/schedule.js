@@ -56,6 +56,25 @@ window.imgFsImages = [];
 window.imgFsCurrentIndex = 0;
 window.imgFsTouchStartX = 0;
 
+// ═══ Zoom State ═══
+window.imgFsZoom = {
+  scale: 1,
+  minScale: 1,
+  maxScale: 3,
+  translateX: 0,
+  translateY: 0,
+  // ⚡ Pinch state
+  initialDistance: 0,
+  initialScale: 1,
+  // ═══ Pan state ═══
+  isPanning: false,
+  panStartX: 0,
+  panStartY: 0
+};
+
+// ═══ Double Tap State ═══
+window.imgFsLastTap = 0;
+
 // ═══ Constants ═══
 const MAX_TEMPLATE_IMAGES = 20;
 
@@ -1746,6 +1765,11 @@ window.openImageFullscreenAt = function(index) {
   window.imgFsImages = [...window.tplSliderImages];
   window.imgFsCurrentIndex = index;
 
+  // ⚡ Reset Zoom
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+
   let modal = document.getElementById('imgFullscreenModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -1777,37 +1801,73 @@ window.renderFullscreen = function() {
     ` : ''}
 
     <div class="img-fs-image-wrapper" id="imgFsWrapper">
-      <img src="${escapeHtml(img.url)}" alt="" />
+      <img id="imgFsImg" src="${escapeHtml(img.url)}" alt="" draggable="false" />
     </div>
 
     ${hasMultiple ? `
       <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">▶</button>
     ` : ''}
 
-       ${hasMultiple ? `
+    ${hasMultiple ? `
       <div class="img-fs-counter">
         ${window.imgFsCurrentIndex + 1} / ${window.imgFsImages.length}
       </div>
     ` : ''}
+
+    <!-- ═══ Zoom Controls ═══ -->
+    <div class="img-fs-zoom-controls">
+      <button class="img-fs-zoom-btn" onclick="imgFsZoomOut()" title="تصغير" aria-label="تصغير">−</button>
+      <div class="img-fs-zoom-level" id="imgFsZoomLevel">100%</div>
+      <button class="img-fs-zoom-btn" onclick="imgFsZoomIn()" title="تكبير" aria-label="تكبير">+</button>
+      <button class="img-fs-zoom-reset" onclick="imgFsZoomReset()" title="إعادة الحجم" aria-label="إعادة الحجم">↺</button>
+    </div>
   `;
 
-  // ⚡ Swipe listeners
+  // ⚡ Reset Zoom
+  window.imgFsZoomReset();
+
+  // ═══ Wheel (Desktop) ═══
   const wrapper = document.getElementById('imgFsWrapper');
-  if (wrapper && hasMultiple) {
-    wrapper.addEventListener('touchstart', window.handleFsTouchStart, { passive: true });
-    wrapper.addEventListener('touchend', window.handleFsTouchEnd, { passive: true });
+  if (wrapper) {
+    wrapper.addEventListener('wheel', window.handleFsWheel, { passive: false });
+  }
+
+  // ═══ Mouse Drag (Pan) ═══
+  if (wrapper) {
+    wrapper.addEventListener('mousedown', window.handleFsMouseDown);
+    wrapper.addEventListener('mousemove', window.handleFsMouseMove);
+    wrapper.addEventListener('mouseup', window.handleFsMouseUp);
+    wrapper.addEventListener('mouseleave', window.handleFsMouseUp);
+  }
+
+  // ═══ Touch (Pinch + Swipe + Pan) ═══
+  if (wrapper) {
+    wrapper.addEventListener('touchstart', window.handleFsTouchStartFull, { passive: false });
+    wrapper.addEventListener('touchmove', window.handleFsTouchMove, { passive: false });
+    wrapper.addEventListener('touchend', window.handleFsTouchEndFull, { passive: false });
+  }
+
+  // ═══ Double Click (Desktop) ═══
+  if (wrapper) {
+    wrapper.addEventListener('dblclick', window.handleFsDoubleClick);
   }
 };
 
 window.imgFsPrev = function() {
   if (window.imgFsImages.length <= 1) return;
   window.imgFsCurrentIndex = (window.imgFsCurrentIndex - 1 + window.imgFsImages.length) % window.imgFsImages.length;
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
   window.renderFullscreen();
 };
 
 window.imgFsNext = function() {
   if (window.imgFsImages.length <= 1) return;
   window.imgFsCurrentIndex = (window.imgFsCurrentIndex + 1) % window.imgFsImages.length;
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
   window.renderFullscreen();
 };
 
@@ -1846,6 +1906,254 @@ window.closeImageFullscreen = function() {
   if (modal) modal.style.display = 'none';
 
   document.removeEventListener('keydown', window.imgFsKeyHandler);
+
+  // ⚡ Reset Zoom
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+  window.imgFsZoom.initialDistance = 0;
+  window.imgFsZoom.isPanning = false;
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Image Fullscreen — Zoom Controls
+// ═══════════════════════════════════════════════════════
+
+// ═══ Update Image Transform ═══
+window.imgFsUpdateTransform = function() {
+  const img = document.getElementById('imgFsImg');
+  if (!img) return;
+
+  const { scale, translateX, translateY } = window.imgFsZoom;
+
+  img.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+
+  // ⚡ حدّث نسبة الزوم
+  const levelEl = document.getElementById('imgFsZoomLevel');
+  if (levelEl) {
+    levelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  // ⚡ cursor
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) {
+    wrapper.style.cursor = scale > 1 ? 'grab' : 'zoom-in';
+  }
+};
+
+// ═══ Zoom In / Out (أزرار) ═══
+window.imgFsZoomIn = function() {
+  const z = window.imgFsZoom;
+  z.scale = Math.min(z.scale + 0.25, z.maxScale);
+  if (z.scale === 1) {
+    z.translateX = 0;
+    z.translateY = 0;
+  }
+  window.imgFsUpdateTransform();
+};
+
+window.imgFsZoomOut = function() {
+  const z = window.imgFsZoom;
+  z.scale = Math.max(z.scale - 0.25, z.minScale);
+  if (z.scale === 1) {
+    z.translateX = 0;
+    z.translateY = 0;
+  }
+  window.imgFsUpdateTransform();
+};
+
+// ═══ Reset Zoom ═══
+window.imgFsZoomReset = function() {
+  const z = window.imgFsZoom;
+  z.scale = 1;
+  z.translateX = 0;
+  z.translateY = 0;
+  window.imgFsUpdateTransform();
+};
+
+// ═══ Wheel Zoom (Desktop) ═══
+window.handleFsWheel = function(e) {
+  e.preventDefault();
+
+  const z = window.imgFsZoom;
+  const delta = e.deltaY < 0 ? 0.15 : -0.15;
+  const newScale = Math.max(z.minScale, Math.min(z.scale + delta, z.maxScale));
+
+  if (newScale !== z.scale) {
+    z.scale = newScale;
+    if (z.scale === 1) {
+      z.translateX = 0;
+      z.translateY = 0;
+    }
+    window.imgFsUpdateTransform();
+  }
+};
+
+// ═══ Mouse Drag (Pan) ═══
+window.handleFsMouseDown = function(e) {
+  const z = window.imgFsZoom;
+  if (z.scale <= 1) return;
+
+  z.isPanning = true;
+  z.panStartX = e.clientX - z.translateX;
+  z.panStartY = e.clientY - z.translateY;
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) wrapper.style.cursor = 'grabbing';
+};
+
+window.handleFsMouseMove = function(e) {
+  const z = window.imgFsZoom;
+  if (!z.isPanning) return;
+
+  z.translateX = e.clientX - z.panStartX;
+  z.translateY = e.clientY - z.panStartY;
+
+  window.imgFsUpdateTransform();
+};
+
+window.handleFsMouseUp = function() {
+  const z = window.imgFsZoom;
+  z.isPanning = false;
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) {
+    wrapper.style.cursor = z.scale > 1 ? 'grab' : 'zoom-in';
+  }
+};
+
+// ═══ Double Click (Desktop) ═══
+window.handleFsDoubleClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const z = window.imgFsZoom;
+  if (z.scale > 1) {
+    window.imgFsZoomReset();
+  } else {
+    z.scale = 2;
+    window.imgFsUpdateTransform();
+  }
+};
+
+// ═══ Touch Start (Pinch + Swipe + Pan + Double Tap) ═══
+window.handleFsTouchStartFull = function(e) {
+  const z = window.imgFsZoom;
+  const touches = e.touches;
+
+  // ═══ Double Tap Detection ═══
+  const now = Date.now();
+  if (now - window.imgFsLastTap < 300 && touches.length === 1) {
+    e.preventDefault();
+    if (z.scale > 1) {
+      window.imgFsZoomReset();
+    } else {
+      z.scale = 2;
+      window.imgFsUpdateTransform();
+    }
+    window.imgFsLastTap = 0;
+    return;
+  }
+  window.imgFsLastTap = now;
+
+  // ═══ 2 Fingers = Pinch Zoom ═══
+  if (touches.length === 2) {
+    e.preventDefault();
+    z.initialDistance = Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+    z.initialScale = z.scale;
+    z.isPanning = false;
+    return;
+  }
+
+  // ═══ 1 Finger ═══
+  if (touches.length === 1) {
+    window.imgFsTouchStartX = touches[0].clientX;
+
+    // ⚡ لو مكبّر → Pan، لو لأ → Swipe
+    if (z.scale > 1) {
+      e.preventDefault();
+      z.isPanning = true;
+      z.panStartX = touches[0].clientX - z.translateX;
+      z.panStartY = touches[0].clientY - z.translateY;
+    }
+  }
+};
+
+// ═══ Touch Move ═══
+window.handleFsTouchMove = function(e) {
+  const z = window.imgFsZoom;
+  const touches = e.touches;
+
+  // ═══ Pinch Zoom ═══
+  if (touches.length === 2 && z.initialDistance > 0) {
+    e.preventDefault();
+
+    const currentDistance = Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+
+    const ratio = currentDistance / z.initialDistance;
+    const newScale = Math.max(z.minScale, Math.min(z.initialScale * ratio, z.maxScale));
+
+    z.scale = newScale;
+    if (z.scale === 1) {
+      z.translateX = 0;
+      z.translateY = 0;
+    }
+    window.imgFsUpdateTransform();
+    return;
+  }
+
+  // ═══ Pan (1 finger, zoomed) ═══
+  if (touches.length === 1 && z.isPanning && z.scale > 1) {
+    e.preventDefault();
+    z.translateX = touches[0].clientX - z.panStartX;
+    z.translateY = touches[0].clientY - z.panStartY;
+    window.imgFsUpdateTransform();
+  }
+};
+
+// ═══ Touch End ═══
+window.handleFsTouchEndFull = function(e) {
+  const z = window.imgFsZoom;
+
+  // ═══ Reset Pinch ═══
+  if (z.initialDistance > 0) {
+    z.initialDistance = 0;
+
+    // ⚡ Snap back to 1 if < 1.1
+    if (z.scale < 1.1 && z.scale > 0.9) {
+      z.scale = 1;
+      z.translateX = 0;
+      z.translateY = 0;
+      window.imgFsUpdateTransform();
+    }
+    return;
+  }
+
+  // ═══ End Pan ═══
+  if (z.isPanning) {
+    z.isPanning = false;
+    return;
+  }
+
+  // ═══ Swipe (لو مفيش زوم) ═══
+  if (z.scale <= 1 && e.changedTouches.length === 1) {
+    const touchEndX = e.changedTouches[0].screenX;
+    const diff = window.imgFsTouchStartX - touchEndX;
+
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        window.imgFsPrev();
+      } else {
+        window.imgFsNext();
+      }
+    }
+  }
 };
 
 // ═══════════════════════════════════════════════════════
