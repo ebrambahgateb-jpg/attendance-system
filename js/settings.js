@@ -641,37 +641,35 @@ function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, o
       uploadBtn.disabled = true;
       if (removeBtn) removeBtn.disabled = true;
 
-      try {
+            try {
         const url = await onUpload(file);
 
+        // ⚡ Rebuild كامل للـPreview (يحل مشكلة insertBefore)
         if (preview) {
-          const img = preview.querySelector('.simple-upload-img');
-          const empty = preview.querySelector('.simple-upload-empty');
-
-          if (img) {
-            img.src = url;
-          } else {
-            if (empty) empty.remove();
-            const newImg = document.createElement('img');
-            newImg.src = url;
-            newImg.className = 'simple-upload-img';
-            preview.insertBefore(newImg, loading);
-          }
+          preview.innerHTML = `
+            <img src="${url}" alt="" class="simple-upload-img" />
+            <div class="simple-upload-loading" id="${containerId}-loading" style="display:none;">
+              <div class="upload-spinner"></div>
+              <span>جاري الرفع...</span>
+            </div>
+          `;
         }
 
-        uploadBtn.innerHTML = '📤 تغيير';
+               uploadBtn.innerHTML = '📤 تغيير';
 
-        if (!document.getElementById(`${containerId}-remove`)) {
-          const actionsDiv = document.querySelector(`#${containerId} .simple-upload-actions`);
-          if (actionsDiv) {
-            const newRemoveBtn = document.createElement('button');
-            newRemoveBtn.type = 'button';
-            newRemoveBtn.className = 'btn-secondary simple-upload-btn';
-            newRemoveBtn.id = `${containerId}-remove`;
-            newRemoveBtn.innerHTML = '🗑️ مسح';
-            newRemoveBtn.onclick = () => handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner);
-            actionsDiv.appendChild(newRemoveBtn);
-          }
+        // ⚡ شيل الزرار القديم (لو موجود) وضيف واحد جديد
+        const oldRemoveBtn = document.getElementById(`${containerId}-remove`);
+        if (oldRemoveBtn) oldRemoveBtn.remove();
+
+        const actionsDiv = document.querySelector(`#${containerId} .simple-upload-actions`);
+        if (actionsDiv) {
+          const newRemoveBtn = document.createElement('button');
+          newRemoveBtn.type = 'button';
+          newRemoveBtn.className = 'btn-secondary simple-upload-btn';
+          newRemoveBtn.id = `${containerId}-remove`;
+          newRemoveBtn.innerHTML = '🗑️ مسح';
+          newRemoveBtn.onclick = () => handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner);
+          actionsDiv.appendChild(newRemoveBtn);
         }
 
       } catch (err) {
@@ -695,6 +693,7 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
 
   if (typeof onRemove === 'function') onRemove();
 
+  // ⚡ Rebuild كامل للـPreview
   if (preview) {
     preview.innerHTML = `
       <div class="simple-upload-empty">
@@ -708,9 +707,11 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
     `;
   }
 
+  // ⚡ شيل زرار المسح
   const rb = document.getElementById(`${containerId}-remove`);
   if (rb) rb.remove();
 
+  // ⚡ رجّع الزرار لـ"رفع صورة"
   if (uploadBtn) uploadBtn.innerHTML = '📤 رفع صورة';
 }
 
