@@ -714,7 +714,7 @@ function openPersonModal(personId) {
 
   setTimeout(() => {
     if (typeof window.renderUploadWidget === 'function') {
-      window.renderUploadWidget(
+            window.renderUploadWidget(
         'photoUploadContainer',
         currentPhotoURL,
         (result) => {
@@ -728,7 +728,8 @@ function openPersonModal(personId) {
         },
         {
           currentHash: currentPhotoHash || '',
-          currentURL: currentPhotoURL || ''
+          currentURL: currentPhotoURL || '',
+          enableCropper: true
         }
       );
     } else {
