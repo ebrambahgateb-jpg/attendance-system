@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   People Management (Firestore) + Auto Accounts
-//   ⚡ محدّث: Upload Widget + PhotoHash + Ignore List
+//   ⚡ محدّث: Upload Widget + PhotoHash + Ignore List + Filters
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -25,6 +25,15 @@ let filteredPeople = [];
 let currentEditId = null;
 let currentPhotoURL = '';
 let currentPhotoHash = '';
+
+// ═══ Filters State ═══
+let peopleFilters = {
+  search: '',
+  status: 'all',      // all | active | inactive
+  gender: 'all',      // all | male | female
+  ageFrom: '',
+  ageTo: ''
+};
 
 // ═══ Constants ═══
 const DEFAULT_ROLE = 'User';
@@ -89,6 +98,28 @@ function formatDateTime(date) {
   }
 }
 
+// ═══ ⚡ Age Calculator ═══
+function getAge(birthDate) {
+  if (!birthDate) return null;
+
+  try {
+    const birth = new Date(birthDate + 'T00:00:00');
+    if (isNaN(birth.getTime())) return null;
+
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+
+    return age >= 0 ? age : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // ═══ Facebook URL Helpers ═══
 function formatFacebookUrl(value) {
   if (!value) return '';
@@ -125,9 +156,6 @@ function getFacebookDisplay(value) {
 //   ⚡ Sync Ignore List Helper
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ إضافة بريد لقائمة التجاهل (عشان ما يرجعش من المزامنة)
- */
 async function addEmailToIgnoreList(email, reason = '') {
   if (!email) return { ok: false, message: 'Email required' };
 
@@ -268,11 +296,49 @@ function renderPeoplePage(area) {
 
       <div class="people-header">
         <div class="people-search">
-          <input type="text" id="peopleSearchInput" placeholder="🔍 ابحث بالاسم، الموبايل، أو البريد..." />
+          <input type="text" id="peopleSearchInput" placeholder="🔍 ابحث بالاسم، الموبايل، أو البريد..." value="${escapeHtml(peopleFilters.search)}" />
         </div>
         <button class="btn-primary" onclick="openPersonModal()">
           ➕ إضافة شخص
         </button>
+      </div>
+
+      <!-- ═══ فلاتر ═══ -->
+      <div class="people-filters">
+        <div class="people-filter-group">
+          <label>الحالة</label>
+          <select id="peopleFilterStatus">
+            <option value="all" ${peopleFilters.status === 'all' ? 'selected' : ''}>الكل</option>
+            <option value="active" ${peopleFilters.status === 'active' ? 'selected' : ''}>✅ نشط</option>
+            <option value="inactive" ${peopleFilters.status === 'inactive' ? 'selected' : ''}>⛔ معطل</option>
+          </select>
+        </div>
+
+        <div class="people-filter-group">
+          <label>النوع</label>
+          <select id="peopleFilterGender">
+            <option value="all" ${peopleFilters.gender === 'all' ? 'selected' : ''}>الكل</option>
+            <option value="male" ${peopleFilters.gender === 'male' ? 'selected' : ''}>ذكر</option>
+            <option value="female" ${peopleFilters.gender === 'female' ? 'selected' : ''}>أنثى</option>
+          </select>
+        </div>
+
+        <div class="people-filter-group">
+          <label>العمر من</label>
+          <input type="number" id="peopleFilterAgeFrom" placeholder="من" min="0" max="150" value="${escapeHtml(peopleFilters.ageFrom)}" />
+        </div>
+
+        <div class="people-filter-group">
+          <label>العمر إلى</label>
+          <input type="number" id="peopleFilterAgeTo" placeholder="إلى" min="0" max="150" value="${escapeHtml(peopleFilters.ageTo)}" />
+        </div>
+
+        <button class="btn-secondary" onclick="clearPeopleFilters()">مسح الفلاتر</button>
+      </div>
+
+      <!-- ═══ نتائج الفلترة ═══ -->
+      <div class="people-results-info" id="peopleResultsInfo" style="display:none;">
+        <span id="peopleResultsCount"></span>
       </div>
 
       <div class="people-stats">
@@ -321,6 +387,7 @@ function renderPeoplePage(area) {
 
   renderPeopleTable();
   setupPeopleEvents();
+  applyPeopleFilters();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -390,31 +457,138 @@ function renderPeopleTable() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Search
+//   ⚡ Filters
 // ═══════════════════════════════════════════════════════
 
 function setupPeopleEvents() {
+  // ═══ Search ═══
   const searchInput = document.getElementById('peopleSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      const term = e.target.value.toLowerCase().trim();
+      peopleFilters.search = e.target.value.toLowerCase().trim();
+      applyPeopleFilters();
+    });
+  }
 
-      if (!term) {
-        filteredPeople = [...peopleData];
-      } else {
-        filteredPeople = peopleData.filter(p => {
-          const fullName = getFullName(p).toLowerCase();
-          return fullName.includes(term) ||
-            String(p.Mobile || '').includes(term) ||
-            String(p.WhatsApp || '').includes(term) ||
-            String(p.Email || '').toLowerCase().includes(term);
-        });
-      }
+  // ═══ Status ═══
+  const statusFilter = document.getElementById('peopleFilterStatus');
+  if (statusFilter) {
+    statusFilter.onchange = (e) => {
+      peopleFilters.status = e.target.value;
+      applyPeopleFilters();
+    };
+  }
 
-      renderPeopleTable();
+  // ═══ Gender ═══
+  const genderFilter = document.getElementById('peopleFilterGender');
+  if (genderFilter) {
+    genderFilter.onchange = (e) => {
+      peopleFilters.gender = e.target.value;
+      applyPeopleFilters();
+    };
+  }
+
+  // ═══ Age From ═══
+  const ageFromFilter = document.getElementById('peopleFilterAgeFrom');
+  if (ageFromFilter) {
+    ageFromFilter.addEventListener('input', (e) => {
+      peopleFilters.ageFrom = e.target.value.trim();
+      applyPeopleFilters();
+    });
+  }
+
+  // ═══ Age To ═══
+  const ageToFilter = document.getElementById('peopleFilterAgeTo');
+  if (ageToFilter) {
+    ageToFilter.addEventListener('input', (e) => {
+      peopleFilters.ageTo = e.target.value.trim();
+      applyPeopleFilters();
     });
   }
 }
+
+function applyPeopleFilters() {
+  const term = peopleFilters.search;
+  const statusFilter = peopleFilters.status;
+  const genderFilter = peopleFilters.gender;
+  const ageFrom = peopleFilters.ageFrom ? Number(peopleFilters.ageFrom) : null;
+  const ageTo = peopleFilters.ageTo ? Number(peopleFilters.ageTo) : null;
+
+  filteredPeople = peopleData.filter(p => {
+    // ═══ Search ═══
+    if (term) {
+      const fullName = getFullName(p).toLowerCase();
+      const matchesSearch =
+        fullName.includes(term) ||
+        String(p.Mobile || '').includes(term) ||
+        String(p.WhatsApp || '').includes(term) ||
+        String(p.Email || '').toLowerCase().includes(term);
+
+      if (!matchesSearch) return false;
+    }
+
+    // ═══ Status ═══
+    if (statusFilter !== 'all') {
+      const personStatus = String(p.Status || 'active').toLowerCase();
+      if (personStatus !== statusFilter) return false;
+    }
+
+    // ═══ Gender ═══
+    if (genderFilter !== 'all') {
+      if (String(p.Gender || '').toLowerCase() !== genderFilter) return false;
+    }
+
+    // ═══ Age ═══
+    if (ageFrom !== null || ageTo !== null) {
+      const age = getAge(p.BirthDate);
+
+      // ⚡ اللي ملهوش تاريخ ميلاد → يظهر بس في "الكل"
+      if (age === null) return false;
+
+      if (ageFrom !== null && age < ageFrom) return false;
+      if (ageTo !== null && age > ageTo) return false;
+    }
+
+    return true;
+  });
+
+  renderPeopleTable();
+  updateResultsInfo();
+}
+
+function updateResultsInfo() {
+  const infoEl = document.getElementById('peopleResultsInfo');
+  const countEl = document.getElementById('peopleResultsCount');
+
+  if (!infoEl || !countEl) return;
+
+  const hasFilter =
+    peopleFilters.search ||
+    peopleFilters.status !== 'all' ||
+    peopleFilters.gender !== 'all' ||
+    peopleFilters.ageFrom ||
+    peopleFilters.ageTo;
+
+  if (hasFilter && filteredPeople.length !== peopleData.length) {
+    countEl.innerHTML = `🔍 <strong>${filteredPeople.length}</strong> من <strong>${peopleData.length}</strong> (نتيجة الفلترة)`;
+    infoEl.style.display = 'block';
+  } else {
+    infoEl.style.display = 'none';
+  }
+}
+
+window.clearPeopleFilters = function() {
+  peopleFilters = {
+    search: '',
+    status: 'all',
+    gender: 'all',
+    ageFrom: '',
+    ageTo: ''
+  };
+
+  filteredPeople = [...peopleData];
+  renderPeoplePage(document.getElementById('contentArea'));
+};
 
 // ═══════════════════════════════════════════════════════
 //   Person Modal (Add/Edit)
@@ -1014,6 +1188,9 @@ function renderPersonDetailsModal(modal, person, stats) {
   const genderLabel = person.Gender === 'male' ? 'ذكر'
     : (person.Gender === 'female' ? 'أنثى' : '-');
 
+  const age = getAge(person.BirthDate);
+  const ageLabel = age !== null ? `${age} سنة` : '-';
+
   const attendanceHtml = stats.recentAttendance.length > 0
     ? stats.recentAttendance.map(a => {
         const scanDate = parseDate(a.ScanTime);
@@ -1092,6 +1269,7 @@ function renderPersonDetailsModal(modal, person, stats) {
           <div class="pd-info-item"><div class="pd-info-label">الاسم الثالث</div><div class="pd-info-value">${escapeHtml(person.ThirdName || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">الاسم الرابع</div><div class="pd-info-value">${escapeHtml(person.FourthName || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">تاريخ الميلاد</div><div class="pd-info-value">${formatDate(person.BirthDate)}</div></div>
+          <div class="pd-info-item"><div class="pd-info-label">العمر</div><div class="pd-info-value">${ageLabel}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">النوع</div><div class="pd-info-value">${genderLabel}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">الموبايل</div><div class="pd-info-value ltr">${escapeHtml(person.Mobile || '-')}</div></div>
           <div class="pd-info-item"><div class="pd-info-label">واتساب</div><div class="pd-info-value ltr">${escapeHtml(person.WhatsApp || '-')}</div></div>
@@ -1224,3 +1402,4 @@ window.viewPersonDetails = viewPersonDetails;
 window.closePersonDetails = closePersonDetails;
 window.downloadPersonQR = downloadPersonQR;
 window.addEmailToIgnoreList = addEmailToIgnoreList;
+window.clearPeopleFilters = clearPeopleFilters;
