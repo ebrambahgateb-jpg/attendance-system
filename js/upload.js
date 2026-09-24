@@ -99,6 +99,13 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
 // ═══════════════════════════════════════════════════════
 
 async function uploadToImgBB(blob, name = '') {
+  // ⚡ Debug logging
+  console.log('📤 uploadToImgBB:', {
+    blobSize: blob.size,
+    blobType: blob.type,
+    name: name
+  });
+
   const formData = new FormData();
   formData.append('image', blob);
   if (name) formData.append('name', name);
@@ -109,14 +116,33 @@ async function uploadToImgBB(blob, name = '') {
   });
 
   if (!response.ok) {
-    throw new Error(`ImgBB API error: ${response.status}`);
+    // ⚡ اقفل تفاصيل الخطأ
+    let errorData = null;
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      errorData = await response.text();
+    }
+
+    console.error('❌ ImgBB error response:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: errorData,
+      blobSize: blob.size,
+      blobType: blob.type
+    });
+
+    throw new Error(`ImgBB API error: ${response.status} — ${JSON.stringify(errorData)}`);
   }
 
   const data = await response.json();
 
   if (!data.success) {
+    console.error('❌ ImgBB not success:', data);
     throw new Error(data.error?.message || 'فشل رفع الصورة');
   }
+
+  console.log('✅ ImgBB success:', data.data.url);
 
   return {
     url: data.data.url,
