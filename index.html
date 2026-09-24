@@ -103,7 +103,7 @@
         const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
         const snap = await getDoc(settingsRef);
 
-        if (snap.exists()) {
+               if (snap.exists()) {
           const data = snap.data();
           settings = {
             SystemName: data.SystemName || DEFAULTS.SystemName,
@@ -111,7 +111,11 @@
             Subtitle: data.LoginSubtitle || DEFAULTS.Subtitle,
             LogoUrl: data.ThemeLogoUrl || '',
             BgImageUrl: data.ThemeBgImageUrl || '',
-            FooterText: data.FooterText || ''
+            FooterText: data.FooterText || '',
+
+            // ⚡ إعدادات عرض اللوجو
+            LogoSizeLogin: Number(data.LogoSizeLogin) || 90,
+            LogoShape: data.LogoShape || 'square'
           };
         }
       } catch (err) {
@@ -125,12 +129,28 @@
       // ═══ Title ═══
       document.title = s.SystemName || DEFAULTS.SystemName;
 
-      // ═══ Logo ═══
+            // ═══ Logo ═══
       const brandLogo = document.getElementById('brandLogo');
       if (brandLogo) {
         if (s.LogoUrl) {
-          brandLogo.innerHTML = `<img src="${s.LogoUrl}" alt="Logo" class="logo-image" />`;
+          const logoSize = Number(s.LogoSizeLogin) || 90;
+          const shape = s.LogoShape || 'square';
+
+          // ⚡ للـLogin بنستخدم قيم أكبر شوية من الـSidebar
+          const borderRadius = {
+            square: '20px',
+            circle: '50%',
+            rounded: '32px',
+            original: '0'
+          }[shape] || '20px';
+
+          brandLogo.innerHTML = `<img src="${s.LogoUrl}" alt="Logo" class="logo-image" style="width:${logoSize}px;height:${logoSize}px;border-radius:${borderRadius};object-fit:contain;" />`;
           brandLogo.classList.add('has-image');
+
+          // ⚡ عدّل حجم الـWrapper
+          brandLogo.style.width = (logoSize + 20) + 'px';
+          brandLogo.style.height = (logoSize + 20) + 'px';
+          brandLogo.style.borderRadius = borderRadius;
         } else {
           brandLogo.classList.remove('has-image');
         }
