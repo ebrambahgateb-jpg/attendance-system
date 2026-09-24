@@ -487,12 +487,64 @@ function handleRemove(containerId, preview, uploadBtn, onUpload) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Expose
+//   ⚡ Theme Upload (Logo & Background)
 // ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ رفع اللوجو
+ * - ضغط: 500×500
+ * - جودة: 0.9
+ * - حد أقصى: 5 MB
+ */
+async function uploadLogoImage(file) {
+  if (!file) throw new Error('لا يوجد ملف');
+
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('صيغة الصورة غير مدعومة');
+  }
+
+  const maxSize = 5 * 1024 * 1024; // 5 MB
+  if (file.size > maxSize) {
+    throw new Error('حجم الصورة أكبر من 5 MB');
+  }
+
+  const compressed = await compressImage(file, 500, 500, 0.9);
+  const result = await uploadToImgBB(compressed, `logo_${Date.now()}`);
+
+  return result.url;
+}
+
+/**
+ * ⚡ رفع صورة الخلفية
+ * - ضغط: 1920×1080
+ * - جودة: 0.85
+ * - حد أقصى: 5 MB
+ */
+async function uploadBgImage(file) {
+  if (!file) throw new Error('لا يوجد ملف');
+
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('صيغة الصورة غير مدعومة');
+  }
+
+  const maxSize = 5 * 1024 * 1024; // 5 MB
+  if (file.size > maxSize) {
+    throw new Error('حجم الصورة أكبر من 5 MB');
+  }
+
+  const compressed = await compressImage(file, 1920, 1080, 0.85);
+  const result = await uploadToImgBB(compressed, `background_${Date.now()}`);
+
+  return result.url;
+}
 
 window.compressImage = compressImage;
 window.uploadToImgBB = uploadToImgBB;
 window.uploadPersonPhoto = uploadPersonPhoto;
+window.uploadLogoImage = uploadLogoImage;
+window.uploadBgImage = uploadBgImage;
 window.pickImage = pickImage;
 window.getFileHash = getFileHash;
 window.renderUploadWidget = renderUploadWidget;
