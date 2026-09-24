@@ -2098,14 +2098,14 @@ html[data-theme="dark"] .tpl-props-progress-bar {
 
 /* ═══ Image (Transform) ═══ */
 .img-fs-image-wrapper img {
-  transition: transform 0.15s ease-out;
   transform-origin: center center;
   will-change: transform;
   touch-action: none;
   user-select: none;
   -webkit-user-drag: none;
+  /* ⚡ مفيش transition — الحركة مباشرة مع الإصبع */
+  transition: none;
 }
-
 /* ═══ Cursor ═══ */
 .img-fs-image-wrapper {
   cursor: zoom-in;
