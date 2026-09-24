@@ -1596,6 +1596,14 @@ html[data-theme="dark"] .sch-active-template-icon {
   image-rendering: high-quality;
 }
 
+/* ⚡ الأسهم تظهر بس على الأجهزة اللي عندها Hover (PC) */
+@media (hover: none) {
+  .tpl-slider-nav,
+  .img-fs-nav {
+    display: none !important;
+  }
+}
+
 /* ═══ Navigation Buttons ═══ */
 .tpl-slider-nav {
   width: 44px;
