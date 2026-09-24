@@ -2082,3 +2082,147 @@ html[data-theme="dark"] .tpl-props-progress-bar {
     padding: 2px 6px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Image Fullscreen — Zoom Controls
+   ═══════════════════════════════════════════ */
+
+/* ═══ Image (Transform) ═══ */
+.img-fs-image-wrapper img {
+  transition: transform 0.15s ease-out;
+  transform-origin: center center;
+  will-change: transform;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ═══ Cursor ═══ */
+.img-fs-image-wrapper {
+  cursor: zoom-in;
+}
+
+.img-fs-image-wrapper:active {
+  cursor: grabbing;
+}
+
+/* ═══ Zoom Controls ═══ */
+.img-fs-zoom-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 6px;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  z-index: 10001;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.img-fs-zoom-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+.img-fs-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.08);
+}
+
+.img-fs-zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.img-fs-zoom-level {
+  font-size: 12px;
+  color: #fff;
+  font-weight: 700;
+  min-width: 50px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+}
+
+.img-fs-zoom-reset {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.7);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: inherit;
+  padding: 0;
+  margin-left: 4px;
+}
+
+.img-fs-zoom-reset:hover {
+  background: rgba(59, 130, 246, 1);
+  transform: scale(1.08) rotate(-30deg);
+}
+
+.img-fs-zoom-reset:active {
+  transform: scale(0.95);
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .img-fs-zoom-controls {
+    bottom: 14px;
+    right: 50%;
+    transform: translateX(50%);
+    padding: 5px;
+    gap: 4px;
+  }
+
+  .img-fs-zoom-btn,
+  .img-fs-zoom-reset {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .img-fs-zoom-btn {
+    font-size: 18px;
+  }
+
+  .img-fs-zoom-level {
+    font-size: 11px;
+    min-width: 42px;
+  }
+}
+
+@media (max-width: 480px) {
+  .img-fs-zoom-controls {
+    bottom: 10px;
+  }
+
+  .img-fs-zoom-btn,
+  .img-fs-zoom-reset {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+}
