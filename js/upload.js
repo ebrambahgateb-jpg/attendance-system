@@ -196,13 +196,14 @@ async function checkImageExistsStrict(url) {
 //   ⚡ Main Upload Function
 // ═══════════════════════════════════════════════════════
 
-async function uploadPersonPhoto(file, previousHash = '', previousURL = '') {
+async function uploadPersonPhoto(file, previousHash = '', previousURL = '', originalFile = null) {
   console.log('📤 [uploadPersonPhoto] بدء:', {
     fileName: file?.name,
     fileSize: file?.size,
     fileType: file?.type,
     previousHash: previousHash ? previousHash.substring(0, 12) + '...' : '',
-    previousURL: previousURL
+    previousURL: previousURL,
+    hasOriginal: !!originalFile
   });
 
   // ⚡ 1. تحقق من النوع
@@ -221,11 +222,13 @@ async function uploadPersonPhoto(file, previousHash = '', previousURL = '') {
     throw new Error(`حجم الصورة أكبر من ${MAX_FILE_SIZE / 1024 / 1024} MB`);
   }
 
-  // ⚡ 3. احسب الـhash
+    // ⚡ 3. احسب الـhash
+  // ⚡ لو فيه originalFile (بعد Cropper) → نحسب الـHash من الأصلية
+  //    عشان نمنع الرفع المكرر لنفس الصورة
   console.log('📤 [uploadPersonPhoto] حساب الـhash...');
-  const hash = await getFileHash(file);
-  console.log('📤 [uploadPersonPhoto] Hash:', hash.substring(0, 12) + '...');
-
+  const hashSource = originalFile || file;
+  const hash = await getFileHash(hashSource);
+  console.log('📤 [uploadPersonPhoto] Hash:', hash.substring(0, 12) + '...', originalFile ? '(from original)' : '(from file)');
   // ⚡ 4. تحقق من التكرار
   if (previousHash && previousURL && hash === previousHash) {
     console.log('📤 [uploadPersonPhoto] نفس الصورة — فحص لو موجودة على ImgBB...');
@@ -364,10 +367,10 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
 
       console.log('📤 [renderUploadWidget] تم اختيار ملف:', file.name, file.size, 'bytes');
 
-      if (enableCropper && typeof window.openImageCropper === 'function') {
-        window.openImageCropper(file, (croppedFile) => {
+            if (enableCropper && typeof window.openImageCropper === 'function') {
+        window.openImageCropper(file, (croppedFile, originalFile) => {
           console.log('📤 [renderUploadWidget] تم قص الصورة:', croppedFile.size, 'bytes');
-          doUpload(containerId, croppedFile, onUpload);
+          doUpload(containerId, croppedFile, onUpload, originalFile);
         }, { outputSize: 500 });
         return;
       }
@@ -386,8 +389,8 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
 }
 
 // ═══ ⚡ رفع فعلي ═══
-async function doUpload(containerId, file, onUpload) {
-  console.log('📤 [doUpload] بدء:', { containerId, fileName: file?.name, fileSize: file?.size });
+async function doUpload(containerId, file, onUpload, originalFile = null) {
+  console.log('📤 [doUpload] بدء:', { containerId, fileName: file?.name, fileSize: file?.size, hasOriginal: !!originalFile });
 
   const container = document.getElementById(containerId);
   if (!container) {
@@ -405,11 +408,11 @@ async function doUpload(containerId, file, onUpload) {
   if (removeBtn) removeBtn.disabled = true;
 
   try {
-    const prevHash = container.dataset.currentHash || '';
+        const prevHash = container.dataset.currentHash || '';
     const prevURL = container.dataset.currentURL || '';
 
     console.log('📤 [doUpload] بدء رفع الصورة...');
-    const result = await uploadPersonPhoto(file, prevHash, prevURL);
+    const result = await uploadPersonPhoto(file, prevHash, prevURL, originalFile);
     console.log('✅ [doUpload] الرفع نجح:', result);
 
     container.dataset.currentHash = result.hash;
