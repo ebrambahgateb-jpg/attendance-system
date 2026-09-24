@@ -27,7 +27,7 @@
   border-radius: 20px;
   width: 100%;
   max-width: 520px;
-  max-height: 90vh;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -84,78 +84,57 @@
   flex: 1;
 }
 
-/* ═══ Viewport ═══ */
+/* ═══ Viewport — مربع بالكامل ═══ */
 .image-cropper-viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 1;
-  max-width: 400px;
-  margin: 0 auto;
+  height: 0;
+  padding-bottom: 100%; /* ⚡ Trick: مربع تمامًا */
   background: #0f172a;
-  border-radius: 14px;
+  border-radius: 50%;  /* ⚡ دائري زي Facebook */
   overflow: hidden;
   cursor: grab;
   touch-action: none;
   user-select: none;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+  border: 3px solid var(--border);
 }
 
 .image-cropper-viewport:active {
   cursor: grabbing;
 }
 
-.image-cropper-canvas-wrap {
+/* ⚡ الـCanvas بيملأ الـViewport */
+#cropperCanvas {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#cropperCanvas {
-  display: block;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
 
-/* ═══ Overlay (Dark Borders) ═══ */
-.image-cropper-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  border-radius: 14px;
-  /* ⚡ Na2es el awel (خطوط المساعدة) */
-  border: 2px dashed rgba(255, 255, 255, 0.3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-}
-
-/* ═══ Guide (Cross Lines) ═══ */
-.image-cropper-guide {
+/* ═══ Guides (خطوط مساعدة) ═══ */
+.image-cropper-guide-h {
   position: absolute;
   top: 50%;
   left: 0;
   right: 0;
   height: 1px;
   background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-50%);
   pointer-events: none;
 }
 
-.image-cropper-guide::before {
-  content: '';
+.image-cropper-guide-v {
   position: absolute;
-  top: -100vh;
   left: 50%;
+  top: 0;
+  bottom: 0;
   width: 1px;
-  height: 100vh;
   background: rgba(255, 255, 255, 0.15);
-  transform: translateY(-50%);
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 /* ═══ Controls ═══ */
@@ -296,10 +275,6 @@ html[data-theme="dark"] .image-cropper-viewport {
   .image-cropper-body {
     padding: 14px 16px;
     gap: 12px;
-  }
-
-  .image-cropper-viewport {
-    max-width: 100%;
   }
 
   .cropper-ctrl-btn {
