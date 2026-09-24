@@ -1295,8 +1295,8 @@ function renderTemplatePropertiesSection(template) {
           <button type="button" class="btn-secondary" onclick="uploadTemplatePropImage()">
             📤 رفع صور (متعدد)
           </button>
-          ${currentTemplateProps.images.length > 0 ? `
-            <button type="button" class="btn-secondary danger" onclick="clearAllTemplatePropImages()">
+                    ${currentTemplateProps.images.length > 0 ? `
+            <button type="button" class="btn-secondary danger clear-all-btn" onclick="clearAllTemplatePropImages()">
               🗑️ مسح كل الصور
             </button>
           ` : ''}
@@ -1533,23 +1533,17 @@ function refreshTemplatePropsImages() {
     container.innerHTML = renderTemplatePropsImages();
   }
 
+  // ⚡ شيل كل أزرار "مسح كل الصور" المكررة
   const actionsContainer = document.querySelector('.tpl-props-images-actions');
   if (actionsContainer) {
-    const hasImages = currentTemplateProps.images.length > 0;
-    const existingClearBtn = actionsContainer.querySelector('.clear-all-btn');
-
-    if (hasImages && !existingClearBtn) {
-      const clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.className = 'btn-secondary danger clear-all-btn';
-      clearBtn.onclick = window.clearAllTemplatePropImages;
-      clearBtn.innerHTML = '🗑️ مسح كل الصور';
-      actionsContainer.appendChild(clearBtn);
-    } else if (!hasImages && existingClearBtn) {
-      existingClearBtn.remove();
-    }
+    // ⚡ شيل كل الأزرار اللي فيها "مسح كل الصور" (ما عدا الأصلية لو موجودة)
+    const allClearBtns = actionsContainer.querySelectorAll('.clear-all-btn');
+    allClearBtns.forEach((btn, idx) => {
+      if (idx > 0) btn.remove(); // ⚡ سيب الأول بس، شيل الباقي
+    });
   }
 
+  // ⚡ حدّث العدّاد
   const hintEl = document.querySelector('.tpl-props-section .hint:last-child');
   if (hintEl && hintEl.innerHTML.includes('عدد الصور')) {
     hintEl.innerHTML = `عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}`;
