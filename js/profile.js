@@ -496,7 +496,7 @@ window.openPhotoUploadModal = function() {
 
   setTimeout(() => {
     if (typeof window.renderUploadWidget === 'function') {
-      window.renderUploadWidget(
+            window.renderUploadWidget(
         'profilePhotoUploadContainer',
         currentProfilePhotoURL,
         (result) => {
@@ -512,7 +512,8 @@ window.openPhotoUploadModal = function() {
         },
         {
           currentHash: currentProfilePhotoHash || '',
-          currentURL: currentProfilePhotoURL || ''
+          currentURL: currentProfilePhotoURL || '',
+          enableCropper: true
         }
       );
     }
