@@ -772,7 +772,7 @@ function applyTheme(theme) {
     original: '0'
   }[logoShape] || '10px';
 
-  document.querySelectorAll('.app-logo').forEach(img => {
+    document.querySelectorAll('.app-logo').forEach(img => {
     if (t.logoUrl) {
       img.src = t.logoUrl;
       img.style.display = 'block';
@@ -780,6 +780,13 @@ function applyTheme(theme) {
       img.style.height = logoSize + 'px';
       img.style.borderRadius = borderRadius;
       img.style.objectFit = 'contain';
+
+      // ⚡ ⚡ ⚡ خلفية شفافة
+      img.style.background = 'transparent';
+      img.style.backgroundColor = 'transparent';
+      img.style.padding = '0';
+      img.style.border = 'none';
+      img.style.boxShadow = 'none';
     } else {
       img.style.display = 'none';
     }
