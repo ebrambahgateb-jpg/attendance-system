@@ -1951,7 +1951,8 @@ window.imgFsUpdateTransform = function() {
 
   const { scale, translateX, translateY } = window.imgFsZoom;
 
-  img.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+  // ⚡ translate الأول (بدون تضاعف) ثم scale
+  img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
 
   // ⚡ حدّث نسبة الزوم
   const levelEl = document.getElementById('imgFsZoomLevel');
@@ -2031,10 +2032,22 @@ window.handleFsMouseMove = function(e) {
   const z = window.imgFsZoom;
   if (!z.isPanning) return;
 
-  z.translateX = e.clientX - z.panStartX;
-  z.translateY = e.clientY - z.panStartY;
+  // ⚡ requestAnimationFrame لسلاسة أعلى
+  if (z._rafPending) return;
+  z._rafPending = true;
 
-  window.imgFsUpdateTransform();
+  requestAnimationFrame(() => {
+    z.translateX = e.clientX - z.panStartX;
+    z.translateY = e.clientY - z.panStartY;
+
+    const img = document.getElementById('imgFsImg');
+    if (img) {
+      // ⚡ استخدم translate3d للـ GPU acceleration
+      img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+    }
+
+    z._rafPending = false;
+  });
 };
 
 window.handleFsMouseUp = function() {
@@ -2129,16 +2142,41 @@ window.handleFsTouchMove = function(e) {
       z.translateX = 0;
       z.translateY = 0;
     }
-    window.imgFsUpdateTransform();
+
+    // ⚡ requestAnimationFrame
+    if (!z._rafPending) {
+      z._rafPending = true;
+      requestAnimationFrame(() => {
+        const img = document.getElementById('imgFsImg');
+        if (img) {
+          img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+        }
+        z._rafPending = false;
+      });
+    }
     return;
   }
 
   // ═══ Pan (1 finger, zoomed) ═══
   if (touches.length === 1 && z.isPanning && z.scale > 1) {
     e.preventDefault();
-    z.translateX = touches[0].clientX - z.panStartX;
-    z.translateY = touches[0].clientY - z.panStartY;
-    window.imgFsUpdateTransform();
+
+    if (!z._rafPending) {
+      z._rafPending = true;
+      const currentX = touches[0].clientX;
+      const currentY = touches[0].clientY;
+
+      requestAnimationFrame(() => {
+        z.translateX = currentX - z.panStartX;
+        z.translateY = currentY - z.panStartY;
+
+        const img = document.getElementById('imgFsImg');
+        if (img) {
+          img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+        }
+        z._rafPending = false;
+      });
+    }
   }
 };
 
