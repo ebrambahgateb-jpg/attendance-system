@@ -59,6 +59,10 @@ html {
   width: 32px;
   object-fit: contain;
   border-radius: 6px;
+  background: transparent;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .sidebar-nav {
