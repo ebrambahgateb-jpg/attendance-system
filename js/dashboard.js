@@ -719,7 +719,12 @@ function extractThemeFromSettings(s) {
     sidebarText: base.sidebarText,
     sidebarActive: base.sidebarActive,
     logoUrl: s.ThemeLogoUrl || '',
-    bgImageUrl: s.ThemeBgImageUrl || ''
+    bgImageUrl: s.ThemeBgImageUrl || '',
+
+    // ⚡ إعدادات عرض اللوجو
+    logoSizeSidebar: Number(s.LogoSizeSidebar) || 48,
+    logoSizeLogin: Number(s.LogoSizeLogin) || 90,
+    logoShape: s.LogoShape || 'square'
   };
 }
 
@@ -756,9 +761,28 @@ function applyTheme(theme) {
     document.body.style.background = t.bg;
   }
 
+    // ⚡ اللوجو — الحجم والشكل
+  const logoSize = Number(t.logoSizeSidebar) || 48;
+  const logoShape = t.logoShape || 'square';
+
+  const borderRadius = {
+    square: '10px',
+    circle: '50%',
+    rounded: '16px',
+    original: '0'
+  }[logoShape] || '10px';
+
   document.querySelectorAll('.app-logo').forEach(img => {
-    if (t.logoUrl) { img.src = t.logoUrl; img.style.display = 'block'; }
-    else { img.style.display = 'none'; }
+    if (t.logoUrl) {
+      img.src = t.logoUrl;
+      img.style.display = 'block';
+      img.style.width = logoSize + 'px';
+      img.style.height = logoSize + 'px';
+      img.style.borderRadius = borderRadius;
+      img.style.objectFit = 'contain';
+    } else {
+      img.style.display = 'none';
+    }
   });
 }
 
