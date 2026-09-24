@@ -1,0 +1,333 @@
+/* ═══════════════════════════════════════════
+   Image Cropper (Facebook-style)
+   ═══════════════════════════════════════════ */
+
+.image-cropper-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(6px);
+}
+
+.image-cropper-modal[style*="display: flex"],
+.image-cropper-modal[style*="display:flex"] {
+  display: flex !important;
+}
+
+.image-cropper-content {
+  background: var(--card-bg);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
+  animation: cropModalSlide 0.3s ease;
+}
+
+@keyframes cropModalSlide {
+  from { opacity: 0; transform: scale(0.95) translateY(-20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ═══ Header ═══ */
+.image-cropper-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.image-cropper-header h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.image-cropper-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.image-cropper-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ═══ Body ═══ */
+.image-cropper-body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ═══ Viewport ═══ */
+.image-cropper-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 400px;
+  margin: 0 auto;
+  background: #0f172a;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.image-cropper-viewport:active {
+  cursor: grabbing;
+}
+
+.image-cropper-canvas-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#cropperCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ═══ Overlay (Dark Borders) ═══ */
+.image-cropper-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  border-radius: 14px;
+  /* ⚡ Na2es el awel (خطوط المساعدة) */
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* ═══ Guide (Cross Lines) ═══ */
+.image-cropper-guide {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+
+.image-cropper-guide::before {
+  content: '';
+  position: absolute;
+  top: -100vh;
+  left: 50%;
+  width: 1px;
+  height: 100vh;
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-50%);
+}
+
+/* ═══ Controls ═══ */
+.image-cropper-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px;
+  justify-content: center;
+}
+
+.cropper-ctrl-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  font-family: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+.cropper-ctrl-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
+.cropper-ctrl-btn:active {
+  transform: scale(0.95);
+}
+
+.cropper-zoom-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to left, var(--primary), var(--border));
+  outline: none;
+  cursor: pointer;
+}
+
+.cropper-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 3px solid var(--card-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+
+.cropper-zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.cropper-zoom-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 3px solid var(--card-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ═══ Hint ═══ */
+.image-cropper-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ═══ Footer ═══ */
+.image-cropper-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.image-cropper-footer button {
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.image-cropper-footer button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ═══ Dark Mode ═══ */
+html[data-theme="dark"] .image-cropper-viewport {
+  background: #020617;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 600px) {
+  .image-cropper-content {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: 16px;
+  }
+
+  .image-cropper-header {
+    padding: 14px 16px;
+  }
+
+  .image-cropper-header h2 {
+    font-size: 15px;
+  }
+
+  .image-cropper-body {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .image-cropper-viewport {
+    max-width: 100%;
+  }
+
+  .cropper-ctrl-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+
+  .image-cropper-footer {
+    padding: 12px 16px;
+    flex-direction: column;
+  }
+
+  .image-cropper-footer button {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .image-cropper-hint {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 380px) {
+  .cropper-ctrl-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+}
