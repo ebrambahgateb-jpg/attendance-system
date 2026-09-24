@@ -1,4 +1,431 @@
 /* ═══════════════════════════════════════════
+   Settings Styles
+   ═══════════════════════════════════════════ */
+
+.settings-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ═══ Settings Tabs ═══ */
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.settings-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.settings-tab {
+  padding: 12px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text-muted);
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.settings-tab:hover {
+  color: var(--primary);
+}
+
+.settings-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* ═══ Settings Group ═══ */
+.settings-group {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.settings-group h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ═══ Form Rows ═══ */
+.form-row {
+  margin-bottom: 16px;
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+.form-row label {
+  display: block;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.form-row input[type="text"],
+.form-row input[type="email"],
+.form-row input[type="number"],
+.form-row input[type="tel"],
+.form-row input[type="date"],
+.form-row input[type="time"],
+.form-row select,
+.form-row textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--card-bg);
+  color: var(--text);
+  transition: border-color 0.2s;
+}
+
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.form-row input[type="color"] {
+  width: 60px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--card-bg);
+}
+
+/* ═══ Checkbox Row ═══ */
+.form-row.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-row.checkbox-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.form-row.checkbox-row label {
+  margin: 0;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* ═══ Hint ═══ */
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 6px 0 0 0;
+  line-height: 1.5;
+}
+
+/* ═══ Logo Preview (Old — kept for backward compat) ═══ */
+.logo-preview {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+/* ═══ Settings Actions ═══ */
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 20px;
+  border-top: 2px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.settings-actions button {
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* ═══════════════════════════════════════════
+   Sync Group (Google Form)
+   ═══════════════════════════════════════════ */
+
+.sync-info-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sync-info-row strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.sync-info-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.sync-actions button {
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.sync-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ═══ Sync Result ═══ */
+.sync-result {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.sync-result.success {
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.sync-result.error {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.sync-result-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.sync-result-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-result-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════
+   Tab Permissions
+   ═══════════════════════════════════════════ */
+
+.tab-permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tab-permission-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.tab-permission-item:hover {
+  border-color: var(--primary);
+}
+
+.tab-permission-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tab-permission-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tab-permission-item.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.tab-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.tab-label {
+  color: var(--text);
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-tabs-group {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+}
+
+.owner-tabs-group h3 {
+  color: #92400e;
+}
+
+.owner-tabs-group .hint {
+  color: #92400e;
+}
+
+.tab-permissions-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.tab-permissions-actions button {
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+/* ═══════════════════════════════════════════
    Simple Upload Widget (Theme Logo & BG)
    ═══════════════════════════════════════════ */
 
@@ -99,7 +526,10 @@
   cursor: not-allowed;
 }
 
-/* ═══ Dark Mode ═══ */
+/* ═══════════════════════════════════════════
+   Dark Mode
+   ═══════════════════════════════════════════ */
+
 html[data-theme="dark"] .simple-upload-preview {
   background: #0f172a;
   border-color: #334155;
@@ -109,8 +539,93 @@ html[data-theme="dark"] .simple-upload-preview:hover {
   border-color: #60a5fa;
 }
 
-/* ═══ Responsive ═══ */
+html[data-theme="dark"] .owner-tabs-group {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+html[data-theme="dark"] .owner-tabs-group h3 {
+  color: #fbbf24;
+}
+
+html[data-theme="dark"] .owner-tabs-group .hint {
+  color: #fcd34d;
+}
+
+html[data-theme="dark"] .sync-result.success {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .sync-result.error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+/* ═══════════════════════════════════════════
+   Responsive (Mobile)
+   ═══════════════════════════════════════════ */
+
 @media (max-width: 768px) {
+  .settings-tabs {
+    gap: 4px;
+  }
+
+  .settings-tab {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .settings-group {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .settings-group h3 {
+    font-size: 15px;
+    margin-bottom: 14px;
+  }
+
+  .form-row input[type="text"],
+  .form-row input[type="email"],
+  .form-row input[type="number"],
+  .form-row input[type="tel"],
+  .form-row input[type="date"],
+  .form-row input[type="time"],
+  .form-row select,
+  .form-row textarea {
+    font-size: 16px; /* ⚡ يمنع zoom على iOS */
+    padding: 12px 14px;
+  }
+
+  .form-row input[type="color"] {
+    width: 100%;
+    height: 50px;
+  }
+
+  .form-row.checkbox-row input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+  }
+
+  .form-row.checkbox-row label {
+    font-size: 15px;
+  }
+
+  .settings-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .settings-actions button {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  /* ═══ Simple Upload Widget ═══ */
   .simple-upload-preview {
     max-width: 100%;
     height: 160px;
@@ -123,5 +638,72 @@ html[data-theme="dark"] .simple-upload-preview:hover {
   .simple-upload-btn {
     flex: 1;
     min-width: 0;
+  }
+
+  /* ═══ Tab Permissions ═══ */
+  .tab-permissions-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .tab-permission-item {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .tab-permission-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  .tab-label {
+    font-size: 14px;
+  }
+
+  .tab-permissions-actions {
+    flex-direction: column;
+  }
+
+  .tab-permissions-actions button {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  /* ═══ Sync Actions ═══ */
+  .sync-actions {
+    flex-direction: column;
+  }
+
+  .sync-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .settings-group {
+    padding: 12px;
+  }
+
+  .simple-upload-preview {
+    height: 140px;
+  }
+
+  .simple-upload-banner .simple-upload-preview {
+    height: 120px;
+  }
+
+  .simple-upload-icon {
+    font-size: 32px;
+  }
+
+  .simple-upload-btn {
+    font-size: 12px;
+    padding: 8px 14px;
   }
 }
