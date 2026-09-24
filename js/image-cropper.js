@@ -391,16 +391,17 @@ async function handleCropperSave() {
       saveBtn.textContent = originalText;
     }
 
-    // ⚡ احفظ الـcallback قبل ما تقفل (لأن close بتصفّر الـstate)
+    // ⚡ احفظ الـcallback + الملف الأصلي قبل ما تقفل
     const callback = cropperState.onCropCallback;
+    const originalFile = cropperState.originalFile;
 
     // ⚡ اقفل الـModal
     closeImageCropper();
 
-    // ⚡ نادي الـcallback
+    // ⚡ نادي الـcallback بالمعلومات الإضافية
     if (typeof callback === 'function') {
       console.log('📤 [handleCropperSave] نادي الـcallback بـ:', croppedFile.size, 'bytes');
-      callback(croppedFile);
+      callback(croppedFile, originalFile);
     } else {
       console.error('❌ [handleCropperSave] الـcallback مش موجود!');
     }
