@@ -1658,22 +1658,43 @@ window.viewTemplateProperties = function(templateId) {
 
    modal.style.display = 'flex';
 
-  // ⚡ Init slider
+    // ⚡ Init slider
   if (images.length > 0) {
     window.tplSliderInit(images);
 
-    // ⚡ Swipe on slider
+    // ⚡ Swipe on slider (RTL: swipe left = prev, swipe right = next)
     setTimeout(() => {
       const sliderMain = document.querySelector('.tpl-slider-main');
       if (sliderMain) {
         let startX = 0;
+        let startY = 0;
+        let isSwiping = false;
 
         sliderMain.addEventListener('touchstart', (e) => {
-          startX = e.changedTouches[0].screenX;
+          if (e.touches.length !== 1) return;
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+          isSwiping = false;
         }, { passive: true });
 
-                sliderMain.addEventListener('touchend', (e) => {
-          const endX = e.changedTouches[0].screenX;
+        sliderMain.addEventListener('touchmove', (e) => {
+          if (e.touches.length !== 1) return;
+
+          const currentX = e.touches[0].clientX;
+          const currentY = e.touches[0].clientY;
+          const diffX = Math.abs(currentX - startX);
+          const diffY = Math.abs(currentY - startY);
+
+          // ⚡ لو الحركة أفقية أكثر من العمودية → swipe
+          if (diffX > diffY && diffX > 10) {
+            isSwiping = true;
+          }
+        }, { passive: true });
+
+        sliderMain.addEventListener('touchend', (e) => {
+          if (!isSwiping) return;
+
+          const endX = e.changedTouches[0].clientX;
           const diff = startX - endX;
 
           if (Math.abs(diff) > 50) {
@@ -1685,9 +1706,11 @@ window.viewTemplateProperties = function(templateId) {
               window.tplSliderNext();
             }
           }
+
+          isSwiping = false;
         }, { passive: true });
       }
-    }, 50);
+    }, 100);
   }
 };
 
