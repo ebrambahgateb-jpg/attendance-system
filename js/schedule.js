@@ -1291,9 +1291,9 @@ function renderTemplatePropertiesSection(template) {
           ${renderTemplatePropsImages()}
         </div>
 
-        <div class="tpl-props-images-actions">
+                      <div class="tpl-props-images-actions">
           <button type="button" class="btn-secondary" onclick="uploadTemplatePropImage()">
-            📤 رفع صورة
+            📤 رفع صور (متعدد)
           </button>
           ${currentTemplateProps.images.length > 0 ? `
             <button type="button" class="btn-secondary danger" onclick="clearAllTemplatePropImages()">
@@ -1317,82 +1317,201 @@ function renderTemplatePropsImages() {
     return `<div class="tpl-props-images-empty">لا يوجد صور</div>`;
   }
 
-  return images.map((img, idx) => `
-    <div class="tpl-props-image-item">
-      <img src="${escapeHtml(img.url)}" alt="" class="tpl-props-image-thumb" />
-      <button type="button" class="tpl-props-image-remove" onclick="removeTemplatePropImage(${idx})" title="مسح">🗑️</button>
-    </div>
-  `).join('');
+  return images.map((img, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === images.length - 1;
+
+    return `
+      <div class="tpl-props-image-item"
+           draggable="true"
+           data-index="${idx}"
+           ondragstart="handleImageDragStart(event, ${idx})"
+           ondragover="handleImageDragOver(event)"
+           ondrop="handleImageDrop(event, ${idx})"
+           ondragend="handleImageDragEnd(event)">
+
+        <div class="tpl-props-image-number">${idx + 1}</div>
+
+        <img src="${escapeHtml(img.url)}" alt="" class="tpl-props-image-thumb" />
+
+        <div class="tpl-props-image-controls">
+          <button type="button"
+                  class="tpl-props-image-move"
+                  onclick="moveTemplatePropImage(${idx}, -1)"
+                  title="تحريك لليسار"
+                  ${isFirst ? 'disabled' : ''}>◀</button>
+
+          <button type="button"
+                  class="tpl-props-image-move"
+                  onclick="moveTemplatePropImage(${idx}, 1)"
+                  title="تحريك لليمين"
+                  ${isLast ? 'disabled' : ''}>▶</button>
+
+          <button type="button"
+                  class="tpl-props-image-remove"
+                  onclick="removeTemplatePropImage(${idx})"
+                  title="مسح">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
+// ═══ Drag & Drop Handlers ═══
+let dragSourceIndex = null;
+
+window.handleImageDragStart = function(event, index) {
+  dragSourceIndex = index;
+  event.dataTransfer.effectAllowed = 'move';
+  event.target.classList.add('dragging');
+};
+
+window.handleImageDragOver = function(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  event.target.closest('.tpl-props-image-item')?.classList.add('drag-over');
+};
+
+window.handleImageDrop = function(event, targetIndex) {
+  event.preventDefault();
+  event.target.closest('.tpl-props-image-item')?.classList.remove('drag-over');
+
+  if (dragSourceIndex === null || dragSourceIndex === targetIndex) return;
+
+  // ⚡ انقل الصورة
+  const images = currentTemplateProps.images;
+  const [moved] = images.splice(dragSourceIndex, 1);
+  images.splice(targetIndex, 0, moved);
+
+  dragSourceIndex = null;
+  refreshTemplatePropsImages();
+};
+
+window.handleImageDragEnd = function(event) {
+  document.querySelectorAll('.tpl-props-image-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+  dragSourceIndex = null;
+};
+
+// ═══ Move Image (أزرار ⬅️ ➡️) ═══
+window.moveTemplatePropImage = function(index, direction) {
+  const images = currentTemplateProps.images;
+  const newIndex = index + direction;
+
+  if (newIndex < 0 || newIndex >= images.length) return;
+
+  // ⚡ بدّل
+  [images[index], images[newIndex]] = [images[newIndex], images[index]];
+  refreshTemplatePropsImages();
+};
+
 window.uploadTemplatePropImage = async function() {
-  if (currentTemplateProps.images.length >= MAX_TEMPLATE_IMAGES) {
+  const remaining = MAX_TEMPLATE_IMAGES - currentTemplateProps.images.length;
+
+  if (remaining <= 0) {
     alert(`⚠️ الحد الأقصى ${MAX_TEMPLATE_IMAGES} صور`);
     return;
   }
 
-  if (typeof window.pickImage !== 'function') {
+  if (typeof window.pickMultipleImages !== 'function') {
     alert('⚠️ خدمة رفع الصور غير متوفرة');
     return;
   }
 
-  const file = await window.pickImage();
-  if (!file) return;
+  // ⚡ File picker متعدد
+  const files = await window.pickMultipleImages();
+  if (!files || files.length === 0) return;
 
-  // ⚡ تحقق من النوع
+  // ⚡ تحقق من الحد الأقصى
+  if (files.length > remaining) {
+    alert(`⚠️ يمكنك رفع ${remaining} صور فقط (المتبقي من ${MAX_TEMPLATE_IMAGES})`);
+    return;
+  }
+
+  await processMultipleImageUploads(files);
+};
+
+// ═══ Multi-Upload Function ═══
+async function processMultipleImageUploads(files) {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    alert('❌ صيغة الصورة غير مدعومة');
-    return;
-  }
-
-  // ⚡ حدود ملفات أكبر
   const MAX_TEMPLATE_PROP_SIZE = 10 * 1024 * 1024; // 10 MB
-  if (file.size > MAX_TEMPLATE_PROP_SIZE) {
-    alert('❌ حجم الصورة أكبر من 10 MB');
-    return;
-  }
 
   const container = document.getElementById('tplPropsImagesList');
   const originalHtml = container ? container.innerHTML : '';
-  if (container) {
-    container.innerHTML = '<div class="tpl-props-images-loading">⏳ جاري الرفع...</div>';
-  }
 
-   try {
-    if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
-      throw new Error('خدمة الرفع غير متوفرة');
+  let uploaded = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    // ⚡ Progress
+    if (container) {
+      container.innerHTML = `
+        <div class="tpl-props-images-loading">
+          <div class="tpl-props-progress-bar">
+            <div class="tpl-props-progress-fill" style="width: ${(i / files.length) * 100}%"></div>
+          </div>
+          <div class="tpl-props-progress-text">⏳ جاري رفع ${i + 1} من ${files.length}...</div>
+        </div>
+      `;
     }
 
-    // ⚡ ضغط بجودة أعلى لخصائص النمط
-    const compressed = await window.compressImage(
-      file,
-      2400,   // maxWidth
-      2400,   // maxHeight
-      0.98    // quality (أعلى جودة ممكنة)
-    );
+    // ⚡ تحقق من النوع
+    if (!allowedTypes.includes(file.type)) {
+      failed++;
+      errors.push(`"${file.name}": صيغة غير مدعومة`);
+      continue;
+    }
 
-    // ⚡ احسب الـ hash
-    const hash = await window.getFileHash(file);
+    // ⚡ تحقق من الحجم
+    if (file.size > MAX_TEMPLATE_PROP_SIZE) {
+      failed++;
+      errors.push(`"${file.name}": أكبر من 10 MB`);
+      continue;
+    }
 
-    // ⚡ ارفع
-    const result = await window.uploadToImgBB(compressed, `template_prop_${Date.now()}`);
+    try {
+      if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
+        throw new Error('خدمة الرفع غير متوفرة');
+      }
 
-    currentTemplateProps.images.push({
-      url: result.url,
-      hash: hash,
-      uploadedAt: new Date().toISOString()
-    });
-    refreshTemplatePropsImages();
+      const compressed = await window.compressImage(file, 2400, 2400, 0.98);
+      const hash = await window.getFileHash(file);
+      const result = await window.uploadToImgBB(compressed, `template_prop_${Date.now()}_${i}`);
 
-    console.log('✅ Image uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
+      currentTemplateProps.images.push({
+        url: result.url,
+        hash: hash,
+        uploadedAt: new Date().toISOString()
+      });
 
-  } catch (err) {
-    console.error('❌ Upload error:', err);
-    alert('❌ فشل الرفع: ' + err.message);
-    if (container) container.innerHTML = originalHtml;
+      uploaded++;
+      console.log(`✅ [${i + 1}/${files.length}] Uploaded:`, file.name);
+
+    } catch (err) {
+      console.error(`❌ [${i + 1}/${files.length}] Failed:`, file.name, err);
+      failed++;
+      errors.push(`"${file.name}": ${err.message}`);
+    }
   }
-};
+
+  // ⚡ أعد الرسم
+  refreshTemplatePropsImages();
+
+  // ⚡ ملخص
+  if (failed > 0) {
+    alert(
+      `✅ تم رفع ${uploaded} صورة\n` +
+      `❌ فشل ${failed} صورة\n\n` +
+      `الأخطاء:\n${errors.join('\n')}`
+    );
+  } else {
+    console.log(`✅ Uploaded ${uploaded} images successfully`);
+  }
+}
 
 window.removeTemplatePropImage = function(idx) {
   if (!confirm('⚠️ مسح هذه الصورة؟')) return;
