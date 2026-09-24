@@ -1889,3 +1889,196 @@ html[data-theme="dark"] .tpl-slider-dot.active {
     min-height: 200px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   Template Properties — Multi-Upload & Reorder
+   ═══════════════════════════════════════════ */
+
+/* ═══ Image Item (Drag & Drop) ═══ */
+.tpl-props-image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--card-bg);
+  transition: all 0.2s;
+  cursor: grab;
+}
+
+.tpl-props-image-item:active {
+  cursor: grabbing;
+}
+
+.tpl-props-image-item:hover {
+  border-color: var(--primary);
+}
+
+.tpl-props-image-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+
+.tpl-props-image-item.drag-over {
+  border-color: var(--primary);
+  border-style: dashed;
+  background: rgba(59, 130, 246, 0.1);
+  transform: scale(1.05);
+}
+
+/* ═══ Image Number Badge ═══ */
+.tpl-props-image-number {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  z-index: 3;
+  backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ Image Controls (Overlay) ═══ */
+.tpl-props-image-controls {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 4px;
+  border-radius: 8px;
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.tpl-props-image-item:hover .tpl-props-image-controls {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* ⚡ على الموبايل — الأزرار ظاهرة دائمًا */
+  .tpl-props-image-controls {
+    opacity: 1;
+  }
+}
+
+.tpl-props-image-move,
+.tpl-props-image-remove {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: inherit;
+  padding: 0;
+}
+
+.tpl-props-image-move {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.tpl-props-image-move:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.1);
+}
+
+.tpl-props-image-move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.tpl-props-image-remove {
+  background: rgba(220, 38, 38, 0.85);
+  color: #fff;
+}
+
+.tpl-props-image-remove:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+/* ═══ Progress Bar (Multi-Upload) ═══ */
+.tpl-props-images-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  padding: 24px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.tpl-props-progress-bar {
+  width: 100%;
+  max-width: 400px;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.tpl-props-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), #3b82f6);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.tpl-props-progress-text {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ Dark Mode ═══ */
+html[data-theme="dark"] .tpl-props-image-item {
+  background: #1e293b;
+}
+
+html[data-theme="dark"] .tpl-props-image-item.drag-over {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .tpl-props-progress-bar {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .tpl-props-image-controls {
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .tpl-props-image-move,
+  .tpl-props-image-remove {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
+  .tpl-props-image-number {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+}
