@@ -486,24 +486,47 @@ function initThemeUploadWidgets() {
           throw new Error('خدمة الرفع غير متوفرة');
         }
 
+        // ⚡ 1. احسب Hash الصورة الجديدة
+        const hash = await window.getFileHash(file);
+
+        // ⚡ 2. لو نفس الصورة القديمة → فحص لو موجودة على ImgBB
+        if (hash === settingsData.ThemeLogoHash && settingsData.ThemeLogoUrl) {
+          console.log('🔍 نفس الصورة — فحص لو موجودة...');
+
+          if (typeof window.checkImageExistsStrict === 'function') {
+            const exists = await window.checkImageExistsStrict(settingsData.ThemeLogoUrl);
+
+            if (exists) {
+              console.log('✅ الصورة موجودة — استخدام القديمة');
+              return settingsData.ThemeLogoUrl;
+            } else {
+              console.log('❌ الصورة مش موجودة — رفع جديد');
+            }
+          }
+        }
+
+        // ⚡ 3. ارفع صورة جديدة
         const compressed = await window.compressImage(file, 500, 500, 0.9);
         const result = await window.uploadToImgBB(compressed, `logo_${Date.now()}`);
 
+        // ⚡ 4. احفظ URL + Hash
         settingsData.ThemeLogoUrl = result.url;
+        settingsData.ThemeLogoHash = hash;
+
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = result.url;
 
-        // ⚡ حدّث المعاينة
+        // ⚡ 5. حدّث المعاينة
         updateLogoPreview();
 
         return result.url;
       },
       () => {
+        // ⚡ مسح اللوجو (بنحتفظ بالـHash عشان نقدر نمنع الرفع المكرر)
         settingsData.ThemeLogoUrl = '';
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = '';
 
-        // ⚡ حدّث المعاينة
         updateLogoPreview();
       }
     );
@@ -520,10 +543,33 @@ function initThemeUploadWidgets() {
           throw new Error('خدمة الرفع غير متوفرة');
         }
 
+        // ⚡ 1. احسب Hash الصورة الجديدة
+        const hash = await window.getFileHash(file);
+
+        // ⚡ 2. لو نفس الصورة القديمة → فحص لو موجودة على ImgBB
+        if (hash === settingsData.ThemeBgHash && settingsData.ThemeBgImageUrl) {
+          console.log('🔍 نفس الصورة — فحص لو موجودة...');
+
+          if (typeof window.checkImageExistsStrict === 'function') {
+            const exists = await window.checkImageExistsStrict(settingsData.ThemeBgImageUrl);
+
+            if (exists) {
+              console.log('✅ الصورة موجودة — استخدام القديمة');
+              return settingsData.ThemeBgImageUrl;
+            } else {
+              console.log('❌ الصورة مش موجودة — رفع جديد');
+            }
+          }
+        }
+
+        // ⚡ 3. ارفع صورة جديدة
         const compressed = await window.compressImage(file, 1920, 1080, 0.85);
         const result = await window.uploadToImgBB(compressed, `background_${Date.now()}`);
 
+        // ⚡ 4. احفظ URL + Hash
         settingsData.ThemeBgImageUrl = result.url;
+        settingsData.ThemeBgHash = hash;
+
         const hiddenInput = document.getElementById('set_ThemeBgImageUrl');
         if (hiddenInput) hiddenInput.value = result.url;
 
@@ -988,9 +1034,13 @@ window.saveAllSettings = async function(event) {
     if (el) payload[key] = el.value;
   });
 
-  // ⚡ اللوجو والخلفية من settingsData
+    // ⚡ اللوجو والخلفية من settingsData
   payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
   payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
+
+  // ⚡ Hash اللوجو والخلفية (لمنع الرفع المكرر)
+  payload.ThemeLogoHash = settingsData.ThemeLogoHash || '';
+  payload.ThemeBgHash = settingsData.ThemeBgHash || '';
 
   // ⚡ إعدادات عرض اللوجو
   payload.LogoSizeSidebar = Number(settingsData.LogoSizeSidebar) || 48;
@@ -1041,13 +1091,15 @@ window.saveAllSettings = async function(event) {
 window.resetThemeToDefault = async function() {
   if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟')) return;
 
-  const defaults = {
+    const defaults = {
     ThemePrimary: DEFAULT_THEME.primary,
     ThemeAccent: DEFAULT_THEME.accent,
     ThemeBg: DEFAULT_THEME.bg,
     ThemeSidebarBg: DEFAULT_THEME.sidebarBg,
     ThemeLogoUrl: '',
     ThemeBgImageUrl: '',
+    ThemeLogoHash: '',
+    ThemeBgHash: '',
     LogoSizeSidebar: 48,
     LogoSizeLogin: 90,
     LogoShape: 'square'
