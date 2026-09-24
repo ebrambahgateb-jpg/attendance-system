@@ -314,10 +314,10 @@ function renderGridHeader() {
         </button>
       </div>
 
-      <div class="sch-nav">
-        <button class="sch-nav-btn" onclick="changeScheduleRange(-1)">◀</button>
+           <div class="sch-nav">
+        <button class="sch-nav-btn" onclick="changeScheduleRange(-1)">▶</button>
         <div class="sch-nav-title">${title}</div>
-        <button class="sch-nav-btn" onclick="changeScheduleRange(1)">▶</button>
+        <button class="sch-nav-btn" onclick="changeScheduleRange(1)">◀</button>
       </div>
 
       <div class="sch-nav-today">
@@ -1604,16 +1604,16 @@ window.viewTemplateProperties = function(templateId) {
     contentHtml += `
       <div class="tpl-props-slider" id="tplPropsSlider">
         <div class="tpl-slider-main">
-          ${images.length > 1 ? `
-            <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">◀</button>
+                   ${images.length > 1 ? `
+            <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">▶</button>
           ` : ''}
 
-                   <div class="tpl-slider-image-wrapper" onclick="window.openImageFullscreenByIndex(window.tplSliderCurrentIndex || 0)">
+          <div class="tpl-slider-image-wrapper" onclick="window.openImageFullscreenByIndex(window.tplSliderCurrentIndex || 0)">
             <img id="tplSliderImg" src="${escapeHtml(images[0].url)}" alt="" />
           </div>
 
           ${images.length > 1 ? `
-            <button class="tpl-slider-nav tpl-slider-next" onclick="tplSliderNext()" aria-label="التالي">▶</button>
+            <button class="tpl-slider-nav tpl-slider-next" onclick="tplSliderNext()" aria-label="التالي">◀</button>
           ` : ''}
         </div>
 
@@ -1821,8 +1821,8 @@ window.renderFullscreen = function() {
   modal.innerHTML = `
     <button class="img-fs-close" onclick="closeImageFullscreen()" aria-label="إغلاق">✕</button>
 
-    ${hasMultiple ? `
-      <button class="img-fs-nav img-fs-prev" onclick="imgFsPrev()" aria-label="السابق">◀</button>
+       ${hasMultiple ? `
+      <button class="img-fs-nav img-fs-prev" onclick="imgFsPrev()" aria-label="السابق">▶</button>
     ` : ''}
 
     <div class="img-fs-image-wrapper" id="imgFsWrapper">
@@ -1830,7 +1830,7 @@ window.renderFullscreen = function() {
     </div>
 
     ${hasMultiple ? `
-      <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">▶</button>
+      <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">◀</button>
     ` : ''}
 
     ${hasMultiple ? `
