@@ -540,6 +540,46 @@ async function uploadBgImage(file) {
   return result.url;
 }
 
+// ═══════════════════════════════════════════════════════
+//   ⚡ Check Image Exists on ImgBB
+// ═══════════════════════════════════════════════════════
+
+/**
+ * ⚡ فحص إن الصورة موجودة على ImgBB
+ * @param {string} url - رابط الصورة
+ * @returns {Promise<boolean>} - true لو موجودة، false لو 404
+ */
+async function checkImageExistsStrict(url) {
+  if (!url) return false;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+
+    // ⚡ Timeout احتياطي (5 ثواني)
+    const timeout = setTimeout(() => {
+      img.src = '';
+      console.warn('⏱️ checkImageExists timeout — افتراض إنها موجودة');
+      resolve(true);
+    }, 5000);
+
+    img.onload = () => {
+      clearTimeout(timeout);
+      console.log('✅ Image exists:', url);
+      resolve(true);
+    };
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      console.warn('❌ Image NOT found (404):', url);
+      resolve(false);
+    };
+
+    // ⚡ cache-buster عشان نتأكد إننا بنفحص الصورة الحالية (مش من الكاش)
+    const separator = url.includes('?') ? '&' : '?';
+    img.src = url + separator + '_cb=' + Date.now();
+  });
+}
+
 window.compressImage = compressImage;
 window.uploadToImgBB = uploadToImgBB;
 window.uploadPersonPhoto = uploadPersonPhoto;
@@ -549,3 +589,4 @@ window.pickImage = pickImage;
 window.getFileHash = getFileHash;
 window.renderUploadWidget = renderUploadWidget;
 window.pickMultipleImages = pickMultipleImages;
+window.checkImageExistsStrict = checkImageExistsStrict;
