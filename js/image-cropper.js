@@ -391,12 +391,18 @@ async function handleCropperSave() {
       saveBtn.textContent = originalText;
     }
 
+    // ⚡ احفظ الـcallback قبل ما تقفل (لأن close بتصفّر الـstate)
+    const callback = cropperState.onCropCallback;
+
     // ⚡ اقفل الـModal
     closeImageCropper();
 
     // ⚡ نادي الـcallback
-    if (typeof cropperState.onCropCallback === 'function') {
-      cropperState.onCropCallback(croppedFile);
+    if (typeof callback === 'function') {
+      console.log('📤 [handleCropperSave] نادي الـcallback بـ:', croppedFile.size, 'bytes');
+      callback(croppedFile);
+    } else {
+      console.error('❌ [handleCropperSave] الـcallback مش موجود!');
     }
 
   } catch (err) {
@@ -408,7 +414,6 @@ async function handleCropperSave() {
     }
   }
 }
-
 async function generateCroppedFile() {
   const outputSize = cropperState.outputSize;
   const img = cropperState.imageElement;
