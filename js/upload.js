@@ -206,6 +206,26 @@ function pickImage() {
   });
 }
 
+/**
+ * ⚡ فتح File Picker لاختيار عدة صور
+ * @returns {Promise<File[]>}
+ */
+function pickMultipleImages() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
+    input.multiple = true;  // ⚡ متعدد
+
+    input.onchange = (e) => {
+      const files = Array.from(e.target.files || []);
+      resolve(files);
+    };
+
+    input.click();
+  });
+} 
+
 // ═══════════════════════════════════════════════════════
 //   ⚡ Upload Component (UI Widget)
 // ═══════════════════════════════════════════════════════
@@ -476,3 +496,4 @@ window.uploadPersonPhoto = uploadPersonPhoto;
 window.pickImage = pickImage;
 window.getFileHash = getFileHash;
 window.renderUploadWidget = renderUploadWidget;
+window.pickMultipleImages = pickMultipleImages;
