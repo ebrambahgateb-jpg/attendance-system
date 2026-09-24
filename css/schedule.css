@@ -1596,10 +1596,11 @@ html[data-theme="dark"] .sch-active-template-icon {
   image-rendering: high-quality;
 }
 
-/* ⚡ الأسهم تظهر بس على الأجهزة اللي عندها Hover (PC) */
+/* ⚡ الأسهم وزراير الزوم تظهر بس على الأجهزة اللي عندها Hover (PC) */
 @media (hover: none) {
   .tpl-slider-nav,
-  .img-fs-nav {
+  .img-fs-nav,
+  .img-fs-zoom-controls {
     display: none !important;
   }
 }
