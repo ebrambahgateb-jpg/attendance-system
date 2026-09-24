@@ -1672,15 +1672,17 @@ window.viewTemplateProperties = function(templateId) {
           startX = e.changedTouches[0].screenX;
         }, { passive: true });
 
-        sliderMain.addEventListener('touchend', (e) => {
+                sliderMain.addEventListener('touchend', (e) => {
           const endX = e.changedTouches[0].screenX;
           const diff = startX - endX;
 
           if (Math.abs(diff) > 50) {
             if (diff > 0) {
-              window.tplSliderNext();
-            } else {
+              // ⚡ Swipe يسار (RTL): السابق
               window.tplSliderPrev();
+            } else {
+              // ⚡ Swipe يمين (RTL): التالي
+              window.tplSliderNext();
             }
           }
         }, { passive: true });
