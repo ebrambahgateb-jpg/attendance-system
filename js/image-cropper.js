@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Image Cropper — Facebook-style
-//   ⚡ Drag + Zoom + Crop
+//   ⚡ Drag + Zoom + Crop with Bounds
 // ═══════════════════════════════════════════════════════
 
 // ═══ State ═══
@@ -10,13 +10,12 @@ let cropperState = {
   canvas: null,
   context: null,
 
-  // ⚡ عرض + موقع
   imageWidth: 0,
   imageHeight: 0,
-  baseScale: 1,      // ⚡ الحجم الأساسي للصورة في الـViewport
-  zoom: 1,           // ⚡ الزووم الإضافي
-  offsetX: 0,        // ⚡ الإزاحة الأفقية
-  offsetY: 0,        // ⚡ الإزاحة الرأسية
+  baseScale: 1,
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
 
   // ⚡ Drag state
   isDragging: false,
@@ -29,10 +28,7 @@ let cropperState = {
   initialPinchDistance: 0,
   initialZoom: 0,
 
-  // ═══ Output size (500×500) ═══
   outputSize: 500,
-
-  // ═══ Callback ═══
   onCropCallback: null
 };
 
@@ -40,12 +36,6 @@ let cropperState = {
 //   Open Cropper
 // ═══════════════════════════════════════════════════════
 
-/**
- * ⚡ فتح الـCropper
- * @param {File} file - الملف الأصلي
- * @param {Function} onCrop - callback (croppedFile) => {}
- * @param {Object} options - { outputSize: 500 }
- */
 async function openImageCropper(file, onCrop, options = {}) {
   if (!file) {
     console.warn('⚠️ No file provided');
@@ -56,7 +46,6 @@ async function openImageCropper(file, onCrop, options = {}) {
   cropperState.onCropCallback = onCrop;
   cropperState.outputSize = options.outputSize || 500;
 
-  // ⚡ اقرأ الصورة
   const imageUrl = URL.createObjectURL(file);
   const img = new Image();
 
@@ -65,7 +54,6 @@ async function openImageCropper(file, onCrop, options = {}) {
     cropperState.imageWidth = img.width;
     cropperState.imageHeight = img.height;
 
-    // ⚡ افتح الـModal
     initCropperModal(img);
   };
 
@@ -99,11 +87,9 @@ function initCropperModal(img) {
 
       <div class="image-cropper-body">
         <div class="image-cropper-viewport" id="cropperViewport">
-          <div class="image-cropper-canvas-wrap">
-            <canvas id="cropperCanvas"></canvas>
-          </div>
-          <div class="image-cropper-overlay"></div>
-          <div class="image-cropper-guide"></div>
+          <canvas id="cropperCanvas"></canvas>
+          <div class="image-cropper-guide-h"></div>
+          <div class="image-cropper-guide-v"></div>
         </div>
 
         <div class="image-cropper-controls">
@@ -124,10 +110,9 @@ function initCropperModal(img) {
 
   modal.style.display = 'flex';
 
-  // ⚡ Init canvas
   setTimeout(() => {
     initCropperCanvas();
-  }, 50);
+  }, 80);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -139,10 +124,15 @@ function initCropperCanvas() {
   const canvas = document.getElementById('cropperCanvas');
   if (!viewport || !canvas) return;
 
+  // ⚡ نستخدم clientWidth/clientHeight عشان نضمن المربع
   const viewportSize = viewport.clientWidth;
-  if (viewportSize === 0) return;
+  if (viewportSize === 0) {
+    console.warn('⚠️ viewport size = 0، محاولة تانية...');
+    setTimeout(initCropperCanvas, 100);
+    return;
+  }
 
-  // ⚡ اعمل الـcanvas مربع بحجم الـViewport
+  // ⚡ الـCanvas مربع بحجم الـViewport
   canvas.width = viewportSize;
   canvas.height = viewportSize;
 
@@ -159,7 +149,6 @@ function initCropperCanvas() {
   cropperState.offsetX = 0;
   cropperState.offsetY = 0;
 
-  // ⚡ Reset الـSlider
   const slider = document.getElementById('cropperZoomSlider');
   if (slider) slider.value = 1;
 
@@ -170,6 +159,32 @@ function initCropperCanvas() {
   setupCropperEvents(viewport);
 }
 
+// ═══════════════════════════════════════════════════════
+//   Clamp Offset — يمنع الصورة تخرج عن الإطار
+// ═══════════════════════════════════════════════════════
+
+function clampOffset() {
+  const canvas = cropperState.canvas;
+  const img = cropperState.imageElement;
+  if (!canvas || !img) return;
+
+  const size = canvas.width;
+  const totalScale = cropperState.baseScale * cropperState.zoom;
+  const drawWidth = img.width * totalScale;
+  const drawHeight = img.height * totalScale;
+
+  // ⚡ الحد الأقصى للإزاحة = (حجم الصورة - حجم الـViewport) / 2
+  const maxOffsetX = Math.max(0, (drawWidth - size) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - size) / 2);
+
+  cropperState.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, cropperState.offsetX));
+  cropperState.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, cropperState.offsetY));
+}
+
+// ═══════════════════════════════════════════════════════
+//   Draw Cropper
+// ═══════════════════════════════════════════════════════
+
 function drawCropper() {
   const canvas = cropperState.canvas;
   const ctx = cropperState.context;
@@ -179,7 +194,6 @@ function drawCropper() {
 
   const size = canvas.width;
 
-  // ⚡ امسح
   ctx.clearRect(0, 0, size, size);
 
   // ⚡ احسب المقاسات
@@ -204,17 +218,17 @@ function drawCropper() {
 // ═══════════════════════════════════════════════════════
 
 function setupCropperEvents(viewport) {
-  // ⚡ Mouse Drag
+  // ⚡ Mouse
   viewport.addEventListener('mousedown', handleCropperMouseDown);
   document.addEventListener('mousemove', handleCropperMouseMove);
   document.addEventListener('mouseup', handleCropperMouseUp);
 
-  // ⚡ Touch Drag + Pinch
+  // ⚡ Touch
   viewport.addEventListener('touchstart', handleCropperTouchStart, { passive: false });
   viewport.addEventListener('touchmove', handleCropperTouchMove, { passive: false });
   viewport.addEventListener('touchend', handleCropperTouchEnd);
 
-  // ⚡ Wheel Zoom
+  // ⚡ Wheel
   viewport.addEventListener('wheel', handleCropperWheel, { passive: false });
 
   // ⚡ Slider
@@ -222,11 +236,12 @@ function setupCropperEvents(viewport) {
   if (slider) {
     slider.oninput = (e) => {
       cropperState.zoom = Number(e.target.value);
+      clampOffset();
       drawCropper();
     };
   }
 
-  // ⚡ Save Button
+  // ⚡ Save
   const saveBtn = document.getElementById('cropperSaveBtn');
   if (saveBtn) {
     saveBtn.onclick = handleCropperSave;
@@ -251,6 +266,7 @@ function handleCropperMouseMove(e) {
   cropperState.offsetX = cropperState.dragInitialOffsetX + dx;
   cropperState.offsetY = cropperState.dragInitialOffsetY + dy;
 
+  clampOffset();  // ⚡ امنع الخروج
   drawCropper();
 }
 
@@ -261,14 +277,12 @@ function handleCropperMouseUp() {
 // ═══ Touch ═══
 function handleCropperTouchStart(e) {
   if (e.touches.length === 1) {
-    // ⚡ Drag
     cropperState.isDragging = true;
     cropperState.dragStartX = e.touches[0].clientX;
     cropperState.dragStartY = e.touches[0].clientY;
     cropperState.dragInitialOffsetX = cropperState.offsetX;
     cropperState.dragInitialOffsetY = cropperState.offsetY;
   } else if (e.touches.length === 2) {
-    // ⚡ Pinch
     e.preventDefault();
     cropperState.isDragging = false;
 
@@ -289,6 +303,7 @@ function handleCropperTouchMove(e) {
     cropperState.offsetX = cropperState.dragInitialOffsetX + dx;
     cropperState.offsetY = cropperState.dragInitialOffsetY + dy;
 
+    clampOffset();
     drawCropper();
   } else if (e.touches.length === 2 && cropperState.initialPinchDistance > 0) {
     e.preventDefault();
@@ -302,10 +317,10 @@ function handleCropperTouchMove(e) {
 
     cropperState.zoom = newZoom;
 
-    // ⚡ حدّث الـSlider
     const slider = document.getElementById('cropperZoomSlider');
     if (slider) slider.value = newZoom;
 
+    clampOffset();
     drawCropper();
   }
 }
@@ -315,7 +330,6 @@ function handleCropperTouchEnd(e) {
     cropperState.isDragging = false;
     cropperState.initialPinchDistance = 0;
   } else if (e.touches.length === 1) {
-    // ⚡ رجع للـdrag بإصبع واحد
     cropperState.isDragging = true;
     cropperState.dragStartX = e.touches[0].clientX;
     cropperState.dragStartY = e.touches[0].clientY;
@@ -336,6 +350,7 @@ function handleCropperWheel(e) {
   const slider = document.getElementById('cropperZoomSlider');
   if (slider) slider.value = newZoom;
 
+  clampOffset();
   drawCropper();
 }
 
@@ -344,6 +359,7 @@ window.cropperZoomIn = function() {
   cropperState.zoom = Math.min(cropperState.zoom + 0.1, 3);
   const slider = document.getElementById('cropperZoomSlider');
   if (slider) slider.value = cropperState.zoom;
+  clampOffset();
   drawCropper();
 };
 
@@ -351,6 +367,7 @@ window.cropperZoomOut = function() {
   cropperState.zoom = Math.max(cropperState.zoom - 0.1, 1);
   const slider = document.getElementById('cropperZoomSlider');
   if (slider) slider.value = cropperState.zoom;
+  clampOffset();
   drawCropper();
 };
 
@@ -392,11 +409,10 @@ async function handleCropperSave() {
   }
 }
 
-/**
- * ⚡ توليد الصورة النهائية (500×500)
- */
 async function generateCroppedFile() {
   const outputSize = cropperState.outputSize;
+  const img = cropperState.imageElement;
+  const viewportSize = cropperState.canvas.width;
 
   // ⚡ اعمل canvas مؤقت بحجم الـOutput
   const outputCanvas = document.createElement('canvas');
@@ -404,15 +420,14 @@ async function generateCroppedFile() {
   outputCanvas.height = outputSize;
 
   const outCtx = outputCanvas.getContext('2d');
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = 'high';
 
-  // ⚡ املأ الخلفية بالأبيض (اختياري — لو عايز خلفية بيضاء)
-  // ⚡ هنستخدم شفافية (بدون ملء) → PNG شفاف
-  outCtx.clearRect(0, 0, outputSize, outputSize);
+  // ⚡ املأ الخلفية بالأبيض (اختياري - بس أفضل للصور بـJPG)
+  outCtx.fillStyle = '#ffffff';
+  outCtx.fillRect(0, 0, outputSize, outputSize);
 
-  const img = cropperState.imageElement;
-  const viewportSize = cropperState.canvas.width;
-
-  // ⚡ احسب نسبة التحويل من الـviewport للـoutput
+  // ⚡ احسب نسبة التحويل
   const ratio = outputSize / viewportSize;
 
   // ⚡ احسب المقاسات بنفس منطق الرسم
@@ -444,10 +459,10 @@ async function generateCroppedFile() {
           return;
         }
 
-        // ⚡ حوّل لـFile
         const fileName = cropperState.originalFile.name || 'cropped.jpg';
         const croppedFile = new File([blob], fileName, { type: 'image/jpeg' });
 
+        console.log('✅ Cropped file created:', croppedFile.size, 'bytes');
         resolve(croppedFile);
       },
       'image/jpeg',
@@ -464,7 +479,6 @@ window.closeImageCropper = function() {
   const modal = document.getElementById('imageCropperModal');
   if (modal) modal.style.display = 'none';
 
-  // ⚡ Cleanup
   if (cropperState.imageElement) {
     try { URL.revokeObjectURL(cropperState.imageElement.src); } catch (e) {}
   }
