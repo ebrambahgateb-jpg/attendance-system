@@ -845,6 +845,11 @@ function loadLogsLazy(area) {
   else showLoadError(area, 'السجلات');
 }
 
+function loadChatLazy(area) {
+  if (typeof window.loadChatPage === 'function') window.loadChatPage(area);
+  else showLoadError(area, 'الرسائل');
+}
+
 function loadMyAttendanceLazy(area) {
   if (typeof window.loadMyAttendancePage === 'function') window.loadMyAttendancePage(area);
   else showLoadError(area, 'سجل حضورك بنفسك');
@@ -1003,6 +1008,7 @@ window.loadScheduleLazy = loadScheduleLazy;
 window.loadArchiveLazy = loadArchiveLazy;
 window.loadReportsLazy = loadReportsLazy;
 window.loadLogsLazy = loadLogsLazy;
+window.loadChatLazy = loadChatLazy;
 window.loadMyAttendanceLazy = loadMyAttendanceLazy;
 window.loadAttendanceLazy = loadAttendanceLazy;
 window.loadAccountsLazy = loadAccountsLazy;
