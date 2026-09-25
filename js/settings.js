@@ -204,6 +204,18 @@ function renderSettingsPage(area) {
           <div id="bgUploadContainer"></div>
           <input type="hidden" id="set_ThemeBgImageUrl" />
         </div>
+
+        <!-- ═══ ⚡ أيقونة التطبيق (PWA) ═══ -->
+        <div class="settings-group">
+          <h3>📱 أيقونة التطبيق</h3>
+          <p class="hint">
+            الأيقونة اللي هتظهر لما حد يثبّت الموقع كتطبيق على الموبايل.<br>
+            <strong>الحجم المفضل:</strong> 512×512 بكسل (PNG)<br>
+            <strong>لو ما رفعتش حاجة:</strong> هيستخدم اللوجو العادي.
+          </p>
+          <div id="pwaIconUploadContainer"></div>
+          <input type="hidden" id="set_PWAIconUrl" />
+        </div>
       </div>
 
       <!-- الحضور -->
@@ -367,6 +379,10 @@ function fillSettingsForm() {
   const bgInput = document.getElementById('set_ThemeBgImageUrl');
   if (bgInput) bgInput.value = settingsData.ThemeBgImageUrl || '';
 
+  // ⚡ أيقونة التطبيق
+  const pwaIconInput = document.getElementById('set_PWAIconUrl');
+  if (pwaIconInput) pwaIconInput.value = settingsData.PWAIconUrl || '';
+
   const boolKeys = ['PreventDuplicateAttendance','SuccessSound','ErrorSound',
                     'ShowPersonPhoto','AllowDelete','DisableInsteadOfDelete',
                     'CompressPhotos'];
@@ -486,10 +502,8 @@ function initThemeUploadWidgets() {
           throw new Error('خدمة الرفع غير متوفرة');
         }
 
-        // ⚡ 1. احسب Hash الصورة الجديدة
         const hash = await window.getFileHash(file);
 
-        // ⚡ 2. لو نفس الصورة القديمة → فحص لو موجودة على ImgBB
         if (hash === settingsData.ThemeLogoHash && settingsData.ThemeLogoUrl) {
           console.log('🔍 نفس الصورة — فحص لو موجودة...');
 
@@ -505,24 +519,20 @@ function initThemeUploadWidgets() {
           }
         }
 
-        // ⚡ 3. ارفع صورة جديدة
         const compressed = await window.compressImage(file, 500, 500, 0.9);
         const result = await window.uploadToImgBB(compressed, `logo_${Date.now()}`);
 
-        // ⚡ 4. احفظ URL + Hash
         settingsData.ThemeLogoUrl = result.url;
         settingsData.ThemeLogoHash = hash;
 
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = result.url;
 
-        // ⚡ 5. حدّث المعاينة
         updateLogoPreview();
 
         return result.url;
       },
       () => {
-        // ⚡ مسح اللوجو (بنحتفظ بالـHash عشان نقدر نمنع الرفع المكرر)
         settingsData.ThemeLogoUrl = '';
         const hiddenInput = document.getElementById('set_ThemeLogoUrl');
         if (hiddenInput) hiddenInput.value = '';
@@ -543,10 +553,8 @@ function initThemeUploadWidgets() {
           throw new Error('خدمة الرفع غير متوفرة');
         }
 
-        // ⚡ 1. احسب Hash الصورة الجديدة
         const hash = await window.getFileHash(file);
 
-        // ⚡ 2. لو نفس الصورة القديمة → فحص لو موجودة على ImgBB
         if (hash === settingsData.ThemeBgHash && settingsData.ThemeBgImageUrl) {
           console.log('🔍 نفس الصورة — فحص لو موجودة...');
 
@@ -562,11 +570,9 @@ function initThemeUploadWidgets() {
           }
         }
 
-        // ⚡ 3. ارفع صورة جديدة
         const compressed = await window.compressImage(file, 1920, 1080, 0.85);
         const result = await window.uploadToImgBB(compressed, `background_${Date.now()}`);
 
-        // ⚡ 4. احفظ URL + Hash
         settingsData.ThemeBgImageUrl = result.url;
         settingsData.ThemeBgHash = hash;
 
@@ -581,6 +587,45 @@ function initThemeUploadWidgets() {
         if (hiddenInput) hiddenInput.value = '';
       },
       { isBanner: true }
+    );
+  }
+
+  // ═══ ⚡ أيقونة التطبيق (PWA) ═══
+  const pwaIconContainer = document.getElementById('pwaIconUploadContainer');
+  if (pwaIconContainer) {
+    renderSimpleUploadWidget(
+      'pwaIconUploadContainer',
+      settingsData.PWAIconUrl || '',
+      async (file) => {
+        if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
+          throw new Error('خدمة الرفع غير متوفرة');
+        }
+
+        // ⚡ ضغط مربع 512×512
+        const compressed = await window.compressImage(file, 512, 512, 0.95);
+        const result = await window.uploadToImgBB(compressed, `pwa_icon_${Date.now()}`);
+
+        settingsData.PWAIconUrl = result.url;
+        const hiddenInput = document.getElementById('set_PWAIconUrl');
+        if (hiddenInput) hiddenInput.value = result.url;
+
+        // ⚡ حدّث الـManifest فورًا
+        if (typeof window.updatePWAIcon === 'function') {
+          window.updatePWAIcon(result.url);
+        }
+
+        return result.url;
+      },
+      () => {
+        settingsData.PWAIconUrl = '';
+        const hiddenInput = document.getElementById('set_PWAIconUrl');
+        if (hiddenInput) hiddenInput.value = '';
+
+        // ⚡ رجّع الأيقونة للوجو العادي
+        if (typeof window.updatePWAIcon === 'function' && settingsData.ThemeLogoUrl) {
+          window.updatePWAIcon(settingsData.ThemeLogoUrl);
+        }
+      }
     );
   }
 }
@@ -641,10 +686,9 @@ function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, o
       uploadBtn.disabled = true;
       if (removeBtn) removeBtn.disabled = true;
 
-            try {
+      try {
         const url = await onUpload(file);
 
-        // ⚡ Rebuild كامل للـPreview (يحل مشكلة insertBefore)
         if (preview) {
           preview.innerHTML = `
             <img src="${url}" alt="" class="simple-upload-img" />
@@ -655,9 +699,8 @@ function renderSimpleUploadWidget(containerId, currentUrl, onUpload, onRemove, o
           `;
         }
 
-               uploadBtn.innerHTML = '📤 تغيير';
+        uploadBtn.innerHTML = '📤 تغيير';
 
-        // ⚡ شيل الزرار القديم (لو موجود) وضيف واحد جديد
         const oldRemoveBtn = document.getElementById(`${containerId}-remove`);
         if (oldRemoveBtn) oldRemoveBtn.remove();
 
@@ -693,7 +736,6 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
 
   if (typeof onRemove === 'function') onRemove();
 
-  // ⚡ Rebuild كامل للـPreview
   if (preview) {
     preview.innerHTML = `
       <div class="simple-upload-empty">
@@ -707,11 +749,9 @@ function handleSimpleRemove(containerId, preview, uploadBtn, onRemove, isBanner)
     `;
   }
 
-  // ⚡ شيل زرار المسح
   const rb = document.getElementById(`${containerId}-remove`);
   if (rb) rb.remove();
 
-  // ⚡ رجّع الزرار لـ"رفع صورة"
   if (uploadBtn) uploadBtn.innerHTML = '📤 رفع صورة';
 }
 
@@ -1035,7 +1075,7 @@ window.saveAllSettings = async function(event) {
     if (el) payload[key] = el.value;
   });
 
-    // ⚡ اللوجو والخلفية من settingsData
+  // ⚡ اللوجو والخلفية من settingsData
   payload.ThemeLogoUrl = settingsData.ThemeLogoUrl || '';
   payload.ThemeBgImageUrl = settingsData.ThemeBgImageUrl || '';
 
@@ -1047,6 +1087,9 @@ window.saveAllSettings = async function(event) {
   payload.LogoSizeSidebar = Number(settingsData.LogoSizeSidebar) || 48;
   payload.LogoSizeLogin = Number(settingsData.LogoSizeLogin) || 90;
   payload.LogoShape = settingsData.LogoShape || 'square';
+
+  // ⚡ أيقونة التطبيق (PWA)
+  payload.PWAIconUrl = settingsData.PWAIconUrl || '';
 
   boolKeys.forEach(key => {
     const el = document.getElementById('set_' + key);
@@ -1076,6 +1119,12 @@ window.saveAllSettings = async function(event) {
       document.title = settingsData.SystemName;
     }
 
+    // ⚡ حدّث أيقونة PWA
+    const pwaIcon = settingsData.PWAIconUrl || settingsData.ThemeLogoUrl || '';
+    if (pwaIcon && typeof window.updatePWAIcon === 'function') {
+      window.updatePWAIcon(pwaIcon);
+    }
+
     alert('تم الحفظ بنجاح');
   } catch (err) {
     console.error('❌ Save settings error:', err);
@@ -1092,7 +1141,7 @@ window.saveAllSettings = async function(event) {
 window.resetThemeToDefault = async function() {
   if (!confirm('هل أنت متأكد من استعادة المظهر الافتراضي؟')) return;
 
-    const defaults = {
+  const defaults = {
     ThemePrimary: DEFAULT_THEME.primary,
     ThemeAccent: DEFAULT_THEME.accent,
     ThemeBg: DEFAULT_THEME.bg,
@@ -1103,7 +1152,8 @@ window.resetThemeToDefault = async function() {
     ThemeBgHash: '',
     LogoSizeSidebar: 48,
     LogoSizeLogin: 90,
-    LogoShape: 'square'
+    LogoShape: 'square',
+    PWAIconUrl: ''
   };
 
   try {
@@ -1204,7 +1254,7 @@ function saveTheme(theme) {
     original: '0'
   }[logoShape] || '10px';
 
-    document.querySelectorAll('.app-logo').forEach(img => {
+  document.querySelectorAll('.app-logo').forEach(img => {
     if (t.logoUrl) {
       img.src = t.logoUrl;
       img.style.display = 'block';
@@ -1213,7 +1263,6 @@ function saveTheme(theme) {
       img.style.borderRadius = borderRadius;
       img.style.objectFit = 'contain';
 
-      // ⚡ ⚡ ⚡ خلفية شفافة
       img.style.background = 'transparent';
       img.style.backgroundColor = 'transparent';
       img.style.padding = '0';
