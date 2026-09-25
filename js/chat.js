@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Chat — Internal Messaging System
 //   ⚡ 1-to-1 + Groups + Channels + Realtime
+//   ⚡ Mobile: Sidebar → Chat → Back button + Swipe
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -8,7 +9,6 @@ import {
   doc,
   addDoc,
   updateDoc,
-  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -16,9 +16,6 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  serverTimestamp,
-  arrayUnion,
-  arrayRemove,
   setDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -46,20 +43,8 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 // ═══ Default Channels ═══
 const DEFAULT_CHANNELS = [
-  {
-    id: 'general',
-    Name: '💬 الشات العام',
-    Type: 'channel',
-    Description: 'شات عام لكل الأعضاء',
-    ReadOnly: false
-  },
-  {
-    id: 'announcements',
-    Name: '📢 الإعلانات',
-    Type: 'channel',
-    Description: 'إعلانات الإدارة',
-    ReadOnly: true
-  }
+  { id: 'general', Name: '💬 الشات العام', Type: 'channel', Description: 'شات عام لكل الأعضاء', ReadOnly: false },
+  { id: 'announcements', Name: '📢 الإعلانات', Type: 'channel', Description: 'إعلانات الإدارة', ReadOnly: true }
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -70,7 +55,6 @@ async function loadChatPage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    // ⚡ 1. حمّل المستخدم
     chatUser = JSON.parse(localStorage.getItem('currentUser'));
     if (!chatUser) {
       window.location.href = '../index.html';
@@ -79,7 +63,7 @@ async function loadChatPage(area) {
 
     chatWorkspace = chatUser.currentWorkspace || chatUser.selectedRole || 'User';
 
-    // ⚡ 2. حمّل الشخص (PersonID)
+    // ⚡ حمّل الشخص
     chatPerson = null;
     if (chatUser.personId) {
       const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, chatUser.personId));
@@ -87,10 +71,7 @@ async function loadChatPage(area) {
     }
 
     if (!chatPerson && chatUser.email) {
-      const q = query(
-        collection(db, COLLECTIONS.PEOPLE),
-        where('Email', '==', chatUser.email)
-      );
+      const q = query(collection(db, COLLECTIONS.PEOPLE), where('Email', '==', chatUser.email));
       const snap = await getDocs(q);
       if (!snap.empty) {
         chatPerson = { id: snap.docs[0].id, ...snap.docs[0].data() };
@@ -104,14 +85,13 @@ async function loadChatPage(area) {
         <div class="chat-error">
           <div class="chat-error-icon">👤</div>
           <h2>لا يوجد ملف شخصي</h2>
-          <p>لم يتم ربط حسابك بأي شخص في النظام.</p>
           <p>تواصل مع المسؤول لربط حسابك.</p>
         </div>
       `;
       return;
     }
 
-    // ⚡ 3. حمّل كل الأشخاص
+    // ⚡ حمّل الأشخاص
     const peopleSnap = await getDocs(collection(db, COLLECTIONS.PEOPLE));
     chatPeople = {};
     chatPeopleArray = [];
@@ -123,16 +103,14 @@ async function loadChatPage(area) {
       }
     });
 
-    // ⚡ 4. هيّئ القنوات الافتراضية
+    // ⚡ هيّئ القنوات الافتراضية
     await ensureDefaultChannels();
 
-    // ⚡ 5. ارسم الصفحة
+    // ⚡ ارسم الصفحة
     renderChatPage(area);
 
-       // ⚡ 6. ابدأ الـRealtime Listener
+    // ⚡ ابدأ Listener
     startChatsListener();
-
-    // ⚡ ملاحظة: مفيش فتح تلقائي — المستخدم يختار بنفسه
 
   } catch (err) {
     console.error('❌ Load chat error:', err);
@@ -154,23 +132,20 @@ async function ensureDefaultChannels() {
     const snap = await getDoc(chatRef);
 
     if (!snap.exists()) {
-      const data = {
-        Type: ch.Type,
-        Name: ch.Name,
-        Description: ch.Description,
-        ReadOnly: ch.ReadOnly,
-        Members: [],
-        Admins: [],
-        IsDefault: true,
-        CreatedBy: 'system',
-        CreatedAt: new Date().toISOString(),
-        LastMessage: null,
-        LastMessageAt: null
-      };
-
       try {
-        await setDoc(chatRef, data);
-        console.log(`✅ Created default channel: ${ch.Name}`);
+        await setDoc(chatRef, {
+          Type: ch.Type,
+          Name: ch.Name,
+          Description: ch.Description,
+          ReadOnly: ch.ReadOnly,
+          Members: [],
+          Admins: [],
+          IsDefault: true,
+          CreatedBy: 'system',
+          CreatedAt: new Date().toISOString(),
+          LastMessage: null,
+          LastMessageAt: null
+        });
       } catch (err) {
         console.warn(`⚠️ Could not create channel ${ch.id}:`, err.message);
       }
@@ -187,20 +162,14 @@ function renderChatPage(area) {
 
   area.innerHTML = `
     <div class="chat-container">
-      <div class="chat-sidebar">
+      <div class="chat-sidebar" id="chatSidebar">
         <div class="chat-sidebar-header">
           <div class="chat-search-box">
             <input type="text" id="chatSearchInput" placeholder="🔍 ابحث..." />
           </div>
           <div class="chat-sidebar-actions">
-            <button class="chat-new-btn" onclick="openNewChatModal()" title="محادثة جديدة">
-              ✏️
-            </button>
-            ${isAdmin ? `
-              <button class="chat-new-group-btn" onclick="openNewGroupModal()" title="مجموعة جديدة">
-                ➕
-              </button>
-            ` : ''}
+            <button class="chat-new-btn" id="newChatBtn" title="محادثة جديدة">✏️</button>
+            ${isAdmin ? `<button class="chat-new-group-btn" id="newGroupBtn" title="مجموعة جديدة">➕</button>` : ''}
           </div>
         </div>
 
@@ -212,14 +181,12 @@ function renderChatPage(area) {
         </div>
 
         <div class="chat-list" id="chatList">
-          <div class="loading-state">
-            <div class="spinner"></div>
-          </div>
+          <div class="loading-state"><div class="spinner"></div></div>
         </div>
       </div>
 
       <div class="chat-main" id="chatMain">
-        <div class="chat-empty-state">
+        <div class="chat-empty-state" id="chatEmptyState">
           <div class="chat-empty-icon">💬</div>
           <h3>اختر محادثة للبدء</h3>
           <p>أو ابدأ محادثة جديدة</p>
@@ -228,11 +195,7 @@ function renderChatPage(area) {
     </div>
   `;
 
-  setupChatFilters();
-  setupChatSearch();
-}
-
-function setupChatFilters() {
+  // ⚡ ربط الأزرار
   document.querySelectorAll('.chat-filter-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.chat-filter-btn').forEach(b => b.classList.remove('active'));
@@ -240,17 +203,21 @@ function setupChatFilters() {
       renderChatList();
     };
   });
-}
 
-function setupChatSearch() {
-  const input = document.getElementById('chatSearchInput');
-  if (input) {
-    input.addEventListener('input', () => renderChatList());
+  const searchInput = document.getElementById('chatSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => renderChatList());
   }
+
+  const newChatBtn = document.getElementById('newChatBtn');
+  if (newChatBtn) newChatBtn.onclick = window.openNewChatModal;
+
+  const newGroupBtn = document.getElementById('newGroupBtn');
+  if (newGroupBtn) newGroupBtn.onclick = window.openNewGroupModal;
 }
 
 // ═══════════════════════════════════════════════════════
-//   Chats Listener (Realtime)
+//   Chats Listener
 // ═══════════════════════════════════════════════════════
 
 function startChatsListener() {
@@ -268,20 +235,17 @@ function startChatsListener() {
       snap.docs.forEach(d => {
         const chat = { id: d.id, ...d.data() };
 
-        // ⚡ القنوات: الكل يشوف
         if (chat.Type === 'channel' || chat.IsDefault) {
           chatConversations.push(chat);
           return;
         }
 
-        // ⚡ 1-to-1 والمجموعات: بس الـMembers
         const members = Array.isArray(chat.Members) ? chat.Members : [];
         if (members.includes(chatPerson.id)) {
           chatConversations.push(chat);
         }
       });
 
-      // ⚡ رتب: أحدث رسالة أول
       chatConversations.sort((a, b) => {
         const aTime = a.LastMessageAt || a.CreatedAt || '';
         const bTime = b.LastMessageAt || b.CreatedAt || '';
@@ -315,10 +279,7 @@ function renderChatList() {
   }
 
   if (searchTerm) {
-    filtered = filtered.filter(c => {
-      const name = getChatDisplayName(c).toLowerCase();
-      return name.includes(searchTerm);
-    });
+    filtered = filtered.filter(c => getChatDisplayName(c).toLowerCase().includes(searchTerm));
   }
 
   if (filtered.length === 0) {
@@ -326,13 +287,17 @@ function renderChatList() {
       <div class="chat-list-empty">
         <div class="chat-list-empty-icon">💬</div>
         <p>لا يوجد محادثات</p>
-        <button class="btn-primary" onclick="openNewChatModal()">ابدأ محادثة</button>
       </div>
     `;
     return;
   }
 
   list.innerHTML = filtered.map(chat => renderChatListItem(chat)).join('');
+
+  // ⚡ اربط الأحداث بـaddEventListener
+  list.querySelectorAll('.chat-item').forEach(item => {
+    item.onclick = () => window.openChat(item.dataset.chatId);
+  });
 }
 
 function renderChatListItem(chat) {
@@ -351,7 +316,7 @@ function renderChatListItem(chat) {
   }
 
   return `
-    <div class="chat-item ${isActive ? 'active' : ''}" onclick="openChat('${chat.id}')" data-chat-id="${chat.id}">
+    <div class="chat-item ${isActive ? 'active' : ''}" data-chat-id="${chat.id}">
       <div class="chat-item-avatar">${avatar}</div>
       <div class="chat-item-content">
         <div class="chat-item-header">
@@ -381,22 +346,40 @@ function getChatAvatar(chat) {
     return chat.Name?.includes('📢') ? '📢' : '💬';
   }
 
-  if (chat.Type === 'group') {
-    return '👥';
-  }
+  if (chat.Type === 'group') return '👥';
 
   if (chat.Type === 'direct') {
     const otherId = (chat.Members || []).find(id => id !== chatPerson.id);
     const other = chatPeople[otherId];
-
-    if (other?.PhotoURL) {
-      return `<img src="${other.PhotoURL}" alt="" />`;
-    }
-
+    if (other?.PhotoURL) return `<img src="${other.PhotoURL}" alt="" />`;
     return getInitial(other);
   }
 
   return '💬';
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Mobile Helper — Show/Hide Sidebar
+// ═══════════════════════════════════════════════════════
+
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+
+function showChatMobile() {
+  const sidebar = document.getElementById('chatSidebar');
+  const main = document.getElementById('chatMain');
+
+  if (sidebar) sidebar.classList.add('hidden-mobile');
+  if (main) main.classList.add('active-mobile');
+}
+
+function showSidebarMobile() {
+  const sidebar = document.getElementById('chatSidebar');
+  const main = document.getElementById('chatMain');
+
+  if (sidebar) sidebar.classList.remove('hidden-mobile');
+  if (main) main.classList.remove('active-mobile');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -406,12 +389,10 @@ function getChatAvatar(chat) {
 window.openChat = async function(chatId) {
   chatActiveChatId = chatId;
 
-  // ⚡ حدّد الـactive في القائمة
   document.querySelectorAll('.chat-item').forEach(item => {
     item.classList.toggle('active', item.dataset.chatId === chatId);
   });
 
-  // ⚡ اقفل listener قديم
   if (chatUnsubscribeMessages) {
     try { chatUnsubscribeMessages(); } catch (e) {}
     chatUnsubscribeMessages = null;
@@ -426,43 +407,16 @@ window.openChat = async function(chatId) {
 
     chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
 
-    // ⚡ ارسم المحادثة
     renderChatMain();
     startMessagesListener(chatId);
 
-    // ⚡ على الموبايل: اخفي الـSidebar + اظهر المحادثة
-    if (window.innerWidth <= 768) {
-      const sidebar = document.querySelector('.chat-sidebar');
-      const main = document.querySelector('.chat-main');
-
-      if (sidebar) sidebar.classList.add('hidden-mobile');
-      if (main) main.classList.add('active-mobile');
-    }
+    // ⚡ على الموبايل: اظهر الشات، اخفي Sidebar
+    if (isMobile()) showChatMobile();
 
   } catch (err) {
     console.error('❌ openChat error:', err);
     alert('خطأ: ' + err.message);
   }
-};
-
-window.closeChatMobile = function() {
-  console.log('📱 closeChatMobile called');
-
-  const sidebar = document.querySelector('.chat-sidebar');
-  const main = document.querySelector('.chat-main');
-
-  console.log('before:', {
-    sidebar: sidebar?.className,
-    main: main?.className
-  });
-
-  if (sidebar) sidebar.classList.remove('hidden-mobile');
-  if (main) main.classList.remove('active-mobile');
-
-  console.log('after:', {
-    sidebar: sidebar?.className,
-    main: main?.className
-  });
 };
 
 // ═══════════════════════════════════════════════════════
@@ -479,7 +433,7 @@ function renderChatMain() {
 
   main.innerHTML = `
     <div class="chat-header">
-      <button class="chat-back-btn" onclick="closeChatMobile()">←</button>
+      <button class="chat-back-btn" id="chatBackBtn" type="button" title="رجوع">←</button>
       <div class="chat-header-info">
         <div class="chat-header-avatar">${getChatAvatar(chat)}</div>
         <div class="chat-header-details">
@@ -494,36 +448,124 @@ function renderChatMain() {
     </div>
 
     <div class="chat-messages" id="chatMessages">
-      <div class="loading-state">
-        <div class="spinner"></div>
-      </div>
+      <div class="loading-state"><div class="spinner"></div></div>
     </div>
 
     ${isReadOnly ? `
-      <div class="chat-readonly">
-        🔒 هذه القناة للقراءة فقط
-      </div>
+      <div class="chat-readonly">🔒 هذه القناة للقراءة فقط</div>
     ` : `
       <div class="chat-input-wrapper">
         <div class="chat-input-bar">
-          <button class="chat-input-btn" onclick="openChatImagePicker()" title="صورة">📎</button>
+          <button class="chat-input-btn" id="chatImageBtn" type="button" title="صورة">📎</button>
           <input type="text" id="chatInput" class="chat-input" placeholder="اكتب رسالة..." autocomplete="off" maxlength="${MAX_MESSAGE_LENGTH}" />
-          <button class="chat-input-btn chat-send-btn" onclick="sendChatMessage()" title="إرسال">📤</button>
+          <button class="chat-input-btn chat-send-btn" id="chatSendBtn" type="button" title="إرسال">📤</button>
         </div>
       </div>
     `}
   `;
 
-  setupChatInput();
+  // ⚡ ⚡ ⚡ ربط زر الرجوع — مباشر بدون onclick inline
+  const backBtn = document.getElementById('chatBackBtn');
+  if (backBtn) {
+    backBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('📱 Back button clicked');
+      showSidebarMobile();
+    });
+  }
+
+  // ⚡ ربط زر الصورة
+  const imageBtn = document.getElementById('chatImageBtn');
+  if (imageBtn) imageBtn.onclick = window.openChatImagePicker;
+
+  // ⚡ ربط زر الإرسال
+  const sendBtn = document.getElementById('chatSendBtn');
+  if (sendBtn) sendBtn.onclick = window.sendChatMessage;
+
+  // ⚡ input
+  const input = document.getElementById('chatInput');
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        window.sendChatMessage();
+      }
+    });
+    setTimeout(() => input.focus(), 100);
+  }
+
+  // ⚡ ⚡ ⚡ Swipe للرجوع (اسحب من شمال ليمين)
+  setupSwipeBack();
 }
 
-window.closeChatMobile = function() {
-  const sidebar = document.querySelector('.chat-sidebar');
-  if (sidebar) sidebar.classList.remove('hidden-mobile');
-};
+// ═══════════════════════════════════════════════════════
+//   ⚡ Swipe Back (Mobile)
+// ═══════════════════════════════════════════════════════
+
+function setupSwipeBack() {
+  const main = document.getElementById('chatMain');
+  if (!main) return;
+
+  // ⚡ شيل الـlistener القديم
+  if (main._swipeHandler) {
+    main.removeEventListener('touchstart', main._swipeHandler.start);
+    main.removeEventListener('touchmove', main._swipeHandler.move);
+    main.removeEventListener('touchend', main._swipeHandler.end);
+  }
+
+  let startX = 0;
+  let startY = 0;
+  let isSwiping = false;
+
+  const start = (e) => {
+    if (!isMobile()) return;
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    isSwiping = false;
+  };
+
+  const move = (e) => {
+    if (!isMobile()) return;
+    if (e.touches.length !== 1) return;
+
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - startX;
+    const diffY = Math.abs(currentY - startY);
+
+    // ⚡ لازم الحركة تكون أفقية (يمين) + من أول الشاشة (20% الأولى)
+    if (diffX > 10 && diffY < 50 && startX < window.innerWidth * 0.3) {
+      isSwiping = true;
+    }
+  };
+
+  const end = (e) => {
+    if (!isMobile()) return;
+    if (!isSwiping) return;
+
+    const endX = e.changedTouches[0].clientX;
+    const diffX = endX - startX;
+
+    // ⚡ Swipe يمين > 80px → رجوع
+    if (diffX > 80) {
+      console.log('📱 Swipe back detected');
+      showSidebarMobile();
+    }
+
+    isSwiping = false;
+  };
+
+  main.addEventListener('touchstart', start, { passive: true });
+  main.addEventListener('touchmove', move, { passive: true });
+  main.addEventListener('touchend', end, { passive: true });
+
+  main._swipeHandler = { start, move, end };
+}
 
 // ═══════════════════════════════════════════════════════
-//   Messages Listener (Realtime)
+//   Messages Listener
 // ═══════════════════════════════════════════════════════
 
 function startMessagesListener(chatId) {
@@ -567,8 +609,8 @@ function renderMessages() {
     let contentHtml = '';
     if (msg.Type === 'image') {
       contentHtml = `
-        <div class="chat-message-image" onclick="openChatImage('${escapeHtml(msg.ImageURL)}')">
-          <img src="${msg.ImageURL}" alt="" loading="lazy" />
+        <div class="chat-message-image">
+          <img src="${escapeHtml(msg.ImageURL)}" alt="" loading="lazy" onclick="window.openChatImage('${escapeHtml(msg.ImageURL)}')" />
         </div>
       `;
     } else {
@@ -589,29 +631,13 @@ function renderMessages() {
 }
 
 function getSenderAvatar(sender) {
-  if (sender?.PhotoURL) {
-    return `<img src="${sender.PhotoURL}" alt="" />`;
-  }
+  if (sender?.PhotoURL) return `<img src="${sender.PhotoURL}" alt="" />`;
   return getInitial(sender);
 }
 
 // ═══════════════════════════════════════════════════════
 //   Send Message
 // ═══════════════════════════════════════════════════════
-
-function setupChatInput() {
-  const input = document.getElementById('chatInput');
-  if (!input) return;
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
-  });
-
-  input.focus();
-}
 
 window.sendChatMessage = async function() {
   const input = document.getElementById('chatInput');
@@ -641,7 +667,6 @@ window.sendChatMessage = async function() {
 
     await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
-    // ⚡ حدّث آخر رسالة
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
       LastMessage: {
         Text: text,
@@ -750,13 +775,12 @@ window.openChatImage = function(url) {
     modal.onclick = () => modal.style.display = 'none';
     document.body.appendChild(modal);
   }
-
   modal.innerHTML = `<img src="${url}" alt="" />`;
   modal.style.display = 'flex';
 };
 
 // ═══════════════════════════════════════════════════════
-//   New Chat Modal (1-to-1)
+//   New Chat Modal
 // ═══════════════════════════════════════════════════════
 
 window.openNewChatModal = function() {
@@ -776,14 +800,12 @@ window.openNewChatModal = function() {
     <div class="modal-content" style="max-width:500px;max-height:80vh;display:flex;flex-direction:column;">
       <div class="modal-header">
         <h2>✏️ محادثة جديدة</h2>
-        <button class="modal-close" onclick="closeNewChatModal()">✕</button>
+        <button class="modal-close" id="closeNewChatBtn">✕</button>
       </div>
-
       <div class="modal-body" style="flex:1;overflow-y:auto;">
         <div class="form-row">
           <input type="text" id="newChatSearch" placeholder="🔍 ابحث عن شخص..." class="chat-new-search" />
         </div>
-
         <div class="new-chat-people" id="newChatPeople">
           ${activePeople.map(p => renderNewChatPerson(p)).join('')}
         </div>
@@ -793,34 +815,37 @@ window.openNewChatModal = function() {
 
   modal.style.display = 'flex';
 
+  document.getElementById('closeNewChatBtn').onclick = () => modal.style.display = 'none';
+
   const searchInput = document.getElementById('newChatSearch');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const term = e.target.value.toLowerCase().trim();
-      const list = document.getElementById('newChatPeople');
-      if (!list) return;
+  searchInput.oninput = (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    const list = document.getElementById('newChatPeople');
 
-      const filtered = activePeople.filter(p => {
-        const name = getPersonFullName(p).toLowerCase();
-        return name.includes(term);
-      });
+    const filtered = activePeople.filter(p => getPersonFullName(p).toLowerCase().includes(term));
 
-      list.innerHTML = filtered.map(p => renderNewChatPerson(p)).join('') ||
-        '<p style="text-align:center;color:#94a3b8;padding:20px;">لا يوجد نتائج</p>';
+    list.innerHTML = filtered.map(p => renderNewChatPerson(p)).join('') ||
+      '<p style="text-align:center;color:#94a3b8;padding:20px;">لا يوجد نتائج</p>';
+
+    list.querySelectorAll('.new-chat-person').forEach(el => {
+      el.onclick = () => window.startDirectChat(el.dataset.personId);
     });
+  };
 
-    searchInput.focus();
-  }
+  // ⚡ اربط
+  modal.querySelectorAll('.new-chat-person').forEach(el => {
+    el.onclick = () => window.startDirectChat(el.dataset.personId);
+  });
+
+  setTimeout(() => searchInput.focus(), 100);
 };
 
 function renderNewChatPerson(p) {
   const name = getPersonFullName(p);
-  const avatar = p.PhotoURL
-    ? `<img src="${p.PhotoURL}" alt="" />`
-    : getInitial(p);
+  const avatar = p.PhotoURL ? `<img src="${p.PhotoURL}" alt="" />` : getInitial(p);
 
   return `
-    <div class="new-chat-person" onclick="startDirectChat('${p.id}')">
+    <div class="new-chat-person" data-person-id="${p.id}">
       <div class="new-chat-avatar">${avatar}</div>
       <div class="new-chat-info">
         <div class="new-chat-name">${escapeHtml(name)}</div>
@@ -838,7 +863,7 @@ window.closeNewChatModal = function() {
 window.startDirectChat = async function(otherPersonId) {
   if (!otherPersonId || otherPersonId === chatPerson.id) return;
 
-  closeNewChatModal();
+  window.closeNewChatModal();
 
   try {
     const existing = chatConversations.find(c =>
@@ -848,11 +873,10 @@ window.startDirectChat = async function(otherPersonId) {
     );
 
     if (existing) {
-      openChat(existing.id);
+      window.openChat(existing.id);
       return;
     }
 
-    const otherPerson = chatPeople[otherPersonId];
     const chatData = {
       Type: 'direct',
       Members: [chatPerson.id, otherPersonId],
@@ -865,7 +889,7 @@ window.startDirectChat = async function(otherPersonId) {
 
     const docRef = await addDoc(collection(db, 'chats'), chatData);
 
-    setTimeout(() => openChat(docRef.id), 500);
+    setTimeout(() => window.openChat(docRef.id), 500);
 
   } catch (err) {
     console.error('❌ startDirectChat error:', err);
@@ -874,7 +898,7 @@ window.startDirectChat = async function(otherPersonId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   New Group Modal (Owner/Admin only)
+//   New Group Modal
 // ═══════════════════════════════════════════════════════
 
 window.openNewGroupModal = function() {
@@ -897,20 +921,17 @@ window.openNewGroupModal = function() {
     <div class="modal-content" style="max-width:520px;max-height:85vh;display:flex;flex-direction:column;">
       <div class="modal-header">
         <h2>👥 مجموعة جديدة</h2>
-        <button class="modal-close" onclick="closeNewGroupModal()">✕</button>
+        <button class="modal-close" id="closeNewGroupBtn">✕</button>
       </div>
-
       <div class="modal-body" style="flex:1;overflow-y:auto;">
         <div class="form-row">
           <label>اسم المجموعة *</label>
           <input type="text" id="newGroupName" placeholder="مثال: فريق الشباب" />
         </div>
-
         <div class="form-row">
           <label>الوصف (اختياري)</label>
           <input type="text" id="newGroupDesc" placeholder="وصف مختصر" />
         </div>
-
         <div class="form-row">
           <label>الأعضاء *</label>
           <input type="text" id="newGroupSearch" placeholder="🔍 ابحث..." />
@@ -918,36 +939,37 @@ window.openNewGroupModal = function() {
             ${activePeople.map(p => renderNewGroupPerson(p)).join('')}
           </div>
         </div>
-
         <p class="hint" id="newGroupCount">0 شخص محدد</p>
       </div>
-
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeNewGroupModal()">إلغاء</button>
-        <button class="btn-primary" onclick="createGroup()">👥 إنشاء</button>
+        <button class="btn-secondary" id="cancelNewGroupBtn">إلغاء</button>
+        <button class="btn-primary" id="createGroupBtn">👥 إنشاء</button>
       </div>
     </div>
   `;
 
   modal.style.display = 'flex';
 
+  document.getElementById('closeNewGroupBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('cancelNewGroupBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('createGroupBtn').onclick = window.createGroup;
+
   const searchInput = document.getElementById('newGroupSearch');
-  if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-      const term = e.target.value.toLowerCase().trim();
-      const list = document.getElementById('newGroupPeople');
-      if (!list) return;
+  searchInput.oninput = (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    const list = document.getElementById('newGroupPeople');
 
-      const filtered = activePeople.filter(p =>
-        getPersonFullName(p).toLowerCase().includes(term)
-      );
+    const filtered = activePeople.filter(p => getPersonFullName(p).toLowerCase().includes(term));
 
-      list.innerHTML = filtered.map(p => renderNewGroupPerson(p)).join('') ||
-        '<p style="text-align:center;color:#94a3b8;padding:20px;">لا يوجد نتائج</p>';
+    list.innerHTML = filtered.map(p => renderNewGroupPerson(p)).join('') ||
+      '<p style="text-align:center;color:#94a3b8;padding:20px;">لا يوجد نتائج</p>';
+
+    // ⚡ أعد الربط
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', updateGroupCount);
     });
-  }
+  };
 
-  // ⚡ Counting
   setTimeout(() => {
     document.querySelectorAll('#newGroupPeople input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', updateGroupCount);
@@ -957,9 +979,7 @@ window.openNewGroupModal = function() {
 
 function renderNewGroupPerson(p) {
   const name = getPersonFullName(p);
-  const avatar = p.PhotoURL
-    ? `<img src="${p.PhotoURL}" alt="" />`
-    : getInitial(p);
+  const avatar = p.PhotoURL ? `<img src="${p.PhotoURL}" alt="" />` : getInitial(p);
 
   return `
     <label class="new-group-person">
@@ -1002,7 +1022,6 @@ window.createGroup = async function() {
   }
 
   try {
-    // ⚡ ضيف نفسه كعضو وكـAdmin
     const members = [chatPerson.id, ...selected];
 
     const chatData = {
@@ -1019,8 +1038,8 @@ window.createGroup = async function() {
 
     const docRef = await addDoc(collection(db, 'chats'), chatData);
 
-    closeNewGroupModal();
-    setTimeout(() => openChat(docRef.id), 500);
+    window.closeNewGroupModal();
+    setTimeout(() => window.openChat(docRef.id), 500);
 
   } catch (err) {
     console.error('❌ createGroup error:', err);
@@ -1080,3 +1099,5 @@ function escapeHtml(str) {
 
 // ═══ Expose ═══
 window.loadChatPage = loadChatPage;
+window.showSidebarMobile = showSidebarMobile;
+window.closeChatMobile = showSidebarMobile; // ⚡ للتوافق
