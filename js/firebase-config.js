@@ -1,10 +1,13 @@
 // ═══════════════════════════════════════════════════════
-//   Firebase Config + FCM
+//   Firebase Config + Auth + FCM
 // ═══════════════════════════════════════════════════════
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { 
+  getAuth,
+  GoogleAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { getMessaging } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging.js";
 
 // ═══ Firebase Config ═══
@@ -17,11 +20,20 @@ const firebaseConfig = {
   appId: "1:288395797724:web:20f2277013c8d0966e4019"
 };
 
+// ═══ Initialize ═══
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// ⚡ FCM
+// ═══ ⚡ Google Auth Provider ═══
+export const googleProvider = new GoogleAuthProvider();
+
+// ⚡ Google Provider Settings
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
+
+// ═══ FCM ═══
 let messagingInstance = null;
 try {
   messagingInstance = getMessaging(app);
