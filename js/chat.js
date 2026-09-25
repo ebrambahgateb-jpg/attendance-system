@@ -600,6 +600,11 @@ function renderMessages() {
     return;
   }
 
+  function getSenderAvatar(sender) {
+  if (sender?.PhotoURL) return `<img src="${sender.PhotoURL}" alt="" />`;
+  return getInitial(sender);
+}
+  
   // ⚡ فلترة: شيل الرسائل المحذوفة ليّ
   const visibleMessages = chatMessages.filter(msg => {
     const deletedFor = Array.isArray(msg.DeletedFor) ? msg.DeletedFor : [];
