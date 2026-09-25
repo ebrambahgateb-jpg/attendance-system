@@ -159,12 +159,16 @@
     window.updatePWAIcon = function(iconUrl) {
       if (!iconUrl) return;
 
+            // ⚡ URL كامل عشان Blob يشتغل
+      const baseUrl = window.location.origin + '/attendance-system';
+      const currentUrl = window.location.href;
+
       const manifest = {
         name: "نظام الحضور - Attendance System",
         short_name: "الحضور",
         description: "نظام إدارة الحضور والغياب",
-        start_url: "/attendance-system/pages/dashboard.html",
-        scope: "/attendance-system/",
+        start_url: currentUrl,
+        scope: baseUrl + '/',
         display: "standalone",
         orientation: "portrait",
         background_color: "#0f172a",
