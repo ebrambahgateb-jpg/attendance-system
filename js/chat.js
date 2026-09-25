@@ -16,7 +16,8 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  setDoc
+  setDoc,
+  arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -599,13 +600,44 @@ function renderMessages() {
     return;
   }
 
-  container.innerHTML = chatMessages.map(msg => {
+  // ⚡ فلترة: شيل الرسائل المحذوفة ليّ
+  const visibleMessages = chatMessages.filter(msg => {
+    const deletedFor = Array.isArray(msg.DeletedFor) ? msg.DeletedFor : [];
+    return !deletedFor.includes(chatPerson.id);
+  });
+
+  if (visibleMessages.length === 0) {
+    container.innerHTML = `
+      <div class="chat-messages-empty">
+        <div class="chat-messages-empty-icon">👋</div>
+        <p>ابدأ المحادثة</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = visibleMessages.map(msg => {
     const isMine = msg.SenderID === chatPerson.id;
     const sender = chatPeople[msg.SenderID];
     const senderName = msg.SenderName || getPersonFullName(sender) || 'غير معروف';
     const senderAvatar = getSenderAvatar(sender);
     const time = msg.SentAt ? formatTime(parseDate(msg.SentAt)) : '';
 
+    // ⚡ لو الرسالة محذوفة للجميع
+    if (msg.DeletedForEveryone) {
+      return `
+        <div class="chat-message ${isMine ? 'mine' : 'theirs'} chat-message-deleted">
+          <div class="chat-message-bubble">
+            <div class="chat-message-deleted-text">
+              🚫 تم حذف هذه الرسالة
+            </div>
+            <div class="chat-message-time">${time}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ⚡ المحتوى
     let contentHtml = '';
     if (msg.Type === 'image') {
       contentHtml = `
@@ -617,22 +649,37 @@ function renderMessages() {
       contentHtml = `<div class="chat-message-text">${escapeHtml(msg.Text || '')}</div>`;
     }
 
+    // ⚡ "تم التعديل"
+    const editedBadge = msg.Edited ? '<span class="chat-edited-badge">✏️ تم التعديل</span>' : '';
+
     return `
-      <div class="chat-message ${isMine ? 'mine' : 'theirs'}">
+      <div class="chat-message ${isMine ? 'mine' : 'theirs'}"
+           data-msg-id="${msg.id}"
+           data-msg-mine="${isMine ? '1' : '0'}"
+           data-msg-type="${msg.Type || 'text'}">
         ${!isMine ? `<div class="chat-message-avatar">${senderAvatar}</div>` : ''}
         <div class="chat-message-bubble">
           ${!isMine && chatActiveChat.Type !== 'direct' ? `<div class="chat-message-sender">${escapeHtml(senderName)}</div>` : ''}
           ${contentHtml}
-          <div class="chat-message-time">${time}</div>
+          <div class="chat-message-meta">
+            <span class="chat-message-time">${time}</span>
+            ${editedBadge}
+          </div>
         </div>
       </div>
     `;
   }).join('');
-}
 
-function getSenderAvatar(sender) {
-  if (sender?.PhotoURL) return `<img src="${sender.PhotoURL}" alt="" />`;
-  return getInitial(sender);
+  // ⚡ اربط Long Press + Right Click على كل رسالة
+  container.querySelectorAll('.chat-message').forEach(el => {
+    if (el.classList.contains('chat-message-deleted')) return;
+    attachMessageActions(el);
+  });
+
+  // ⚡ Scroll للأسفل
+  setTimeout(() => {
+    container.scrollTop = container.scrollHeight;
+  }, 50);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1096,6 +1143,216 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Message Actions (Edit / Delete)
+// ═══════════════════════════════════════════════════════
+
+let longPressTimer = null;
+
+function attachMessageActions(el) {
+  const msgId = el.dataset.msgId;
+  const isMine = el.dataset.msgMine === '1';
+  const msgType = el.dataset.msgType;
+
+  // ⚡ Long press (Mobile)
+  el.addEventListener('touchstart', (e) => {
+    longPressTimer = setTimeout(() => {
+      e.preventDefault();
+      showMessageActionsMenu(msgId, isMine, msgType, e.touches[0].clientX, e.touches[0].clientY);
+      // ⚡ Haptic feedback
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 500);
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  });
+
+  el.addEventListener('touchmove', () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  });
+
+  // ⚡ Right click (Desktop)
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showMessageActionsMenu(msgId, isMine, msgType, e.clientX, e.clientY);
+  });
+}
+
+function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
+  // ⚡ اقفل أي Menu قديم
+  closeMessageActionsMenu();
+
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  // ⚡ الوقت الحالي
+  const now = Date.now();
+  const sentAt = msg.SentAt ? new Date(msg.SentAt).getTime() : 0;
+  const minutesSinceSent = (now - sentAt) / 60000;
+
+  // ⚡ الشروط
+  const canEdit = isMine && msgType === 'text' && minutesSinceSent < 60 && !msg.DeletedForEveryone;
+  const canDeleteForEveryone = isMine && minutesSinceSent < 60 && !msg.DeletedForEveryone;
+  const canCopy = msgType === 'text' && !msg.DeletedForEveryone;
+
+  const menu = document.createElement('div');
+  menu.id = 'messageActionsMenu';
+  menu.className = 'message-actions-menu';
+  menu.innerHTML = `
+    <div class="msg-menu-backdrop"></div>
+    <div class="msg-menu-content" style="left: ${Math.min(x, window.innerWidth - 200)}px; top: ${Math.min(y, window.innerHeight - 250)}px;">
+      ${canEdit ? `
+        <button class="msg-menu-item" data-action="edit">
+          <span>✏️</span> <span>تعديل</span>
+        </button>
+      ` : ''}
+      ${canCopy ? `
+        <button class="msg-menu-item" data-action="copy">
+          <span>📋</span> <span>نسخ</span>
+        </button>
+      ` : ''}
+      <button class="msg-menu-item" data-action="delete-me">
+        <span>🗑️</span> <span>حذف ليّ</span>
+      </button>
+      ${canDeleteForEveryone ? `
+        <button class="msg-menu-item danger" data-action="delete-all">
+          <span>🗑️</span> <span>حذف للجميع</span>
+        </button>
+      ` : ''}
+      <button class="msg-menu-item cancel" data-action="cancel">
+        <span>✕</span> <span>إلغاء</span>
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  // ⚡ اضغط على الـbackdrop → اقفل
+  menu.querySelector('.msg-menu-backdrop').onclick = closeMessageActionsMenu;
+
+  // ⚡ الأزرار
+  menu.querySelectorAll('.msg-menu-item').forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      closeMessageActionsMenu();
+
+      if (action === 'edit') editMessage(msgId);
+      else if (action === 'copy') copyMessageText(msg.text);
+      else if (action === 'delete-me') deleteMessageForMe(msgId);
+      else if (action === 'delete-all') deleteMessageForEveryone(msgId);
+    };
+  });
+}
+
+function closeMessageActionsMenu() {
+  const menu = document.getElementById('messageActionsMenu');
+  if (menu) menu.remove();
+}
+
+function copyMessageText(text) {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('📋 تم النسخ');
+  }).catch(() => {
+    alert('فشل النسخ');
+  });
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'chat-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Edit Message
+// ═══════════════════════════════════════════════════════
+
+function editMessage(msgId) {
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  // ⚡ اطلب النص الجديد
+  const newText = prompt('✏️ تعديل الرسالة:', msg.Text || '');
+  if (newText === null) return; // ⚡ إلغاء
+  if (!newText.trim()) {
+    alert('⚠️ الرسالة لا يمكن أن تكون فارغة');
+    return;
+  }
+  if (newText === msg.Text) return; // ⚡ مفيش تغيير
+
+  // ⚡ حدّث
+  updateDoc(doc(db, 'chats', chatActiveChatId, 'messages', msgId), {
+    Text: newText.trim(),
+    Edited: true,
+    EditedAt: new Date().toISOString()
+  }).then(() => {
+    showToast('✏️ تم التعديل');
+  }).catch(err => {
+    console.error('❌ Edit error:', err);
+    alert('❌ فشل التعديل: ' + err.message);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Delete Message — For Me
+// ═══════════════════════════════════════════════════════
+
+async function deleteMessageForMe(msgId) {
+  if (!confirm('🗑️ حذف الرسالة ليّ فقط؟\n(هتختفي عندك بس، الآخر هيفضل شايفها)')) return;
+
+  try {
+    const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msgId);
+    await updateDoc(msgRef, {
+      DeletedFor: arrayUnion(chatPerson.id)
+    });
+    showToast('🗑️ تم الحذف ليّ');
+  } catch (err) {
+    console.error('❌ Delete-for-me error:', err);
+    alert('❌ فشل الحذف: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Delete Message — For Everyone
+// ═══════════════════════════════════════════════════════
+
+async function deleteMessageForEveryone(msgId) {
+  if (!confirm('🗑️ حذف الرسالة للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)')) return;
+
+  try {
+    const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msgId);
+    await updateDoc(msgRef, {
+      DeletedForEveryone: true,
+      DeletedAt: new Date().toISOString(),
+      DeletedBy: chatPerson.id,
+      Text: '',   // ⚡ امسح النص
+      ImageURL: '' // ⚡ امسح الصورة
+    });
+    showToast('🗑️ تم الحذف للجميع');
+  } catch (err) {
+    console.error('❌ Delete-for-everyone error:', err);
+    alert('❌ فشل الحذف: ' + err.message);
+  }
+}
+
+// ═══ Expose ═══
+window.closeMessageActionsMenu = closeMessageActionsMenu;
 
 // ═══ Expose ═══
 window.loadChatPage = loadChatPage;
