@@ -127,6 +127,32 @@
           console.warn('⚠️ Service Worker registration failed:', err);
         });
       });
+
+      // ⚡ استقبال رسائل من Service Worker (Notification Click)
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('💬 SW message:', event.data);
+
+        if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
+          const data = event.data.data || {};
+
+          // ⚡ افتح التاب المناسب
+          if (data.tab) {
+            const navItem = document.querySelector(`.nav-item[data-page="${data.tab}"]`);
+            if (navItem) {
+              navItem.click();
+
+              // ⚡ لو فيه chatId → افتح المحادثة
+              if (data.chatId && data.tab === 'chat') {
+                setTimeout(() => {
+                  if (typeof window.openChat === 'function') {
+                    window.openChat(data.chatId);
+                  }
+                }, 800);
+              }
+            }
+          }
+        }
+      });
     }
 
     // ⚡ PWA Dynamic Icon
