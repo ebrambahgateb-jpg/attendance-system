@@ -2,10 +2,11 @@
 //   Service Worker — PWA + Push Notifications
 // ═══════════════════════════════════════════════════════
 
-const CACHE_NAME = 'attendance-v1';
-const RUNTIME_CACHE = 'attendance-runtime-v1';
+const CACHE_NAME = 'attendance-v3';
+const RUNTIME_CACHE = 'attendance-runtime-v3';
 
-// ⚡ الملفات الأساسية
+const DEFAULT_ICON = 'https://placehold.co/192x192/2563eb/ffffff?text=ح';
+
 const PRECACHE_URLS = [
   '/attendance-system/',
   '/attendance-system/index.html',
@@ -14,11 +15,10 @@ const PRECACHE_URLS = [
 
 // ═══ Install ═══
 self.addEventListener('install', (event) => {
-  console.log('🔧 Service Worker: Installing...');
+  console.log('🔧 SW: Installing...');
 
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('📦 Precaching files');
       return cache.addAll(PRECACHE_URLS).catch(err => {
         console.warn('⚠️ Precache partial fail:', err.message);
       });
@@ -30,17 +30,14 @@ self.addEventListener('install', (event) => {
 
 // ═══ Activate ═══
 self.addEventListener('activate', (event) => {
-  console.log('✅ Service Worker: Activated');
+  console.log('✅ SW: Activated');
 
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((names) => {
       return Promise.all(
-        cacheNames
-          .filter(name => name !== CACHE_NAME && name !== RUNTIME_CACHE)
-          .map(name => {
-            console.log('🗑️ Deleting old cache:', name);
-            return caches.delete(name);
-          })
+        names
+          .filter(n => n !== CACHE_NAME && n !== RUNTIME_CACHE)
+          .map(n => caches.delete(n))
       );
     })
   );
@@ -48,11 +45,10 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ═══ Fetch (Network first, fallback to cache) ═══
+// ═══ Fetch ═══
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // ⚡ تجاهل Firebase, ImgBB, Catbox, CDN
   if (
     url.hostname.includes('firebase') ||
     url.hostname.includes('googleapis') ||
@@ -61,56 +57,46 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('catbox') ||
     url.hostname.includes('jsdelivr') ||
     url.hostname.includes('unpkg') ||
+    url.hostname.includes('placehold') ||
     event.request.method !== 'GET'
   ) {
-    return; // ⚡ بدون Cache
+    return;
   }
 
-  // ⚡ Network first
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // ⚡ احفظ نسخة
         if (response.ok && event.request.method === 'GET') {
-          const responseClone = response.clone();
+          const clone = response.clone();
           caches.open(RUNTIME_CACHE).then(cache => {
-            cache.put(event.request, responseClone);
+            cache.put(event.request, clone);
           });
         }
         return response;
       })
       .catch(() => {
-        // ⚡ Offline → جيب من الـCache
-        return caches.match(event.request).then(cached => {
-          return cached || caches.match('/attendance-system/index.html');
+        return caches.match(event.request).then(c => {
+          return c || caches.match('/attendance-system/index.html');
         });
       })
   );
 });
 
-// ═══════════════════════════════════════════════════════
-//   Push Notifications
-// ═══════════════════════════════════════════════════════
-
+// ═══ Push ═══
 self.addEventListener('push', (event) => {
-  console.log('🔔 Push received:', event);
+  console.log('🔔 Push received');
 
   let data = {
     title: '🔔 إشعار جديد',
-    body: 'لديك إشعار جديد في نظام الحضور',
-    icon: 'https://i.ibb.co/icon-192.png',
-    badge: 'https://i.ibb.co/icon-192.png',
-    tag: 'default',
-    data: {
-      url: '/attendance-system/pages/dashboard.html'
-    }
+    body: 'لديك إشعار جديد',
+    icon: DEFAULT_ICON,
+    badge: DEFAULT_ICON,
+    data: { url: '/attendance-system/pages/dashboard.html' }
   };
 
-  // ⚡ لو فيه data
   if (event.data) {
     try {
-      const payload = event.data.json();
-      data = { ...data, ...payload };
+      data = { ...data, ...event.data.json() };
     } catch (e) {
       data.body = event.data.text();
     }
@@ -121,82 +107,47 @@ self.addEventListener('push', (event) => {
       body: data.body,
       icon: data.icon,
       badge: data.badge,
-      tag: data.tag,
       data: data.data,
       dir: 'rtl',
       lang: 'ar',
-      vibrate: [200, 100, 200],
-      requireInteraction: false,
-      actions: data.actions || []
+      vibrate: [200, 100, 200]
     })
   );
 });
 
-// ═══════════════════════════════════════════════════════
-//   Notification Click — Open Related Page
-// ═══════════════════════════════════════════════════════
-
+// ═══ Notification Click ═══
 self.addEventListener('notificationclick', (event) => {
-  console.log('👆 Notification clicked:', event);
-
   event.notification.close();
 
   const data = event.notification.data || {};
   let targetUrl = data.url || '/attendance-system/pages/dashboard.html';
 
-  // ⚡ لو فيه tab محدد
-  if (data.tab) {
-    targetUrl += `?tab=${data.tab}`;
-  }
-
-  // ⚡ لو فيه chatId
-  if (data.chatId) {
-    targetUrl += `&chatId=${data.chatId}`;
-  }
-
-  // ⚡ لو فيه eventId
-  if (data.eventId) {
-    targetUrl += `&eventId=${data.eventId}`;
-  }
+  if (data.tab) targetUrl += `?tab=${data.tab}`;
+  if (data.chatId) targetUrl += `&chatId=${data.chatId}`;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // ⚡ لو الموقع مفتوح → focus عليه + ابعتله رسالة
-      for (const client of clientList) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
         if (client.url.includes('/attendance-system/') && 'focus' in client) {
-          client.postMessage({
-            type: 'NOTIFICATION_CLICK',
-            data: data
-          });
+          client.postMessage({ type: 'NOTIFICATION_CLICK', data });
           return client.focus();
         }
       }
-
-      // ⚡ لو مش مفتوح → افتحه
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });
 
-// ═══════════════════════════════════════════════════════
-//   Message from App
-// ═══════════════════════════════════════════════════════
-
+// ═══ Message ═══
 self.addEventListener('message', (event) => {
-  console.log('💬 Message from app:', event.data);
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
-    const { title, body, data } = event.data;
+  if (event.data?.type === 'SHOW_NOTIFICATION') {
+    const { title, body, data, icon } = event.data;
     self.registration.showNotification(title, {
       body,
-      icon: 'https://i.ibb.co/icon-192.png',
-      badge: 'https://i.ibb.co/icon-192.png',
+      icon: icon || DEFAULT_ICON,
+      badge: icon || DEFAULT_ICON,
       dir: 'rtl',
       lang: 'ar',
       data: data || {},
