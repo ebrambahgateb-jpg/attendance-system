@@ -528,6 +528,12 @@ function applyDashboardData(data) {
     document.title = data.settings.SystemName;
   }
 
+  // ⚡ ⚡ ⚡ PWA Icon — استخدم PWAIconUrl أو اللوجو
+  const pwaIcon = data.settings?.PWAIconUrl || data.settings?.ThemeLogoUrl || '';
+  if (pwaIcon && typeof window.updatePWAIcon === 'function') {
+    window.updatePWAIcon(pwaIcon);
+  }
+
   document.querySelectorAll('.nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.page === 'dashboard');
   });
@@ -866,7 +872,7 @@ function loadAccountsLazy(area) {
 }
 
 function showLoadError(area, name) {
-  console.error(`❌ load${name}Page not found`);
+  console.error(`❌ load[${name}]Page not found`);
   area.innerHTML = `<div class="placeholder-page">
     <h2>خطأ</h2>
     <p>لم يتم تحميل ملف ${name}.</p>
