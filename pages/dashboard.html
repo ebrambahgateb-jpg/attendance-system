@@ -111,7 +111,25 @@
       } catch (e) {}
     })();
   </script>
+  <!-- ═══ Service Worker Registration ═══ -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../service-worker.js', {
+          scope: '../'
+        })
+        .then((registration) => {
+          console.log('✅ Service Worker registered:', registration.scope);
+        })
+        .catch((err) => {
+          console.warn('⚠️ Service Worker registration failed:', err);
+        });
+      });
+    }
+  </script>
 
+  <!-- Firebase SDK + Modules -->
+  <script type="module" src="../js/tabs-config.js"></script>
   <!-- Firebase SDK + Modules -->
   <script type="module" src="../js/tabs-config.js"></script>
   <script type="module" src="../js/firebase-config.js"></script>
