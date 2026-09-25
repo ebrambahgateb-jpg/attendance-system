@@ -429,6 +429,16 @@ window.openChat = async function(chatId) {
 
     renderChatMain();
     startMessagesListener(chatId);
+
+    // ⚡ موبايل: اخفي الـSidebar واظهر المحادثة
+    // (ننفذها بعد renderChatMain عشان الـelements تكون موجودة)
+    if (window.innerWidth <= 768) {
+      const sidebar = document.querySelector('.chat-sidebar');
+      const main = document.querySelector('.chat-main');
+      if (sidebar) sidebar.classList.add('hidden-mobile');
+      if (main) main.classList.add('active-mobile');
+    }
+
   } catch (err) {
     console.error('❌ openChat error:', err);
     alert('خطأ: ' + err.message);
