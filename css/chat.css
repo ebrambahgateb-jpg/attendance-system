@@ -703,7 +703,7 @@ html[data-theme="dark"] .chat-message-bubble {
     overflow: hidden;
   }
 
-  /* ⚡ الـSidebar (القائمة) — يظهر افتراضيًا */
+  /* ⚡ الـSidebar — يظهر افتراضيًا (المستخدم يبدأ من هنا) */
   .chat-sidebar {
     border-left: none;
     display: flex;
@@ -716,7 +716,7 @@ html[data-theme="dark"] .chat-message-bubble {
     background: var(--card-bg);
   }
 
-  /* ⚡ لما يبقى مخفي */
+  /* ⚡ لما المستخدم يختار محادثة → نخفيه */
   .chat-sidebar.hidden-mobile {
     display: none;
   }
@@ -733,13 +733,13 @@ html[data-theme="dark"] .chat-message-bubble {
     background: var(--bg);
   }
 
-  /* ⚡ لما يبقى مفعّل */
+  /* ⚡ لما المستخدم يختار محادثة → نعرضه */
   .chat-main.active-mobile {
     display: flex;
     flex-direction: column;
   }
 
-  /* ⚡ زر الرجوع ← يظهر على الموبايل */
+  /* ⚡ زر الرجوع ← */
   .chat-back-btn {
     display: flex;
     align-items: center;
@@ -772,7 +772,6 @@ html[data-theme="dark"] .chat-message-bubble {
     max-width: 220px;
   }
 }
-
 @media (max-width: 480px) {
   .chat-item {
     padding: 10px;
