@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//   Notifications Center
+//   Notifications Center + Browser Notifications
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -25,6 +25,7 @@ let notificationsData = [];
 let currentUser = null;
 let unsubscribeListener = null;
 let unreadCount = 0;
+let previousNotifIds = [];
 
 // ═══════════════════════════════════════════════════════
 //   Initialize
@@ -41,6 +42,13 @@ function initNotifications() {
 
   startNotificationsListener();
   setupNotificationsEvents();
+
+  // ⚡ زر تفعيل الإشعارات في Topbar
+  setTimeout(() => {
+    if (typeof renderEnableNotifButton === 'function') {
+      renderEnableNotifButton();
+    }
+  }, 500);
 }
 
 function setupNotificationsEvents() {
@@ -66,9 +74,23 @@ function startNotificationsListener() {
     );
 
     unsubscribeListener = onSnapshot(q, (snap) => {
+      const oldIds = [...previousNotifIds];
+
       notificationsData = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter(n => isNotificationForMe(n));
+
+      // ⚡ اعرض Browser Notification للإشعارات الجديدة
+      notificationsData.forEach(n => {
+        if (!oldIds.includes(n.id) && previousNotifIds.length > 0) {
+          if (typeof notifyNewNotification === 'function') {
+            notifyNewNotification(n);
+          }
+        }
+      });
+
+      // ⚡ حدّث القائمة
+      previousNotifIds = notificationsData.map(n => n.id);
 
       updateBadge();
     }, (err) => {
@@ -84,6 +106,7 @@ function startNotificationsListener() {
               const db2 = new Date(a.CreatedAt || 0);
               return da - db2;
             });
+          previousNotifIds = notificationsData.map(n => n.id);
           updateBadge();
         })
         .catch(() => {});
@@ -223,30 +246,24 @@ function renderNotificationsModal(modal) {
     </div>
   `;
 
-  // ⚡ اقفل
   const closeBtn = document.getElementById('closeNotifModal');
   if (closeBtn) closeBtn.onclick = closeNotificationsModal;
 
-  // ⚡ تعليم الكل
   const markAllBtn = document.getElementById('markAllReadBtn');
   if (markAllBtn) markAllBtn.onclick = window.markAllAsRead;
 
-  // ⚡ حذف الكل
   const clearAllBtn = document.getElementById('clearAllNotifBtn');
   if (clearAllBtn) clearAllBtn.onclick = window.clearAllNotifications;
 
-  // ⚡ اربط الإشعارات
   modal.querySelectorAll('.notif-item').forEach(el => {
     const notifId = el.dataset.id;
 
     el.onclick = (e) => {
-      // ⚡ لو ضغط على زرار الحذف → مش نفتح
       if (e.target.closest('.notif-item-delete')) return;
       handleNotificationClick(notifId);
     };
   });
 
-  // ⚡ اربط أزرار الحذف
   modal.querySelectorAll('.notif-item-delete').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
@@ -257,7 +274,7 @@ function renderNotificationsModal(modal) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Handle Notification Click (Navigate)
+//   Handle Click (Navigate)
 // ═══════════════════════════════════════════════════════
 
 function isClickable(notif) {
@@ -283,19 +300,13 @@ async function handleNotificationClick(notifId) {
   const notif = notificationsData.find(n => n.id === notifId);
   if (!notif) return;
 
-  // ⚡ علّم كمقروء
   await markAsRead(notifId);
 
   const type = String(notif.Type || '').toLowerCase();
 
   console.log('🔔 Notification clicked:', type, notif);
 
-  // ⚡ اقفل المودال
   closeNotificationsModal();
-
-  // ═══════════════════════════════════════════════════
-  //   Navigate based on Type
-  // ═══════════════════════════════════════════════════
 
   if (type === 'chat_message') {
     navigateToChat(notif);
@@ -327,14 +338,10 @@ async function handleNotificationClick(notifId) {
     return;
   }
 
-  // ⚡ Fallback — لو مش عارفين النوع
   console.log('⚠️ Unknown notification type:', type);
 }
 
-// ═══ Navigate to Tab ═══
-
 function navigateToTab(tabId) {
-  // ⚡ اضغط على الـnav-item المناسب
   const navItem = document.querySelector(`.nav-item[data-page="${tabId}"]`);
 
   if (navItem) {
@@ -342,48 +349,39 @@ function navigateToTab(tabId) {
     console.log(`✅ Navigated to: ${tabId}`);
   } else {
     console.warn(`⚠️ Tab not found: ${tabId}`);
-    alert(`⚠️ التاب "${tabId}" غير متاح في واجهتك`);
   }
 }
 
 function navigateToScheduleTab(subTab) {
-  // ⚡ اذهب للجدول
   const scheduleNav = document.querySelector('.nav-item[data-page="schedule"]');
 
   if (!scheduleNav) {
     console.warn('⚠️ Schedule tab not available');
-    alert('⚠️ تاب الجدول غير متاح في واجهتك');
     return;
   }
 
   scheduleNav.click();
 
-  // ⚡ بعد ما الجدول يفتح، نضغط على التاب الفرعي
   setTimeout(() => {
     const subTabBtn = document.querySelector(`.sch-tab[data-tab="${subTab}"]`);
 
     if (subTabBtn) {
       subTabBtn.click();
       console.log(`✅ Navigated to schedule sub-tab: ${subTab}`);
-    } else {
-      console.warn(`⚠️ Sub-tab not found: ${subTab}`);
     }
   }, 800);
 }
 
 function navigateToChat(notif) {
-  // ⚡ اذهب للشات
   const chatNav = document.querySelector('.nav-item[data-page="chat"]');
 
   if (!chatNav) {
     console.warn('⚠️ Chat tab not available');
-    alert('⚠️ تاب الرسائل غير متاح في واجهتك');
     return;
   }
 
   chatNav.click();
 
-  // ⚡ بعد ما الشات يفتح، نفتح المحادثة المحددة
   const chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
 
   if (chatId) {
@@ -391,8 +389,6 @@ function navigateToChat(notif) {
       if (typeof window.openChat === 'function') {
         window.openChat(chatId);
         console.log(`✅ Opened chat: ${chatId}`);
-      } else {
-        console.warn('⚠️ openChat function not available');
       }
     }, 1000);
   }
@@ -458,6 +454,201 @@ window.clearAllNotifications = async function() {
 };
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Browser Notifications
+// ═══════════════════════════════════════════════════════
+
+function isNotificationSupported() {
+  return 'Notification' in window && 'serviceWorker' in navigator;
+}
+
+window.requestNotificationPermission = async function() {
+  if (!isNotificationSupported()) {
+    alert('⚠️ المتصفح لا يدعم الإشعارات');
+    return false;
+  }
+
+  if (Notification.permission === 'granted') {
+    if (window.showToast) window.showToast('✅ الإشعارات مفعّلة بالفعل');
+    else alert('✅ الإشعارات مفعّلة بالفعل');
+    return true;
+  }
+
+  if (Notification.permission === 'denied') {
+    alert('⚠️ الإشعارات محظورة. افتح إعدادات المتصفح → Notifications → Allow');
+    return false;
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+
+    if (permission === 'granted') {
+      console.log('✅ Notification permission granted');
+
+      if (window.showToast) window.showToast('✅ تم تفعيل الإشعارات');
+      else alert('✅ تم تفعيل الإشعارات');
+
+      await showBrowserNotification({
+        title: '🎉 تم تفعيل الإشعارات',
+        body: 'هتستقبل إشعارات فورية من النظام',
+        tag: 'welcome',
+        data: { url: '/attendance-system/pages/dashboard.html' },
+        force: true
+      });
+
+      updateNotifPermissionBadge();
+      return true;
+    } else {
+      console.log('❌ Notification permission denied');
+      return false;
+    }
+
+  } catch (err) {
+    console.error('❌ Notification permission error:', err);
+    return false;
+  }
+};
+
+async function showBrowserNotification(options) {
+  if (!isNotificationSupported()) return false;
+  if (Notification.permission !== 'granted') return false;
+
+  // ⚡ لو الموقع مفتوح → ما نعرضش (إلا لو force)
+  if (document.visibilityState === 'visible' && !options.force) {
+    return false;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+
+    await registration.showNotification(options.title || '🔔 إشعار جديد', {
+      body: options.body || '',
+      icon: options.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
+      badge: options.badge || 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
+      tag: options.tag || 'default',
+      dir: 'rtl',
+      lang: 'ar',
+      vibrate: [200, 100, 200],
+      requireInteraction: false,
+      data: options.data || { url: '/attendance-system/pages/dashboard.html' }
+    });
+
+    console.log('✅ Browser notification shown');
+    return true;
+  } catch (err) {
+    console.error('❌ showBrowserNotification error:', err);
+
+    // ⚡ Fallback
+    try {
+      new Notification(options.title || '🔔 إشعار', {
+        body: options.body || '',
+        icon: options.icon,
+        dir: 'rtl',
+        lang: 'ar',
+        tag: options.tag
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+window.showBrowserNotification = showBrowserNotification;
+
+function updateNotifPermissionBadge() {
+  const btn = document.getElementById('enableNotifBtn');
+  if (!btn) return;
+
+  if (!isNotificationSupported()) {
+    btn.style.display = 'none';
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    btn.style.display = 'none';
+  } else if (Notification.permission === 'denied') {
+    btn.style.display = 'none';
+  } else {
+    btn.style.display = 'flex';
+  }
+}
+
+function renderEnableNotifButton() {
+  const topbarRight = document.querySelector('.topbar-right');
+  if (!topbarRight) return;
+
+  if (document.getElementById('enableNotifBtn')) {
+    updateNotifPermissionBadge();
+    return;
+  }
+
+  const btn = document.createElement('button');
+  btn.id = 'enableNotifBtn';
+  btn.className = 'enable-notif-btn';
+  btn.title = 'تفعيل الإشعارات';
+  btn.setAttribute('aria-label', 'تفعيل الإشعارات');
+  btn.innerHTML = '🔕';
+
+  btn.onclick = () => {
+    window.requestNotificationPermission();
+  };
+
+  const notifBtn = document.getElementById('notificationsBtn');
+  if (notifBtn) {
+    topbarRight.insertBefore(btn, notifBtn);
+  } else {
+    topbarRight.appendChild(btn);
+  }
+
+  updateNotifPermissionBadge();
+}
+
+function notifyNewNotification(notif) {
+  if (!notif) return;
+
+  // ⚡ ما تعرضش إشعارات قديمة (أكتر من 30 ثانية)
+  const created = notif.CreatedAt ? new Date(notif.CreatedAt).getTime() : 0;
+  const now = Date.now();
+  if (now - created > 30000) return;
+
+  const typeIcon = getTypeIcon(notif.Type);
+  const bodyText = (notif.Body || '').substring(0, 120);
+  const notifData = buildNotifData(notif);
+
+  showBrowserNotification({
+    title: `${typeIcon} ${notif.Title || 'إشعار جديد'}`,
+    body: bodyText,
+    tag: `notif_${notif.id}`,
+    data: notifData
+  });
+}
+
+function buildNotifData(notif) {
+  const type = String(notif.Type || '').toLowerCase();
+  const data = {
+    url: '/attendance-system/pages/dashboard.html',
+    notifId: notif.id
+  };
+
+  if (type === 'chat_message') {
+    data.tab = 'chat';
+    data.chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
+  } else if (type === 'transfer_request') {
+    data.tab = 'schedule';
+  } else if (type === 'transfer_approved' || type === 'transfer_rejected') {
+    data.tab = 'schedule';
+  } else if (type.startsWith('event_')) {
+    data.tab = 'events';
+  } else if (type === 'rsvp_request') {
+    data.tab = 'my-events';
+  } else if (type.startsWith('person_')) {
+    data.tab = 'attendance';
+  }
+
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════
 //   Helpers
 // ═══════════════════════════════════════════════════════
 
@@ -517,12 +708,15 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Expose to window
+//   Expose
 // ═══════════════════════════════════════════════════════
 
 window.initNotifications = initNotifications;
 window.openNotificationsModal = openNotificationsModal;
 window.closeNotificationsModal = closeNotificationsModal;
+window.renderEnableNotifButton = renderEnableNotifButton;
+window.updateNotifPermissionBadge = updateNotifPermissionBadge;
+window.notifyNewNotification = notifyNewNotification;
 
 // ═══ Auto-init ═══
 document.addEventListener('DOMContentLoaded', () => {
