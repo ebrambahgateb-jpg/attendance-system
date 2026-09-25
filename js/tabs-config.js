@@ -110,6 +110,15 @@ export const TABS_REGISTRY = [
     handler: 'loadLogsLazy',
     isPage: false
   },
+    {
+    id: 'chat',
+    label: 'الرسائل',
+    icon: '💬',
+    workspaces: ['Owner', 'Admin', 'Scanner', 'User'],
+    ownerOnly: false,
+    handler: 'loadChatLazy',
+    isPage: false
+  },
   {
     id: 'archive',
     label: 'الأرشيف',
