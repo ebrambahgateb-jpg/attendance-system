@@ -693,7 +693,7 @@ html[data-theme="dark"] .chat-message-bubble {
   background: #1e293b;
 }
 
-/* ═══ Responsive ═══ */
+/* ═══ Responsive (Mobile) ═══ */
 @media (max-width: 768px) {
   .chat-container {
     grid-template-columns: 1fr;
@@ -703,40 +703,65 @@ html[data-theme="dark"] .chat-message-bubble {
     overflow: hidden;
   }
 
+  /* ⚡ الـSidebar (القائمة) — يظهر افتراضيًا */
   .chat-sidebar {
     border-left: none;
-    position: relative;
-    z-index: 1;
-  }
-
-  /* ⚡ لما الـSidebar مخفي على الموبايل */
-  .chat-sidebar.hidden-mobile {
-    display: none !important;
-  }
-
-  /* ⚡ الـMain مخفي افتراضيًا على الموبايل */
-  .chat-main {
-    display: none;
-    position: relative;
-    z-index: 2;
-  }
-
-  /* ⚡ بيظهر لما نضيف active-mobile */
-  .chat-main.active-mobile {
-    display: flex !important;
+    display: flex;
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 10;
+    z-index: 1;
+    background: var(--card-bg);
+  }
+
+  /* ⚡ لما يبقى مخفي */
+  .chat-sidebar.hidden-mobile {
+    display: none;
+  }
+
+  /* ⚡ الـMain (الشات) — مخفي افتراضيًا */
+  .chat-main {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
     background: var(--bg);
   }
 
+  /* ⚡ لما يبقى مفعّل */
+  .chat-main.active-mobile {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ⚡ زر الرجوع ← يظهر على الموبايل */
   .chat-back-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--card-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: 700;
+    font-family: inherit;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .chat-back-btn:hover {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
   }
 
   .chat-message {
