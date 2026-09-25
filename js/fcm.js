@@ -69,9 +69,15 @@ async function registerFCMToken() {
   try {
     console.log('🔔 FCM: Getting token...');
 
+        // ⚡ تأكد إن الـSW جاهز
+    const registration = await navigator.serviceWorker.ready;
+
+    console.log('🔔 FCM: SW ready, scope =', registration.scope);
+
+    // ⚡ استخدم registration.scope للتأكد
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: await navigator.serviceWorker.ready
+      serviceWorkerRegistration: registration
     });
 
     if (!token) {
