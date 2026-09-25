@@ -1020,10 +1020,18 @@ function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
   const sentAt = msg.SentAt ? new Date(msg.SentAt).getTime() : 0;
   const minutesSinceSent = (now - sentAt) / 60000;
 
+    const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
+
   const canReply = !msg.DeletedForEveryone;
   const canEdit = isMine && msgType === 'text' && minutesSinceSent < 60 && !msg.DeletedForEveryone;
-  const canDeleteForEveryone = isMine && minutesSinceSent < 60 && !msg.DeletedForEveryone;
   const canCopy = msgType === 'text' && !msg.DeletedForEveryone;
+
+  // ⚡ حذف للجميع:
+  // - رسائلك خلال 60 دقيقة
+  // - أو أي رسالة لو Owner/Admin
+  const canDeleteForEveryone =
+    !msg.DeletedForEveryone &&
+    (isAdminOrOwner || (isMine && minutesSinceSent < 60));
 
   const menu = document.createElement('div');
   menu.id = 'messageActionsMenu';
@@ -1163,7 +1171,24 @@ async function deleteMessageForMe(msgId) {
 }
 
 async function deleteMessageForEveryone(msgId) {
-  if (!confirm('🗑️ حذف الرسالة للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)')) return;
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
+  const isMine = msg.SenderID === chatPerson.id;
+
+  // ⚡ تحقق من الصلاحية
+  if (!isAdminOrOwner && !isMine) {
+    alert('⚠️ لا يمكنك حذف رسائل الآخرين');
+    return;
+  }
+
+  // ⚡ Confirm رسالة مخصصة
+  const confirmMsg = isAdminOrOwner && !isMine
+    ? `🗑️ حذف رسالة "${msg.SenderName || 'مستخدم'}" للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)`
+    : '🗑️ حذف الرسالة للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)';
+
+  if (!confirm(confirmMsg)) return;
 
   try {
     const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msgId);
@@ -1171,6 +1196,8 @@ async function deleteMessageForEveryone(msgId) {
       DeletedForEveryone: true,
       DeletedAt: new Date().toISOString(),
       DeletedBy: chatPerson.id,
+      DeletedByName: getPersonFullName(chatPerson),
+      DeletedByAdmin: isAdminOrOwner && !isMine,
       Text: '',
       ImageURL: ''
     });
