@@ -763,7 +763,7 @@ window.sendChatMessage = async function() {
       };
     }
 
-    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
+       await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
       LastMessage: {
@@ -775,6 +775,9 @@ window.sendChatMessage = async function() {
       },
       LastMessageAt: messageData.SentAt
     });
+
+    // ⚡ ابعت إشعار للأعضاء التانيين
+    await sendChatNotification(chatActiveChat, messageData);
 
     window.cancelReply();
 
@@ -851,7 +854,7 @@ async function sendChatImage(file) {
       };
     }
 
-    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
+        await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
       LastMessage: {
@@ -863,6 +866,9 @@ async function sendChatImage(file) {
       },
       LastMessageAt: messageData.SentAt
     });
+
+    // ⚡ ابعت إشعار للأعضاء التانيين
+    await sendChatNotification(chatActiveChat, messageData);
 
     window.cancelReply();
 
@@ -1584,6 +1590,57 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Send Chat Notification
+// ═══════════════════════════════════════════════════════
+
+async function sendChatNotification(chat, messageData) {
+  // ⚡ متبعتش إشعارات للقنوات
+  if (chat.Type === 'channel' || chat.IsDefault) {
+    console.log('⏭️ Skipped notification for channel');
+    return;
+  }
+
+  // ⚡ الأعضاء (ما عدا المُرسل)
+  const recipients = (chat.Members || []).filter(id => id !== chatPerson.id);
+
+  if (recipients.length === 0) return;
+
+  // ⚡ نص الرسالة
+  const previewText = messageData.Type === 'image'
+    ? '📷 صورة'
+    : (messageData.Text || '').substring(0, 80);
+
+  // ⚡ اسم الشات
+  const chatName = getChatDisplayName(chat);
+
+  // ⚡ لكل عضو → إشعار
+  for (const recipientId of recipients) {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'chat_message',
+        Title: `💬 رسالة من ${chatPerson.FirstName || 'مستخدم'}`,
+        Body: `${chatName}:\n${previewText}`,
+        RelatedChatID: chat.id,
+        ChatID: chat.id, // ⚡ مزدوج للاحتياط
+        RelatedID: chat.id,
+        RelatedTitle: chatName,
+        TargetType: 'person',
+        TargetPersonID: recipientId,
+        SentBy: chatPerson.id,
+        SenderName: getPersonFullName(chatPerson),
+        SentAt: new Date().toISOString(),
+        CreatedAt: new Date().toISOString(),
+        ReadBy: []
+      });
+    } catch (err) {
+      console.warn('⚠️ Send notification error:', err.message);
+    }
+  }
+
+  console.log(`✅ Sent ${recipients.length} chat notifications`);
 }
 
 // ═══ Expose ═══
