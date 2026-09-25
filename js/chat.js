@@ -409,10 +409,12 @@ function getChatAvatar(chat) {
 window.openChat = async function(chatId) {
   chatActiveChatId = chatId;
 
+  // ⚡ حدّد الـactive في القائمة
   document.querySelectorAll('.chat-item').forEach(item => {
     item.classList.toggle('active', item.dataset.chatId === chatId);
   });
 
+  // ⚡ اقفل listener قديم
   if (chatUnsubscribeMessages) {
     try { chatUnsubscribeMessages(); } catch (e) {}
     chatUnsubscribeMessages = null;
@@ -427,14 +429,15 @@ window.openChat = async function(chatId) {
 
     chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
 
+    // ⚡ ارسم المحادثة
     renderChatMain();
     startMessagesListener(chatId);
 
-    // ⚡ موبايل: اخفي الـSidebar واظهر المحادثة
-    // (ننفذها بعد renderChatMain عشان الـelements تكون موجودة)
+    // ⚡ على الموبايل: اخفي الـSidebar + اظهر المحادثة
     if (window.innerWidth <= 768) {
       const sidebar = document.querySelector('.chat-sidebar');
       const main = document.querySelector('.chat-main');
+
       if (sidebar) sidebar.classList.add('hidden-mobile');
       if (main) main.classList.add('active-mobile');
     }
@@ -443,6 +446,15 @@ window.openChat = async function(chatId) {
     console.error('❌ openChat error:', err);
     alert('خطأ: ' + err.message);
   }
+};
+
+// ⚡ الرجوع للـSidebar على الموبايل
+window.closeChatMobile = function() {
+  const sidebar = document.querySelector('.chat-sidebar');
+  const main = document.querySelector('.chat-main');
+
+  if (sidebar) sidebar.classList.remove('hidden-mobile');
+  if (main) main.classList.remove('active-mobile');
 };
 
 // ═══════════════════════════════════════════════════════
