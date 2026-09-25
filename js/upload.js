@@ -565,4 +565,58 @@ window.pickImage = pickImage;
 window.getFileHash = getFileHash;
 window.renderUploadWidget = renderUploadWidget;
 window.pickMultipleImages = pickMultipleImages;
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Voice Upload (Catbox)
+// ═══════════════════════════════════════════════════════
+
+const CATBOX_UPLOAD_URL = 'https://catbox.moe/user/api.php';
+
+/**
+ * ⚡ رفع ملف صوتي على Catbox
+ * @param {Blob} audioBlob - ملف الصوت
+ * @returns {Promise<string>} - URL الصوت
+ */
+async function uploadVoiceMessage(audioBlob) {
+  if (!audioBlob || audioBlob.size === 0) {
+    throw new Error('❌ لا يوجد صوت');
+  }
+
+  // ⚡ الحد الأقصى (200 MB لـCatbox)
+  const MAX_VOICE_SIZE = 200 * 1024 * 1024;
+  if (audioBlob.size > MAX_VOICE_SIZE) {
+    throw new Error('❌ الصوت أكبر من الحد المسموح');
+  }
+
+  console.log('📤 [uploadVoiceMessage] بدء:', {
+    size: audioBlob.size,
+    type: audioBlob.type
+  });
+
+  const formData = new FormData();
+  formData.append('reqtype', 'fileupload');
+  formData.append('fileToUpload', audioBlob, `voice_${Date.now()}.webm`);
+
+  const response = await fetch(CATBOX_UPLOAD_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new Error(`Catbox error: ${response.status}`);
+  }
+
+  const url = await response.text();
+
+  if (!url || !url.startsWith('http')) {
+    throw new Error('❌ استجابة غير صالحة من Catbox');
+  }
+
+  console.log('✅ [uploadVoiceMessage] تم الرفع:', url);
+
+  return url.trim();
+}
+
+window.uploadVoiceMessage = uploadVoiceMessage;
+
 window.checkImageExistsStrict = checkImageExistsStrict;
