@@ -1,9 +1,57 @@
 // ═══════════════════════════════════════════════════════
-//   Service Worker — PWA + Push Notifications
+//   Service Worker — PWA + FCM Push Notifications
 // ═══════════════════════════════════════════════════════
 
-const CACHE_NAME = 'attendance-v3';
-const RUNTIME_CACHE = 'attendance-runtime-v3';
+importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js');
+
+// ═══ Firebase Config ═══
+const firebaseConfig = {
+  apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  authDomain: "attendance-system-2dc6f.firebaseapp.com",
+  projectId: "attendance-system-2dc6f",
+  storageBucket: "attendance-system-2dc6f.appspot.com",
+  messagingSenderId: "XXXXXXXXXXXXXXXX",
+  appId: "1:XXXXXXXXXXXXXXXX:web:XXXXXXXXXXXXXXXX"
+};
+
+// ⚡ Initialize Firebase
+try {
+  firebase.initializeApp(firebaseConfig);
+  const messaging = firebase.messaging();
+
+  // ⚡ Background message handler
+  messaging.onBackgroundMessage((payload) => {
+    console.log('🔔 FCM Background message:', payload);
+
+    const notification = payload.notification || {};
+    const data = payload.data || {};
+
+    const notificationOptions = {
+      body: notification.body || data.body || '',
+      icon: notification.icon || data.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
+      badge: 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
+      tag: data.tag || 'default',
+      dir: 'rtl',
+      lang: 'ar',
+      vibrate: [200, 100, 200],
+      data: data
+    };
+
+    self.registration.showNotification(
+      notification.title || data.title || '🔔 إشعار جديد',
+      notificationOptions
+    );
+  });
+
+  console.log('✅ Firebase Messaging initialized in SW');
+} catch (err) {
+  console.warn('⚠️ Firebase SW init error:', err.message);
+}
+
+// ═══ Cache ═══
+const CACHE_NAME = 'attendance-v4';
+const RUNTIME_CACHE = 'attendance-runtime-v4';
 
 const DEFAULT_ICON = 'https://placehold.co/192x192/2563eb/ffffff?text=ح';
 
@@ -15,23 +63,18 @@ const PRECACHE_URLS = [
 
 // ═══ Install ═══
 self.addEventListener('install', (event) => {
-  console.log('🔧 SW: Installing...');
-
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(PRECACHE_URLS).catch(err => {
-        console.warn('⚠️ Precache partial fail:', err.message);
+        console.warn('⚠️ Precache fail:', err.message);
       });
     })
   );
-
   self.skipWaiting();
 });
 
 // ═══ Activate ═══
 self.addEventListener('activate', (event) => {
-  console.log('✅ SW: Activated');
-
   event.waitUntil(
     caches.keys().then((names) => {
       return Promise.all(
@@ -41,7 +84,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-
   self.clients.claim();
 });
 
@@ -82,15 +124,14 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// ═══ Push ═══
+// ═══ Push (Web Push غير FCM) ═══
 self.addEventListener('push', (event) => {
-  console.log('🔔 Push received');
+  console.log('🔔 Push received:', event);
 
   let data = {
     title: '🔔 إشعار جديد',
     body: 'لديك إشعار جديد',
     icon: DEFAULT_ICON,
-    badge: DEFAULT_ICON,
     data: { url: '/attendance-system/pages/dashboard.html' }
   };
 
@@ -106,7 +147,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: data.icon,
-      badge: data.badge,
+      badge: data.icon,
       data: data.data,
       dir: 'rtl',
       lang: 'ar',
@@ -117,6 +158,8 @@ self.addEventListener('push', (event) => {
 
 // ═══ Notification Click ═══
 self.addEventListener('notificationclick', (event) => {
+  console.log('👆 Notification clicked');
+
   event.notification.close();
 
   const data = event.notification.data || {};
@@ -138,7 +181,7 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// ═══ Message ═══
+// ═══ Message from App ═══
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 
