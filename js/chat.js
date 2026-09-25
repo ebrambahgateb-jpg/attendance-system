@@ -515,10 +515,9 @@ function renderChatMain() {
     setTimeout(() => input.focus(), 100);
   }
 
-  // ⚡ Swipe للرجوع
-  setupSwipeBack();
+    // ⚡ Swipe للرجوع — ملغي
+  // setupSwipeBack();
 }
-
 // ═══════════════════════════════════════════════════════
 //   Swipe Back (Mobile)
 // ═══════════════════════════════════════════════════════
