@@ -154,8 +154,9 @@
 }
 
 .chat-item.active .chat-item-time,
-.chat-item.active .chat-item-preview {
-  color: rgba(255, 255, 255, 0.85);
+.chat-item.active .chat-item-preview,
+.chat-item.active .chat-item-name {
+  color: #fff;
 }
 
 .chat-item-avatar {
@@ -200,10 +201,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
-}
-
-.chat-item.active .chat-item-name {
-  color: #fff;
 }
 
 .chat-item-badge {
@@ -261,14 +258,25 @@
 
 .chat-back-btn {
   display: none;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   background: var(--bg);
   border: 1px solid var(--border);
   cursor: pointer;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 700;
   font-family: inherit;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.chat-back-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
 }
 
 .chat-header-info {
@@ -276,6 +284,7 @@
   align-items: center;
   gap: 12px;
   flex: 1;
+  min-width: 0;
 }
 
 .chat-header-avatar {
@@ -326,6 +335,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .chat-messages-empty {
@@ -471,6 +481,7 @@
   font-size: 14px;
   background: var(--bg);
   color: var(--text);
+  min-width: 0;
 }
 
 .chat-input:focus {
@@ -664,25 +675,8 @@
 }
 
 /* ═══ Dark Mode ═══ */
-html[data-theme="dark"] .chat-container {
-  background: var(--card-bg);
-  border-color: var(--border);
-}
-
-html[data-theme="dark"] .chat-sidebar {
-  background: var(--card-bg);
-}
-
 html[data-theme="dark"] .chat-main {
   background: #0f172a;
-}
-
-html[data-theme="dark"] .chat-header {
-  background: var(--card-bg);
-}
-
-html[data-theme="dark"] .chat-input-wrapper {
-  background: var(--card-bg);
 }
 
 html[data-theme="dark"] .chat-input {
@@ -693,75 +687,59 @@ html[data-theme="dark"] .chat-message-bubble {
   background: #1e293b;
 }
 
-/* ═══ Responsive (Mobile) ═══ */
+/* ═══════════════════════════════════════════
+   ⚡ Responsive (Mobile)
+   ═══════════════════════════════════════════ */
+
 @media (max-width: 768px) {
   .chat-container {
-    grid-template-columns: 1fr;
+    display: block;
+    position: relative;
     height: calc(100vh - 140px);
     border-radius: 0;
-    position: relative;
     overflow: hidden;
   }
 
-  /* ⚡ الـSidebar — يظهر افتراضيًا (المستخدم يبدأ من هنا) */
+  /* ═══ الـSidebar (القائمة) — يظهر افتراضيًا ═══ */
   .chat-sidebar {
-    border-left: none;
-    display: flex;
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: none;
     z-index: 1;
     background: var(--card-bg);
   }
 
-  /* ⚡ لما المستخدم يختار محادثة → نخفيه */
   .chat-sidebar.hidden-mobile {
     display: none;
   }
 
-  /* ⚡ الـMain (الشات) — مخفي افتراضيًا */
+  /* ═══ الـMain (الشات) — مخفي افتراضيًا ═══ */
   .chat-main {
-    display: none;
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
+    display: none;
+    flex-direction: column;
     z-index: 2;
     background: var(--bg);
+    /* ⚡ Swipe hint */
+    touch-action: pan-y;
   }
 
-  /* ⚡ لما المستخدم يختار محادثة → نعرضه */
   .chat-main.active-mobile {
     display: flex;
-    flex-direction: column;
   }
 
-  /* ⚡ زر الرجوع ← */
+  /* ═══ زر الرجوع ← يظهر على الموبايل ═══ */
   .chat-back-btn {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--card-bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 20px;
-    font-weight: 700;
-    font-family: inherit;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-
-  .chat-back-btn:hover {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
   }
 
   .chat-message {
@@ -772,6 +750,7 @@ html[data-theme="dark"] .chat-message-bubble {
     max-width: 220px;
   }
 }
+
 @media (max-width: 480px) {
   .chat-item {
     padding: 10px;
@@ -792,7 +771,7 @@ html[data-theme="dark"] .chat-message-bubble {
   }
 
   .chat-input {
-    font-size: 16px; /* ⚡ يمنع zoom على iOS */
+    font-size: 16px;
   }
 
   .chat-header-name {
