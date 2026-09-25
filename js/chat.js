@@ -37,6 +37,7 @@ let chatActiveChat = null;
 let chatMessages = [];
 let chatUnsubscribeMessages = null;
 let chatUnsubscribeChats = null;
+let chatReplyTo = null; // ⚡ الرسالة المُردود عليها
 
 // ═══ Constants ═══
 const MAX_MESSAGE_LENGTH = 2000;
@@ -406,7 +407,10 @@ window.openChat = async function(chatId) {
       return;
     }
 
-    chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
+        chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
+
+    // ⚡ صفّر الـReply لما تفتح شات جديد
+    window.cancelReply();
 
     renderChatMain();
     startMessagesListener(chatId);
@@ -452,10 +456,18 @@ function renderChatMain() {
       <div class="loading-state"><div class="spinner"></div></div>
     </div>
 
-    ${isReadOnly ? `
+        ${isReadOnly ? `
       <div class="chat-readonly">🔒 هذه القناة للقراءة فقط</div>
     ` : `
       <div class="chat-input-wrapper">
+        <div class="chat-reply-preview" id="chatReplyPreview" style="display:none;">
+          <div class="chat-reply-preview-bar"></div>
+          <div class="chat-reply-preview-content">
+            <div class="chat-reply-preview-name" id="chatReplyPreviewName">-</div>
+            <div class="chat-reply-preview-text" id="chatReplyPreviewText">-</div>
+          </div>
+          <button class="chat-reply-preview-close" id="chatReplyPreviewClose" type="button" title="إلغاء">✕</button>
+        </div>
         <div class="chat-input-bar">
           <button class="chat-input-btn" id="chatImageBtn" type="button" title="صورة">📎</button>
           <input type="text" id="chatInput" class="chat-input" placeholder="اكتب رسالة..." autocomplete="off" maxlength="${MAX_MESSAGE_LENGTH}" />
@@ -463,7 +475,6 @@ function renderChatMain() {
         </div>
       </div>
     `}
-  `;
 
   // ⚡ ⚡ ⚡ ربط زر الرجوع — مباشر بدون onclick inline
   const backBtn = document.getElementById('chatBackBtn');
@@ -484,6 +495,12 @@ function renderChatMain() {
   const sendBtn = document.getElementById('chatSendBtn');
   if (sendBtn) sendBtn.onclick = window.sendChatMessage;
 
+  // ⚡ ⚡ ⚡ ربط زر إغلاق الـReply
+  const replyCloseBtn = document.getElementById('chatReplyPreviewClose');
+  if (replyCloseBtn) {
+    replyCloseBtn.onclick = () => window.cancelReply();
+  }
+  
   // ⚡ input
   const input = document.getElementById('chatInput');
   if (input) {
@@ -654,8 +671,27 @@ function renderMessages() {
       contentHtml = `<div class="chat-message-text">${escapeHtml(msg.Text || '')}</div>`;
     }
 
-    // ⚡ "تم التعديل"
+        // ⚡ "تم التعديل"
     const editedBadge = msg.Edited ? '<span class="chat-edited-badge">✏️ تم التعديل</span>' : '';
+
+    // ⚡ ⚡ ⚡ Reply Preview
+    let replyHtml = '';
+    if (msg.ReplyTo && msg.ReplyTo.MessageID) {
+      const replyType = msg.ReplyTo.Type || 'text';
+      const replyText = replyType === 'image'
+        ? '📷 صورة'
+        : (msg.ReplyTo.Text || '').substring(0, 60);
+
+      replyHtml = `
+        <div class="chat-message-reply" onclick="window.jumpToMessage('${msg.ReplyTo.MessageID}')">
+          <div class="chat-message-reply-bar"></div>
+          <div class="chat-message-reply-content">
+            <div class="chat-message-reply-name">${escapeHtml(msg.ReplyTo.SenderName || '')}</div>
+            <div class="chat-message-reply-text">${escapeHtml(replyText)}</div>
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="chat-message ${isMine ? 'mine' : 'theirs'}"
@@ -665,6 +701,7 @@ function renderMessages() {
         ${!isMine ? `<div class="chat-message-avatar">${senderAvatar}</div>` : ''}
         <div class="chat-message-bubble">
           ${!isMine && chatActiveChat.Type !== 'direct' ? `<div class="chat-message-sender">${escapeHtml(senderName)}</div>` : ''}
+          ${replyHtml}
           ${contentHtml}
           <div class="chat-message-meta">
             <span class="chat-message-time">${time}</span>
@@ -673,12 +710,20 @@ function renderMessages() {
         </div>
       </div>
     `;
+
   }).join('');
 
-  // ⚡ اربط Long Press + Right Click على كل رسالة
+    // ⚡ اربط Long Press + Right Click + Swipe Reply
   container.querySelectorAll('.chat-message').forEach(el => {
     if (el.classList.contains('chat-message-deleted')) return;
+
+    const msgId = el.dataset.msgId;
     attachMessageActions(el);
+
+    // ⚡ Swipe to Reply (الموبايل بس)
+    if (window.innerWidth <= 768) {
+      setupSwipeToReply(el, msgId);
+    }
   });
 
   // ⚡ Scroll للأسفل
@@ -717,6 +762,16 @@ window.sendChatMessage = async function() {
       Reactions: {}
     };
 
+    // ⚡ لو فيه Reply
+    if (chatReplyTo) {
+      messageData.ReplyTo = {
+        MessageID: chatReplyTo.MessageID,
+        Text: chatReplyTo.Text,
+        SenderName: chatReplyTo.SenderName,
+        Type: chatReplyTo.Type || 'text'
+      };
+    }
+
     await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
@@ -729,6 +784,9 @@ window.sendChatMessage = async function() {
       },
       LastMessageAt: messageData.SentAt
     });
+
+    // ⚡ امسح الـReply
+    window.cancelReply();
 
   } catch (err) {
     console.error('❌ sendChatMessage error:', err);
@@ -783,7 +841,7 @@ async function sendChatImage(file) {
     const loadingEl = document.getElementById('chatUploading');
     if (loadingEl) loadingEl.remove();
 
-    const messageData = {
+        const messageData = {
       SenderID: chatPerson.id,
       SenderName: getPersonFullName(chatPerson),
       Type: 'image',
@@ -792,6 +850,16 @@ async function sendChatImage(file) {
       ReadBy: [chatPerson.id],
       Reactions: {}
     };
+
+    // ⚡ لو فيه Reply
+    if (chatReplyTo) {
+      messageData.ReplyTo = {
+        MessageID: chatReplyTo.MessageID,
+        Text: chatReplyTo.Text,
+        SenderName: chatReplyTo.SenderName,
+        Type: chatReplyTo.Type || 'text'
+      };
+    }
 
     await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
@@ -1211,17 +1279,20 @@ function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
   const menu = document.createElement('div');
   menu.id = 'messageActionsMenu';
   menu.className = 'message-actions-menu';
-  menu.innerHTML = `
+   menu.innerHTML = `
     <div class="msg-menu-backdrop"></div>
-    <div class="msg-menu-content" style="left: ${Math.min(x, window.innerWidth - 200)}px; top: ${Math.min(y, window.innerHeight - 250)}px;">
-      ${canEdit ? `
-        <button class="msg-menu-item" data-action="edit">
-          <span>✏️</span> <span>تعديل</span>
-        </button>
-      ` : ''}
+    <div class="msg-menu-content" style="left: ${Math.min(x, window.innerWidth - 200)}px; top: ${Math.min(y, window.innerHeight - 300)}px;">
+      <button class="msg-menu-item" data-action="reply">
+        <span>↩️</span> <span>رد</span>
+      </button>
       ${canCopy ? `
         <button class="msg-menu-item" data-action="copy">
           <span>📋</span> <span>نسخ</span>
+        </button>
+      ` : ''}
+      ${canEdit ? `
+        <button class="msg-menu-item" data-action="edit">
+          <span>✏️</span> <span>تعديل</span>
         </button>
       ` : ''}
       <button class="msg-menu-item" data-action="delete-me">
@@ -1244,13 +1315,14 @@ function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
   menu.querySelector('.msg-menu-backdrop').onclick = closeMessageActionsMenu;
 
   // ⚡ الأزرار
-  menu.querySelectorAll('.msg-menu-item').forEach(btn => {
+    menu.querySelectorAll('.msg-menu-item').forEach(btn => {
     btn.onclick = () => {
       const action = btn.dataset.action;
       closeMessageActionsMenu();
 
-      if (action === 'edit') editMessage(msgId);
-      else if (action === 'copy') copyMessageText(msg.text);
+      if (action === 'reply') window.startReply(msgId);
+      else if (action === 'edit') editMessage(msgId);
+      else if (action === 'copy') copyMessageText(msg.Text);
       else if (action === 'delete-me') deleteMessageForMe(msgId);
       else if (action === 'delete-all') deleteMessageForEveryone(msgId);
     };
@@ -1358,6 +1430,146 @@ async function deleteMessageForEveryone(msgId) {
 
 // ═══ Expose ═══
 window.closeMessageActionsMenu = closeMessageActionsMenu;
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Reply System
+// ═══════════════════════════════════════════════════════
+
+window.startReply = function(msgId) {
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  // ⚡ لو رسالة محذوفة للجميع → مفيش رد
+  if (msg.DeletedForEveryone) {
+    showToast('⚠️ لا يمكن الرد على رسالة محذوفة');
+    return;
+  }
+
+  const sender = chatPeople[msg.SenderID];
+  const senderName = msg.SenderID === chatPerson.id
+    ? 'أنت'
+    : (msg.SenderName || getPersonFullName(sender) || 'غير معروف');
+
+  const replyText = msg.Type === 'image'
+    ? '📷 صورة'
+    : (msg.Text || '').substring(0, 100);
+
+  chatReplyTo = {
+    MessageID: msg.id,
+    Text: replyText,
+    SenderName: senderName,
+    Type: msg.Type || 'text'
+  };
+
+  // ⚡ عرض الـReply Preview
+  showReplyPreview();
+
+  // ⚡ Focus على الـinput
+  const input = document.getElementById('chatInput');
+  if (input) input.focus();
+};
+
+function showReplyPreview() {
+  const preview = document.getElementById('chatReplyPreview');
+  const nameEl = document.getElementById('chatReplyPreviewName');
+  const textEl = document.getElementById('chatReplyPreviewText');
+
+  if (!preview || !chatReplyTo) return;
+
+  if (nameEl) nameEl.textContent = chatReplyTo.SenderName;
+  if (textEl) textEl.textContent = chatReplyTo.Text;
+  preview.style.display = 'flex';
+}
+
+window.cancelReply = function() {
+  chatReplyTo = null;
+
+  const preview = document.getElementById('chatReplyPreview');
+  if (preview) preview.style.display = 'none';
+};
+
+// ═══ Jump to Message ═══
+window.jumpToMessage = function(msgId) {
+  const targetEl = document.querySelector(`.chat-message[data-msg-id="${msgId}"]`);
+  if (!targetEl) {
+    showToast('⚠️ الرسالة الأصلية غير متوفرة');
+    return;
+  }
+
+  // ⚡ Scroll إليها
+  targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // ⚡ ظلّلها مؤقتًا
+  targetEl.classList.add('chat-message-highlight');
+  setTimeout(() => {
+    targetEl.classList.remove('chat-message-highlight');
+  }, 1500);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Swipe to Reply (Mobile)
+// ═══════════════════════════════════════════════════════
+
+function setupSwipeToReply(el, msgId) {
+  let startX = 0;
+  let currentX = 0;
+  let isSwiping = false;
+  const threshold = 60;
+
+  const bubble = el.querySelector('.chat-message-bubble');
+  if (!bubble) return;
+
+  // ⚡ شيل أي Reply icon قديم
+  const oldIcon = el.querySelector('.chat-swipe-reply-icon');
+  if (oldIcon) oldIcon.remove();
+
+  // ⚡ ضيف Reply icon
+  const replyIcon = document.createElement('div');
+  replyIcon.className = 'chat-swipe-reply-icon';
+  replyIcon.innerHTML = '↩️';
+  el.appendChild(replyIcon);
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
+    currentX = startX;
+    isSwiping = true;
+    bubble.style.transition = 'none';
+  }, { passive: true });
+
+  el.addEventListener('touchmove', (e) => {
+    if (!isSwiping || e.touches.length !== 1) return;
+
+    currentX = e.touches[0].clientX;
+    const diff = currentX - startX;
+
+    // ⚡ بس لو سحب لليمين
+    if (diff > 0 && diff < 100) {
+      bubble.style.transform = `translateX(${diff}px)`;
+
+      // ⚡ أظهر الـicon تدريجيًا
+      const opacity = Math.min(diff / threshold, 1);
+      replyIcon.style.opacity = opacity;
+      replyIcon.style.transform = `scale(${0.5 + opacity * 0.5})`;
+    }
+  }, { passive: true });
+
+  el.addEventListener('touchend', (e) => {
+    if (!isSwiping) return;
+    isSwiping = false;
+
+    const diff = currentX - startX;
+    bubble.style.transition = 'transform 0.2s ease-out';
+    bubble.style.transform = 'translateX(0)';
+    replyIcon.style.opacity = '0';
+
+    // ⚡ لو تجاوز الـthreshold → Reply
+    if (diff >= threshold) {
+      if (navigator.vibrate) navigator.vibrate(30);
+      window.startReply(msgId);
+    }
+  }, { passive: true });
+}
 
 // ═══ Expose ═══
 window.loadChatPage = loadChatPage;
