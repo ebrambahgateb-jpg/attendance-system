@@ -1,0 +1,42 @@
+{
+  "name": "نظام الحضور - Attendance System",
+  "short_name": "الحضور",
+  "description": "نظام إدارة الحضور والغياب",
+  "start_url": "/attendance-system/pages/dashboard.html",
+  "scope": "/attendance-system/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.ibb.co/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "education"],
+  "shortcuts": [
+    {
+      "name": "الرسائل",
+      "short_name": "الرسائل",
+      "url": "/attendance-system/pages/dashboard.html?tab=chat",
+      "icons": [{ "src": "https://i.ibb.co/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "لوحة التحكم",
+      "short_name": "الرئيسية",
+      "url": "/attendance-system/pages/dashboard.html",
+      "icons": [{ "src": "https://i.ibb.co/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
