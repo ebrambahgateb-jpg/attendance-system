@@ -445,13 +445,24 @@ window.openChat = async function(chatId) {
   }
 };
 
-// ⚡ الرجوع للـSidebar على الموبايل
 window.closeChatMobile = function() {
+  console.log('📱 closeChatMobile called');
+
   const sidebar = document.querySelector('.chat-sidebar');
   const main = document.querySelector('.chat-main');
 
+  console.log('before:', {
+    sidebar: sidebar?.className,
+    main: main?.className
+  });
+
   if (sidebar) sidebar.classList.remove('hidden-mobile');
   if (main) main.classList.remove('active-mobile');
+
+  console.log('after:', {
+    sidebar: sidebar?.className,
+    main: main?.className
+  });
 };
 
 // ═══════════════════════════════════════════════════════
