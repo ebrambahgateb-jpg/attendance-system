@@ -129,13 +129,10 @@ async function loadChatPage(area) {
     // ⚡ 5. ارسم الصفحة
     renderChatPage(area);
 
-    // ⚡ 6. ابدأ الـRealtime Listener
+       // ⚡ 6. ابدأ الـRealtime Listener
     startChatsListener();
 
-    // ⚡ 7. اختر القناة العامة افتراضيًا
-    setTimeout(() => {
-      openChat('general');
-    }, 500);
+    // ⚡ ملاحظة: مفيش فتح تلقائي — المستخدم يختار بنفسه
 
   } catch (err) {
     console.error('❌ Load chat error:', err);
