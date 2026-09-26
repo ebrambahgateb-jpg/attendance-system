@@ -1592,3 +1592,167 @@ html[data-theme="dark"] .sync-info-row {
 html[data-theme="dark"] .sync-info-row strong {
   color: #ffffff !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ My Events (حضوري) — Dark Mode
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Card ═══ */
+html[data-theme="dark"] .me-card {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-card-title {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-card-type {
+  background: #334155 !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-info-row {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .me-info-row strong {
+  color: #ffffff !important;
+}
+
+/* ═══ Action Buttons ═══ */
+html[data-theme="dark"] .me-card-actions {
+  border-top-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-cancel-btn,
+html[data-theme="dark"] .me-btn-cancel,
+html[data-theme="dark"] .me-btn-transfer {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-cancel-btn:hover,
+html[data-theme="dark"] .me-btn-cancel:hover,
+html[data-theme="dark"] .me-btn-transfer:hover {
+  background: #475569 !important;
+}
+
+/* ═══ Request Transfer Button — أزرق ═══ */
+html[data-theme="dark"] .me-card-btn.transfer,
+html[data-theme="dark"] .me-card-btn-req {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-card-btn.transfer:hover,
+html[data-theme="dark"] .me-card-btn-req:hover {
+  background: rgba(59, 130, 246, 0.35) !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Cancel Button — أحمر ═══ */
+html[data-theme="dark"] .me-card-btn.cancel,
+html[data-theme="dark"] .me-cancel-req-btn {
+  background: rgba(220, 38, 38, 0.2) !important;
+  color: #f87171 !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-card-btn.cancel:hover,
+html[data-theme="dark"] .me-cancel-req-btn:hover {
+  background: rgba(220, 38, 38, 0.35) !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Empty State ═══ */
+html[data-theme="dark"] .me-empty {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .me-empty h3 {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-empty-icon {
+  opacity: 0.4;
+}
+
+/* ═══ Section Titles ═══ */
+html[data-theme="dark"] .me-section-title {
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+/* ═══ Stats ═══ */
+html[data-theme="dark"] .me-stat {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .me-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Attendance List ═══ */
+html[data-theme="dark"] .me-attendance-item {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-attendance-title {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-attendance-meta {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Badges ═══ */
+html[data-theme="dark"] .me-status-badge.active {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-status-badge.inactive {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+/* ═══ Event Location ═══ */
+html[data-theme="dark"] .me-location {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Warnings / Alerts ═══ */
+html[data-theme="dark"] .me-warning {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #fbbf24 !important;
+}
+
+/* ═══ Cancel Request Info Box ═══ */
+html[data-theme="dark"] .me-cancel-info {
+  background: rgba(220, 38, 38, 0.15) !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+  color: #f87171 !important;
+}
+
+/* ═══ Transfer Info Box ═══ */
+html[data-theme="dark"] .me-transfer-info {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+  color: #60a5fa !important;
+}
