@@ -1,700 +1,3159 @@
 // ═══════════════════════════════════════════════════════
-//   Notifications Center + Browser Notifications
+//   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
+//   ⚡ محدّث: Properties + Active Template Banner + Image Slider
+//   ⚡ محدّث: GPS Location Picker for Locations Modal
 // ═══════════════════════════════════════════════════════
 
 import {
   collection,
   doc,
-  getDocs,
+  addDoc,
   updateDoc,
   deleteDoc,
+  getDocs,
+  getDoc,
   query,
-  where,
-  orderBy,
-  onSnapshot,
-  arrayUnion
+  where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
   db,
-  COLLECTIONS
+  COLLECTIONS,
+  SETTINGS_DOC
 } from './firebase-config.js';
 
 // ═══ State ═══
-let notificationsData = [];
-let currentUser = null;
-let unsubscribeListener = null;
-let unreadCount = 0;
-let previousNotifIds = [];
+let schUser = null;
+let schWorkspace = null;
+let schActiveTab = 'grid';
+
+let schEvents = [];
+let schEventTypes = [];
+let schLocations = [];
+let schTemplates = [];
+let schRequests = [];
+let schMyRequests = [];
+let schRegistrations = {};
+let schPeople = {};
+let schSettings = {};
+
+let schViewMode = 'month';
+let schCurrentDate = new Date();
+
+let currentTemplateId = null;
+let templateDaysState = {};
+
+let currentTemplateProps = {
+  text: '',
+  images: []
+};
+
+// ═══ Slider State ═══
+window.tplSliderImages = [];
+window.tplSliderCurrentIndex = 0;
+
+// ═══ Fullscreen Slider State ═══
+window.imgFsImages = [];
+window.imgFsCurrentIndex = 0;
+window.imgFsTouchStartX = 0;
+
+// ═══ Zoom State ═══
+window.imgFsZoom = {
+  scale: 1,
+  minScale: 1,
+  maxScale: 3,
+  translateX: 0,
+  translateY: 0,
+  initialDistance: 0,
+  initialScale: 1,
+  isPanning: false,
+  panStartX: 0,
+  panStartY: 0
+};
+
+window.imgFsLastTap = 0;
+
+// ═══ Constants ═══
+const MAX_TEMPLATE_IMAGES = 20;
+
+// ═══ أيام الأسبوع ═══
+const DAYS_OF_WEEK = [
+  { value: 'Saturday',  label: 'السبت',   short: 'سبت',   icon: '🕯️', jsDay: 6 },
+  { value: 'Sunday',    label: 'الأحد',   short: 'أحد',   icon: '⛪', jsDay: 0 },
+  { value: 'Monday',    label: 'الاثنين', short: 'اثنين', icon: '📅', jsDay: 1 },
+  { value: 'Tuesday',   label: 'الثلاثاء', short: 'ثلاثاء', icon: '📅', jsDay: 2 },
+  { value: 'Wednesday', label: 'الأربعاء', short: 'أربعاء', icon: '📅', jsDay: 3 },
+  { value: 'Thursday',  label: 'الخميس',  short: 'خميس',  icon: '📅', jsDay: 4 },
+  { value: 'Friday',    label: 'الجمعة',  short: 'جمعة',  icon: '⛪', jsDay: 5 }
+];
+
+const MONTHS_AR = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+];
 
 // ═══════════════════════════════════════════════════════
-//   Initialize
+//   Load Schedule Page
 // ═══════════════════════════════════════════════════════
 
-function initNotifications() {
+async function loadSchedulePage(area) {
+  area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
+
   try {
-    currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  } catch (e) {
-    currentUser = null;
-  }
-
-  if (!currentUser) return;
-
-  startNotificationsListener();
-  setupNotificationsEvents();
-
-  // ⚡ زر تفعيل الإشعارات في Topbar
-  setTimeout(() => {
-    if (typeof renderEnableNotifButton === 'function') {
-      renderEnableNotifButton();
+    schUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!schUser) {
+      window.location.href = '../index.html';
+      return;
     }
-  }, 500);
-}
+    schWorkspace = schUser.currentWorkspace || schUser.selectedRole || 'User';
 
-function setupNotificationsEvents() {
-  const bellBtn = document.getElementById('notificationsBtn');
-  if (bellBtn) {
-    bellBtn.onclick = () => openNotificationsModal();
-  }
-}
+    try {
+      const saved = localStorage.getItem('schViewMode');
+      if (saved === 'week' || saved === 'month') schViewMode = saved;
+    } catch (e) {}
 
-// ═══════════════════════════════════════════════════════
-//   Live Listener
-// ═══════════════════════════════════════════════════════
+    const [
+      eventsSnap,
+      eventTypesSnap,
+      locationsSnap,
+      templatesSnap,
+      peopleSnap,
+      registrationsSnap,
+      requestsSnap,
+      myRequestsSnap,
+      settingsDoc
+    ] = await Promise.all([
+      getDocs(collection(db, 'events')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'eventTypes')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'locations')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'massTemplates')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, COLLECTIONS.PEOPLE)).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'eventRegistrations')).catch(() => ({ docs: [] })),
+      getDocs(query(
+        collection(db, 'massChangeRequests'),
+        where('Status', '==', 'pending')
+      )).catch(() => ({ docs: [] })),
+      getDocs(query(
+        collection(db, 'massChangeRequests'),
+        where('RequesterEmail', '==', schUser.email)
+      )).catch(() => ({ docs: [] })),
+      getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC)).catch(() => null)
+    ]);
 
-function startNotificationsListener() {
-  if (unsubscribeListener) {
-    unsubscribeListener();
-  }
+    schEvents = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schEventTypes = eventTypesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schLocations = locationsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schTemplates = templatesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schRequests = requestsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schMyRequests = myRequestsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    schSettings = settingsDoc && settingsDoc.exists() ? settingsDoc.data() : {};
 
-  try {
-    const q = query(
-      collection(db, 'notifications'),
-      orderBy('CreatedAt', 'desc')
-    );
-
-    unsubscribeListener = onSnapshot(q, (snap) => {
-      const oldIds = [...previousNotifIds];
-
-      notificationsData = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(n => isNotificationForMe(n));
-
-      // ⚡ اعرض Browser Notification للإشعارات الجديدة
-      notificationsData.forEach(n => {
-        if (!oldIds.includes(n.id) && previousNotifIds.length > 0) {
-          if (typeof notifyNewNotification === 'function') {
-            notifyNewNotification(n);
-          }
-        }
-      });
-
-      // ⚡ حدّث القائمة
-      previousNotifIds = notificationsData.map(n => n.id);
-
-      updateBadge();
-    }, (err) => {
-      console.warn('⚠️ Notifications listener error:', err.message);
-
-      getDocs(collection(db, 'notifications'))
-        .then(snap => {
-          notificationsData = snap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(n => isNotificationForMe(n))
-            .sort((a, b) => {
-              const da = new Date(b.CreatedAt || 0);
-              const db2 = new Date(a.CreatedAt || 0);
-              return da - db2;
-            });
-          previousNotifIds = notificationsData.map(n => n.id);
-          updateBadge();
-        })
-        .catch(() => {});
+    schPeople = {};
+    peopleSnap.docs.forEach(d => {
+      schPeople[d.id] = { id: d.id, ...d.data() };
     });
+
+    schRegistrations = {};
+    registrationsSnap.docs.forEach(d => {
+      const reg = { id: d.id, ...d.data() };
+      if (!reg.EventID) return;
+      if (!schRegistrations[reg.EventID]) schRegistrations[reg.EventID] = [];
+      schRegistrations[reg.EventID].push(reg);
+    });
+
+    renderSchedulePage(area);
   } catch (err) {
-    console.warn('⚠️ startNotificationsListener error:', err.message);
+    console.error('❌ Load schedule error:', err);
+    area.innerHTML = `<div class="placeholder-page">
+      <h2>خطأ</h2>
+      <p>${err.message}</p>
+      <button class="btn-primary" onclick="loadSchedulePage(document.getElementById('contentArea'))" style="margin-top:16px;">إعادة المحاولة</button>
+    </div>`;
   }
 }
 
-function isNotificationForMe(notif) {
-  if (!currentUser || !currentUser.email) return false;
+// ═══════════════════════════════════════════════════════
+//   Render Page
+// ═══════════════════════════════════════════════════════
 
-  const targetType = String(notif.TargetType || '').toLowerCase();
-  const ws = currentUser.currentWorkspace || currentUser.selectedRole || '';
+function renderSchedulePage(area) {
+  const isAdmin = ['Owner', 'Admin'].includes(schWorkspace);
+  const isOwner = schWorkspace === 'Owner';
+  const isUser = ['User', 'Scanner'].includes(schWorkspace);
 
-  if (targetType === 'all') return true;
+  const tabs = [
+    { id: 'grid', label: '📊 الجدول', show: true },
+    { id: 'locations', label: '⛪ الأماكن', show: isAdmin },
+    { id: 'requests', label: '📨 الطلبات', show: isAdmin, count: schRequests.length },
+    { id: 'my-requests', label: '📝 طلباتي', show: isUser, count: schMyRequests.length },
+    { id: 'templates', label: '⚙️ الأنماط', show: isOwner }
+  ];
 
-  if (targetType === 'admins') {
-    return ['Owner', 'Admin'].includes(ws);
+  const visibleTabs = tabs.filter(t => t.show);
+
+  area.innerHTML = `
+    <div class="sch-container">
+
+      <div class="sch-tabs">
+        ${visibleTabs.map(t => `
+          <button class="sch-tab ${schActiveTab === t.id ? 'active' : ''}" data-tab="${t.id}">
+            ${t.label}
+            ${t.count ? `<span class="sch-tab-count">${t.count}</span>` : ''}
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="sch-content" id="schContent"></div>
+
+    </div>
+  `;
+
+  setupScheduleEvents();
+  renderActiveTab();
+}
+
+function setupScheduleEvents() {
+  document.querySelectorAll('.sch-tab').forEach(btn => {
+    btn.onclick = () => {
+      schActiveTab = btn.dataset.tab;
+      document.querySelectorAll('.sch-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderActiveTab();
+    };
+  });
+}
+
+function renderActiveTab() {
+  const container = document.getElementById('schContent');
+  if (!container) return;
+
+  if (schActiveTab === 'grid') {
+    renderGridView(container);
+  } else if (schActiveTab === 'locations') {
+    renderLocationsView(container);
+  } else if (schActiveTab === 'requests') {
+    renderRequestsView(container);
+  } else if (schActiveTab === 'my-requests') {
+    renderMyRequestsView(container);
+  } else if (schActiveTab === 'templates') {
+    renderTemplatesView(container);
   }
-
-  if (targetType === 'specific') {
-    const ids = Array.isArray(notif.TargetPersonIDs) ? notif.TargetPersonIDs : [];
-    return ids.includes(currentUser.personId);
-  }
-
-  if (targetType === 'person') {
-    return String(notif.TargetPersonID) === String(currentUser.personId);
-  }
-
-  return false;
 }
 
 // ═══════════════════════════════════════════════════════
-//   Badge
+//   1. Grid View
 // ═══════════════════════════════════════════════════════
 
-function updateBadge() {
-  unreadCount = notificationsData.filter(n => !isReadByMe(n)).length;
+function renderGridView(container) {
+  const headerHtml = renderGridHeader();
+  const bannerHtml = renderActiveTemplateBanner();
+  const bodyHtml = schViewMode === 'week' ? renderWeekView() : renderMonthView();
 
-  const badge = document.getElementById('notificationsBadge');
-  const bellBtn = document.getElementById('notificationsBtn');
+  container.innerHTML = `
+    ${headerHtml}
+    ${bannerHtml}
+    ${bodyHtml}
+  `;
+}
 
-  if (badge) {
-    if (unreadCount > 0) {
-      badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      badge.style.display = 'flex';
+// ═══════════════════════════════════════════════════════
+//   Active Template Banner
+// ═══════════════════════════════════════════════════════
+
+function renderActiveTemplateBanner() {
+  const activeTemplateId = schSettings.ActiveMassTemplateID;
+
+  if (!activeTemplateId) return '';
+
+  const activeTemplate = schTemplates.find(t => t.id === activeTemplateId);
+  if (!activeTemplate) return '';
+
+  const props = activeTemplate.Properties || {};
+  const hasText = !!(props.Text || '').trim();
+  const hasImages = Array.isArray(props.Images) && props.Images.length > 0;
+  const hasProps = hasText || hasImages;
+
+  return `
+    <div class="sch-active-template-banner">
+      <div class="sch-active-template-info">
+        <span class="sch-active-template-icon">📖</span>
+        <div class="sch-active-template-text">
+          <div class="sch-active-template-label">النمط الحالي</div>
+          <div class="sch-active-template-name">${escapeHtml(activeTemplate.Name || '')}</div>
+        </div>
+      </div>
+
+      ${hasProps ? `
+        <button class="btn-secondary sch-active-template-btn" onclick="viewTemplateProperties('${activeTemplate.id}')">
+          📖 عرض الخصائص
+        </button>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Grid Header
+// ═══════════════════════════════════════════════════════
+
+function renderGridHeader() {
+  const title = schViewMode === 'week'
+    ? renderWeekTitle()
+    : renderMonthTitle();
+
+  return `
+    <div class="sch-grid-header">
+      <div class="sch-view-switcher">
+        <button class="sch-view-btn ${schViewMode === 'week' ? 'active' : ''}" onclick="switchScheduleView('week')">
+          📆 أسبوعي
+        </button>
+        <button class="sch-view-btn ${schViewMode === 'month' ? 'active' : ''}" onclick="switchScheduleView('month')">
+          📅 شهري
+        </button>
+      </div>
+
+      <div class="sch-nav">
+        <button class="sch-nav-btn" onclick="changeScheduleRange(-1)">▶</button>
+        <div class="sch-nav-title">${title}</div>
+        <button class="sch-nav-btn" onclick="changeScheduleRange(1)">◀</button>
+      </div>
+
+      <div class="sch-nav-today">
+        <button class="sch-today-btn" onclick="goToScheduleToday()">اليوم</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMonthTitle() {
+  return `${MONTHS_AR[schCurrentDate.getMonth()]} ${schCurrentDate.getFullYear()}`;
+}
+
+function renderWeekTitle() {
+  const weekStart = getWeekStart(schCurrentDate);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  const startStr = `${weekStart.getDate()} ${MONTHS_AR[weekStart.getMonth()]}`;
+  const endStr = `${weekEnd.getDate()} ${MONTHS_AR[weekEnd.getMonth()]} ${weekEnd.getFullYear()}`;
+
+  return `${startStr} — ${endStr}`;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Month View
+// ═══════════════════════════════════════════════════════
+
+function renderMonthView() {
+  const year = schCurrentDate.getFullYear();
+  const month = schCurrentDate.getMonth();
+
+  const firstDayOfMonth = new Date(year, month, 1);
+  const startDate = new Date(firstDayOfMonth);
+  const firstDayJs = firstDayOfMonth.getDay();
+  const daysToSubtract = (firstDayJs - 6 + 7) % 7;
+  startDate.setDate(firstDayOfMonth.getDate() - daysToSubtract);
+
+  const lastDayOfMonth = new Date(year, month + 1, 0);
+  const endDate = new Date(lastDayOfMonth);
+  const lastDayJs = lastDayOfMonth.getDay();
+  const daysToAdd = (5 - lastDayJs + 7) % 7;
+  endDate.setDate(lastDayOfMonth.getDate() + daysToAdd);
+
+  const cells = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    cells.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  const headerRow = `
+    <div class="sch-month-header">
+      ${DAYS_OF_WEEK.map(d => `<div class="sch-month-header-cell">${d.label}</div>`).join('')}
+    </div>
+  `;
+
+  const cellsHtml = cells.map(date => renderMonthCell(date, month)).join('');
+
+  return `
+    <div class="sch-month-wrapper">
+      ${headerRow}
+      <div class="sch-month-grid">
+        ${cellsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderMonthCell(date, currentMonth) {
+  const isToday = isSameDay(date, new Date());
+  const isCurrentMonth = date.getMonth() === currentMonth;
+  const dateStr = formatDateISO(date);
+  const dayNum = date.getDate();
+
+  const events = getEventsForDate(date);
+
+  const MAX_VISIBLE = 3;
+  const visibleEvents = events.slice(0, MAX_VISIBLE);
+  const extraCount = events.length - MAX_VISIBLE;
+
+  const eventsHtml = visibleEvents.map(e => {
+    const eventType = schEventTypes.find(t => t.id === e.EventTypeID);
+    const icon = eventType ? (eventType.Icon || '📅') : '📅';
+    const isWeekly = String(e.Type || '').toLowerCase() === 'weekly';
+
+    return `
+      <div class="sch-month-event" onclick="event.stopPropagation(); openEventAttendeesModal('${e.id}')">
+        <span class="sch-month-event-icon">${icon}${isWeekly ? '' : ' ⭐'}</span>
+        <span class="sch-month-event-title">${escapeHtml(e.Title || '')}</span>
+        <span class="sch-month-event-time">${e.Time || ''}</span>
+      </div>
+    `;
+  }).join('');
+
+  const moreHtml = extraCount > 0
+    ? `<div class="sch-month-more">+${extraCount} أكثر</div>`
+    : '';
+
+  const emptyHtml = events.length === 0
+    ? '<div class="sch-month-empty"></div>'
+    : '';
+
+  return `
+    <div class="sch-month-cell ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''}"
+         onclick="openDayEventsModal('${dateStr}')"
+         data-date="${dateStr}">
+      <div class="sch-month-day-num">${dayNum}</div>
+      <div class="sch-month-events">
+        ${eventsHtml}
+        ${moreHtml}
+        ${emptyHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Week View
+// ═══════════════════════════════════════════════════════
+
+function renderWeekView() {
+  const weekStart = getWeekStart(schCurrentDate);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    days.push(d);
+  }
+
+  return `
+    <div class="sch-week-grid">
+      ${days.map(date => renderWeekColumn(date)).join('')}
+    </div>
+  `;
+}
+
+function renderWeekColumn(date) {
+  const isToday = isSameDay(date, new Date());
+  const dayName = DAYS_OF_WEEK.find(d => d.jsDay === date.getDay());
+  const dayLabel = dayName ? dayName.label : '';
+  const dayIcon = dayName ? dayName.icon : '';
+  const dateStr = formatDateISO(date);
+
+  const events = getEventsForDate(date);
+  events.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+
+  const eventsHtml = events.length === 0
+    ? '<div class="sch-week-empty">لا يوجد أحداث</div>'
+    : events.map(e => renderWeekEventCard(e)).join('');
+
+  return `
+    <div class="sch-week-col ${isToday ? 'today' : ''}">
+      <div class="sch-week-col-header" onclick="openDayEventsModal('${dateStr}')">
+        <div class="sch-week-day-icon">${dayIcon}</div>
+        <div class="sch-week-day-name">${dayLabel}</div>
+        <div class="sch-week-day-date">${date.getDate()} ${MONTHS_AR[date.getMonth()]}</div>
+      </div>
+      <div class="sch-week-col-body">
+        ${eventsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function renderWeekEventCard(event) {
+  const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
+  const icon = eventType ? (eventType.Icon || '📅') : '📅';
+  const endTime = getEventEndTime(event);
+  const locInfo = getEventLocationText(event);
+  const isWeekly = String(event.Type || '').toLowerCase() === 'weekly';
+
+  const stats = getEventAttendeesStats(event);
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+  let statsHtml = '';
+  if (isAdminView) {
+    if (scope === 'optional') {
+      statsHtml = `<div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.confirmed} مسجّل</span>
+      </div>`;
     } else {
-      badge.style.display = 'none';
+      statsHtml = `<div class="sch-event-stats">
+        <span class="sch-stat-committed">👥 ${stats.committed}</span>
+        <span class="sch-stat-confirmed">✅ ${stats.confirmed}</span>
+      </div>`;
     }
+  } else {
+    statsHtml = `<div class="sch-event-stats">
+      <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+    </div>`;
   }
 
-  if (bellBtn) {
-    bellBtn.classList.toggle('has-unread', unreadCount > 0);
-  }
-}
-
-function isReadByMe(notif) {
-  const readBy = Array.isArray(notif.ReadBy) ? notif.ReadBy : [];
-  return readBy.includes(currentUser.email);
+  return `
+    <div class="sch-week-event" onclick="openEventAttendeesModal('${event.id}')">
+      <div class="sch-week-event-header">
+        <span class="sch-week-event-icon">${icon}</span>
+        <span class="sch-week-event-title">${escapeHtml(event.Title || '')}</span>
+        ${!isWeekly ? '<span class="sch-week-event-once">⭐</span>' : ''}
+      </div>
+      <div class="sch-week-event-info">
+        <span>🕐 ${event.Time || '-'} - ${endTime}</span>
+        <span>📍 ${escapeHtml(locInfo)}</span>
+      </div>
+      ${statsHtml}
+    </div>
+  `;
 }
 
 // ═══════════════════════════════════════════════════════
-//   Modal
+//   Get Events For Date
 // ═══════════════════════════════════════════════════════
 
-function openNotificationsModal() {
-  let modal = document.getElementById('notificationsModal');
+function getEventsForDate(date) {
+  const dateISO = formatDateISO(date);
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+
+  return schEvents.filter(e => {
+    const status = String(e.Status || '').toLowerCase();
+    if (status !== 'active') return false;
+
+    const type = String(e.Type || 'once').toLowerCase();
+
+    if (type === 'weekly') {
+      return e.DayOfWeek === dayName;
+    }
+
+    if (type === 'once') {
+      return e.Date === dateISO;
+    }
+
+    return false;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//   Navigation
+// ═══════════════════════════════════════════════════════
+
+window.switchScheduleView = function(mode) {
+  if (mode !== 'week' && mode !== 'month') return;
+  schViewMode = mode;
+  try { localStorage.setItem('schViewMode', mode); } catch (e) {}
+  renderGridView(document.getElementById('schContent'));
+};
+
+window.changeScheduleRange = function(direction) {
+  if (schViewMode === 'week') {
+    schCurrentDate.setDate(schCurrentDate.getDate() + direction * 7);
+  } else {
+    schCurrentDate.setMonth(schCurrentDate.getMonth() + direction);
+  }
+  renderGridView(document.getElementById('schContent'));
+};
+
+window.goToScheduleToday = function() {
+  schCurrentDate = new Date();
+  renderGridView(document.getElementById('schContent'));
+};
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = (day - 6 + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+// ═══════════════════════════════════════════════════════
+//   Day Events Modal
+// ═══════════════════════════════════════════════════════
+
+window.openDayEventsModal = function(dateISO) {
+  const date = new Date(dateISO + 'T00:00:00');
+  const events = getEventsForDate(date);
+  events.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+
+  const dayName = DAYS_OF_WEEK.find(d => d.jsDay === date.getDay());
+  const dayLabel = dayName ? dayName.label : '';
+  const dateFormatted = `${dayLabel} ${date.getDate()} ${MONTHS_AR[date.getMonth()]} ${date.getFullYear()}`;
+
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+
+  let modal = document.getElementById('dayEventsModal');
   if (!modal) {
     modal = document.createElement('div');
-    modal.id = 'notificationsModal';
+    modal.id = 'dayEventsModal';
     modal.className = 'modal-overlay';
     document.body.appendChild(modal);
   }
 
-  renderNotificationsModal(modal);
-  modal.style.display = 'flex';
-}
-
-function closeNotificationsModal() {
-  const modal = document.getElementById('notificationsModal');
-  if (modal) modal.style.display = 'none';
-}
-
-function renderNotificationsModal(modal) {
-  const unread = notificationsData.filter(n => !isReadByMe(n));
-
   let contentHtml = '';
-
-  if (notificationsData.length === 0) {
+  if (events.length === 0) {
     contentHtml = `
-      <div class="notif-empty">
-        <div class="notif-empty-icon">🔔</div>
-        <p>لا توجد إشعارات</p>
+      <div class="att-empty">
+        <div class="att-empty-icon">📅</div>
+        <p>لا يوجد أحداث في هذا اليوم</p>
       </div>
     `;
   } else {
-    contentHtml = notificationsData.map(n => {
-      const isRead = isReadByMe(n);
-      const timeStr = formatRelativeTime(n.CreatedAt);
-      const typeIcon = getTypeIcon(n.Type);
-      const clickable = isClickable(n);
+    contentHtml = events.map(e => {
+      const eventType = schEventTypes.find(t => t.id === e.EventTypeID);
+      const icon = eventType ? (eventType.Icon || '📅') : '📅';
+      const typeName = eventType ? eventType.Name : '';
+      const endTime = getEventEndTime(e);
+      const locInfo = getEventLocationText(e);
+      const isWeekly = String(e.Type || '').toLowerCase() === 'weekly';
+      const stats = getEventAttendeesStats(e);
+
+      const scope = String(e.RegistrationScope || 'all').toLowerCase();
+      let scopeBadge = '';
+      if (scope === 'optional') {
+        scopeBadge = '<span class="sch-scope-badge optional">🟢 اختياري</span>';
+      } else if (scope === 'specific') {
+        scopeBadge = '<span class="sch-scope-badge specific">👥 قائمة</span>';
+      } else {
+        scopeBadge = '<span class="sch-scope-badge all">🌍 للكل</span>';
+      }
+
+      let statsHtml = '';
+      if (isAdminView) {
+        if (scope === 'optional') {
+          statsHtml = `<div class="sch-event-stats">
+            <span class="sch-stat-committed">👥 ${stats.confirmed} مسجّل</span>
+          </div>`;
+        } else {
+          statsHtml = `<div class="sch-event-stats">
+            <span class="sch-stat-committed">👥 ${stats.committed} ملتزم</span>
+            <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+          </div>`;
+        }
+      } else {
+        statsHtml = `<div class="sch-event-stats">
+          <span class="sch-stat-confirmed">✅ ${stats.confirmed} مؤكد</span>
+        </div>`;
+      }
 
       return `
-        <div class="notif-item ${isRead ? 'read' : 'unread'} ${clickable ? 'clickable' : ''}"
-             data-id="${n.id}">
-          <div class="notif-item-icon">${typeIcon}</div>
-          <div class="notif-item-content">
-            <div class="notif-item-title">${escapeHtml(n.Title || '')}</div>
-            <div class="notif-item-body">${formatBody(n.Body || '')}</div>
-            <div class="notif-item-time">${timeStr}</div>
+        <div class="sch-day-event-card" onclick="closeDayEventsModal(); openEventAttendeesModal('${e.id}')">
+          <div class="sch-day-event-header">
+            <span class="sch-day-event-icon">${icon}</span>
+            <span class="sch-day-event-title">${escapeHtml(e.Title || '')}</span>
+            ${scopeBadge}
+            ${isWeekly ? '<span class="sch-week-event-weekly">🔄</span>' : '<span class="sch-week-event-once">⭐</span>'}
           </div>
-          ${!isRead ? '<div class="notif-item-dot"></div>' : ''}
-          <button class="notif-item-delete" data-delete-id="${n.id}" title="حذف">✕</button>
+          ${typeName ? `<div class="sch-day-event-line">📋 ${escapeHtml(typeName)}</div>` : ''}
+          <div class="sch-day-event-line">🕐 ${e.Time || '-'} - ${endTime}</div>
+          <div class="sch-day-event-line">📍 ${escapeHtml(locInfo)}</div>
+          ${statsHtml}
         </div>
       `;
     }).join('');
   }
 
   modal.innerHTML = `
-    <div class="modal-content notif-modal-content">
+    <div class="modal-content" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;">
       <div class="modal-header">
-        <h2>🔔 الإشعارات ${unreadCount > 0 ? `<span class="notif-count">${unreadCount} جديد</span>` : ''}</h2>
-        <button class="modal-close" id="closeNotifModal">✕</button>
+        <h2>📅 ${dateFormatted}</h2>
+        <button class="modal-close" onclick="closeDayEventsModal()">✕</button>
       </div>
-      <div class="modal-body notif-modal-body">
-        ${notificationsData.length > 0 ? `
-          <div class="notif-actions">
-            ${unread.length > 0 ? `<button class="btn-small" id="markAllReadBtn">✅ تعليم الكل كمقروء</button>` : ''}
-            <button class="btn-small danger" id="clearAllNotifBtn">🗑️ حذف الكل</button>
-          </div>
-        ` : ''}
-        <div class="notif-list">
-          ${contentHtml}
-        </div>
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+        ${contentHtml}
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeDayEventsModal()">إغلاق</button>
       </div>
     </div>
   `;
 
-  const closeBtn = document.getElementById('closeNotifModal');
-  if (closeBtn) closeBtn.onclick = closeNotificationsModal;
+  modal.style.display = 'flex';
+};
 
-  const markAllBtn = document.getElementById('markAllReadBtn');
-  if (markAllBtn) markAllBtn.onclick = window.markAllAsRead;
-
-  const clearAllBtn = document.getElementById('clearAllNotifBtn');
-  if (clearAllBtn) clearAllBtn.onclick = window.clearAllNotifications;
-
-  modal.querySelectorAll('.notif-item').forEach(el => {
-    const notifId = el.dataset.id;
-
-    el.onclick = (e) => {
-      if (e.target.closest('.notif-item-delete')) return;
-      handleNotificationClick(notifId);
-    };
-  });
-
-  modal.querySelectorAll('.notif-item-delete').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const notifId = btn.dataset.deleteId;
-      if (notifId) window.deleteNotification(notifId);
-    };
-  });
-}
+window.closeDayEventsModal = function() {
+  const modal = document.getElementById('dayEventsModal');
+  if (modal) modal.style.display = 'none';
+};
 
 // ═══════════════════════════════════════════════════════
-//   Handle Click (Navigate)
+//   Event Attendees Modal
 // ═══════════════════════════════════════════════════════
 
-function isClickable(notif) {
-  const type = String(notif.Type || '').toLowerCase();
-  const clickableTypes = [
-    'chat_message',
-    'transfer_request',
-    'transfer_approved',
-    'transfer_rejected',
-    'event_added',
-    'event_updated',
-    'event_cancelled',
-    'rsvp_request',
-    'person_confirmed',
-    'person_cancelled_admin',
-    'person_cancelled_member',
-    'person_cancelled_public'
-  ];
-  return clickableTypes.includes(type);
-}
-
-async function handleNotificationClick(notifId) {
-  const notif = notificationsData.find(n => n.id === notifId);
-  if (!notif) return;
-
-  await markAsRead(notifId);
-
-  const type = String(notif.Type || '').toLowerCase();
-
-  console.log('🔔 Notification clicked:', type, notif);
-
-  closeNotificationsModal();
-
-  if (type === 'chat_message') {
-    navigateToChat(notif);
+window.openEventAttendeesModal = function(eventId) {
+  const event = schEvents.find(e => e.id === eventId);
+  if (!event) {
+    alert('الحدث غير موجود');
     return;
   }
 
-  if (type === 'transfer_request') {
-    navigateToScheduleTab('requests');
-    return;
+  const isAdminView = ['Owner', 'Admin'].includes(schWorkspace);
+
+  const attendees = getEventAttendees(event);
+  const stats = getEventAttendeesStats(event);
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+  const confirmedList = attendees.filter(a => a.rsvpStatus === 'confirmed');
+  const pendingList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'pending') : [];
+  const cancelRequestedList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'cancel_requested') : [];
+  const cancelledList = isAdminView ? attendees.filter(a => a.rsvpStatus === 'cancelled') : [];
+
+  const eventType = schEventTypes.find(t => t.id === event.EventTypeID);
+  const eventTypeIcon = eventType ? (eventType.Icon || '📅') : '📅';
+  const eventTypeName = eventType ? eventType.Name : '';
+  const endTime = getEventEndTime(event);
+  const locInfo = getEventLocationText(event);
+
+  const type = String(event.Type || 'once').toLowerCase();
+  let dateLine = '';
+  if (type === 'weekly') {
+    const dayLabel = DAYS_OF_WEEK.find(d => d.value === event.DayOfWeek)?.label || '';
+    dateLine = `كل ${dayLabel}`;
+  } else if (event.Date) {
+    const d = new Date(event.Date + 'T00:00:00');
+    dateLine = `${d.getDate()} ${MONTHS_AR[d.getMonth()]} ${d.getFullYear()}`;
   }
 
-  if (type === 'transfer_approved' || type === 'transfer_rejected') {
-    navigateToScheduleTab('my-requests');
-    return;
-  }
-
-  if (type === 'event_added' || type === 'event_updated' || type === 'event_cancelled') {
-    navigateToTab('events');
-    return;
-  }
-
-  if (type === 'rsvp_request') {
-    navigateToTab('my-events');
-    return;
-  }
-
-  if (type === 'person_confirmed' || type.startsWith('person_cancelled')) {
-    navigateToTab('attendance');
-    return;
-  }
-
-  console.log('⚠️ Unknown notification type:', type);
-}
-
-function navigateToTab(tabId) {
-  const navItem = document.querySelector(`.nav-item[data-page="${tabId}"]`);
-
-  if (navItem) {
-    navItem.click();
-    console.log(`✅ Navigated to: ${tabId}`);
+  let scopeBadge = '';
+  if (scope === 'optional') {
+    scopeBadge = '<span class="sch-scope-badge optional">🟢 اختياري</span>';
+  } else if (scope === 'specific') {
+    scopeBadge = '<span class="sch-scope-badge specific">👥 إلزامي لقائمة</span>';
   } else {
-    console.warn(`⚠️ Tab not found: ${tabId}`);
+    scopeBadge = '<span class="sch-scope-badge all">🌍 إلزامي للكل</span>';
   }
+
+  let modal = document.getElementById('attendeesModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'attendeesModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  let statsBoxHtml = '';
+  if (isAdminView) {
+    if (scope === 'optional') {
+      statsBoxHtml = `
+        <div class="att-stats-box" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="att-stat-item confirmed">
+            <span class="att-stat-number">${stats.confirmed}</span>
+            <span class="att-stat-label">✅ مسجّل</span>
+          </div>
+          <div class="att-stat-item cancel-req">
+            <span class="att-stat-number">${stats.cancelRequested}</span>
+            <span class="att-stat-label">🔄 طلب إلغاء</span>
+          </div>
+          <div class="att-stat-item cancelled">
+            <span class="att-stat-number">${stats.cancelled}</span>
+            <span class="att-stat-label">❌ ملغي</span>
+          </div>
+        </div>
+      `;
+    } else {
+      statsBoxHtml = `
+        <div class="att-stats-box">
+          <div class="att-stat-item">
+            <span class="att-stat-number">${stats.committed}</span>
+            <span class="att-stat-label">👥 ملتزم</span>
+          </div>
+          <div class="att-stat-item confirmed">
+            <span class="att-stat-number">${stats.confirmed}</span>
+            <span class="att-stat-label">✅ مؤكد</span>
+          </div>
+          <div class="att-stat-item pending">
+            <span class="att-stat-number">${stats.pending}</span>
+            <span class="att-stat-label">⏳ انتظار</span>
+          </div>
+          <div class="att-stat-item cancel-req">
+            <span class="att-stat-number">${stats.cancelRequested}</span>
+            <span class="att-stat-label">🔄 طلب إلغاء</span>
+          </div>
+          <div class="att-stat-item cancelled">
+            <span class="att-stat-number">${stats.cancelled}</span>
+            <span class="att-stat-label">❌ ملغي</span>
+          </div>
+        </div>
+      `;
+    }
+  } else {
+    statsBoxHtml = `
+      <div class="att-stats-box" style="grid-template-columns: repeat(1, 1fr);">
+        <div class="att-stat-item confirmed">
+          <span class="att-stat-number">${stats.confirmed}</span>
+          <span class="att-stat-label">✅ مؤكد الحضور</span>
+        </div>
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>${eventTypeIcon} ${escapeHtml(event.Title || '')}</h2>
+        <button class="modal-close" onclick="closeAttendeesModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <div class="att-event-info">
+          ${eventTypeName ? `<div class="att-event-line"><span>📋</span><span>${escapeHtml(eventTypeName)}</span></div>` : ''}
+          <div class="att-event-line"><span>⚙️</span><span>${scopeBadge}</span></div>
+          ${dateLine ? `<div class="att-event-line"><span>${type === 'weekly' ? '🔄' : '📅'}</span><span>${dateLine}</span></div>` : ''}
+          <div class="att-event-line"><span>🕐</span><span>${event.Time || '-'} - ${endTime}</span></div>
+          <div class="att-event-line"><span>📍</span><span>${escapeHtml(locInfo)}</span></div>
+        </div>
+
+        ${statsBoxHtml}
+
+        ${renderAttendeesGroup('✅ المؤكدين', confirmedList, 'confirmed')}
+        ${isAdminView && scope !== 'optional' ? renderAttendeesGroup('⏳ في انتظار التأكيد', pendingList, 'pending') : ''}
+        ${isAdminView ? renderAttendeesGroup('🔄 طلبات إلغاء', cancelRequestedList, 'cancel-requested') : ''}
+        ${isAdminView ? renderAttendeesGroup('❌ الملغيين', cancelledList, 'cancelled') : ''}
+
+        ${confirmedList.length === 0 && !isAdminView ? `
+          <div class="att-empty">
+            <div class="att-empty-icon">👥</div>
+            <p>لا يوجد مسجّلين بعد</p>
+          </div>
+        ` : ''}
+
+        ${attendees.length === 0 && isAdminView ? `
+          <div class="att-empty">
+            <div class="att-empty-icon">👥</div>
+            <p>${scope === 'optional' ? 'لا يوجد مسجّلين بعد' : 'لا يوجد ملتزمين بهذا الحدث'}</p>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAttendeesModal()">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+function renderAttendeesGroup(title, list, variant) {
+  if (list.length === 0) return '';
+
+  const itemsHtml = list.map(att => {
+    const person = att.person;
+    const name = getPersonFullName(person);
+    const initial = (person.FirstName || name || '?').charAt(0);
+
+    const photoHtml = person.PhotoURL
+      ? `<img src="${person.PhotoURL}" alt="" class="att-mini-photo" />`
+      : `<div class="att-mini-photo-placeholder">${escapeHtml(initial)}</div>`;
+
+    let subText = '';
+    if (variant === 'confirmed' && att.registration?.ConfirmedAt) {
+      const d = parseDate(att.registration.ConfirmedAt);
+      if (d) subText = `أكّد ${formatRelativeTime(d)}`;
+    } else if (variant === 'cancel-requested' && att.registration?.CancelRequestedAt) {
+      const d = parseDate(att.registration.CancelRequestedAt);
+      if (d) subText = `طلب ${formatRelativeTime(d)}`;
+    }
+
+    return `
+      <div class="att-person-row">
+        ${photoHtml}
+        <div class="att-person-info">
+          <div class="att-person-name">${escapeHtml(name)}</div>
+          ${subText ? `<div class="att-person-sub">${escapeHtml(subText)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="att-group">
+      <div class="att-group-title ${variant}">
+        ${title}
+        <span class="att-group-count">${list.length}</span>
+      </div>
+      <div class="att-group-list">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
 }
 
-function navigateToScheduleTab(subTab) {
-  const scheduleNav = document.querySelector('.nav-item[data-page="schedule"]');
+window.closeAttendeesModal = function() {
+  const modal = document.getElementById('attendeesModal');
+  if (modal) modal.style.display = 'none';
+};
 
-  if (!scheduleNav) {
-    console.warn('⚠️ Schedule tab not available');
+// ═══════════════════════════════════════════════════════
+//   Get Event Attendees
+// ═══════════════════════════════════════════════════════
+
+function getEventAttendeesStats(event) {
+  const attendees = getEventAttendees(event);
+
+  let committed = attendees.length;
+  let confirmed = 0;
+  let pending = 0;
+  let cancelRequested = 0;
+  let cancelled = 0;
+
+  for (const att of attendees) {
+    if (att.rsvpStatus === 'confirmed') confirmed++;
+    else if (att.rsvpStatus === 'cancel_requested') cancelRequested++;
+    else if (att.rsvpStatus === 'cancelled') cancelled++;
+    else pending++;
+  }
+
+  return { committed, confirmed, pending, cancelRequested, cancelled };
+}
+
+function getEventAttendees(event) {
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+  const registrations = schRegistrations[event.id] || [];
+
+  const regByPerson = {};
+  registrations.forEach(r => {
+    if (r.PersonID) regByPerson[r.PersonID] = r;
+  });
+
+  let personIds = [];
+
+  if (scope === 'optional') {
+    personIds = registrations.map(r => r.PersonID).filter(id => schPeople[id]);
+  } else if (scope === 'specific') {
+    const ids = Array.isArray(event.RegistrationPersonIDs) ? event.RegistrationPersonIDs : [];
+    personIds = ids.filter(id => schPeople[id]);
+  } else {
+    personIds = Object.keys(schPeople).filter(id => {
+      const p = schPeople[id];
+      return String(p.Status || 'active').toLowerCase() === 'active';
+    });
+  }
+
+  const attendees = personIds.map(personId => {
+    const person = schPeople[personId];
+    const reg = regByPerson[personId];
+    const rsvpStatus = reg?.Status || 'pending';
+    return { person, rsvpStatus, registration: reg };
+  });
+
+  const order = { confirmed: 0, pending: 1, cancel_requested: 2, cancelled: 3 };
+  attendees.sort((a, b) => {
+    const oa = order[a.rsvpStatus] ?? 4;
+    const ob = order[b.rsvpStatus] ?? 4;
+    if (oa !== ob) return oa - ob;
+    return getPersonFullName(a.person).localeCompare(getPersonFullName(b.person), 'ar');
+  });
+
+  return attendees;
+}
+
+// ═══════════════════════════════════════════════════════
+//   2. Locations View
+// ═══════════════════════════════════════════════════════
+
+function renderLocationsView(container) {
+  const isOwnerOrAdmin = ['Owner', 'Admin'].includes(schWorkspace);
+
+  container.innerHTML = `
+    <div class="sch-locations-header">
+      <h3>⛪ الأماكن (${schLocations.length})</h3>
+      ${isOwnerOrAdmin ? `
+        <button class="btn-primary" onclick="openLocationModal()">➕ إضافة مكان</button>
+      ` : ''}
+    </div>
+
+    ${schLocations.length === 0 ? `
+      <div class="sch-empty">
+        <div class="sch-empty-icon">⛪</div>
+        <h3>لا يوجد أماكن</h3>
+        <p>ابدأ بإضافة مكان جديد</p>
+      </div>
+    ` : `
+      <div class="sch-locations-grid">
+        ${schLocations.map(loc => renderLocationCard(loc, isOwnerOrAdmin)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function renderLocationCard(loc, isAdmin) {
+  const qrHtml = loc.QRCode
+    ? `<div class="sch-loc-qr" id="qr-${loc.id}" data-qr="${escapeHtml(loc.QRCode)}"></div>`
+    : '<p class="sch-loc-no-qr">لا يوجد QR</p>';
+
+  return `
+    <div class="sch-loc-card">
+      <div class="sch-loc-header">
+        <h4>${escapeHtml(loc.Name || '')}</h4>
+        <span class="status-badge ${loc.Status === 'active' ? 'active' : 'inactive'}">
+          ${loc.Status === 'active' ? '✅ نشط' : '⏸️ معطل'}
+        </span>
+      </div>
+
+      <div class="sch-loc-info">
+        <div class="sch-loc-row">
+          <span>📍</span>
+          <span>${loc.Lat?.toFixed(5) || '-'}, ${loc.Lng?.toFixed(5) || '-'}</span>
+        </div>
+        <div class="sch-loc-row">
+          <span>📏</span>
+          <span>نطاق: ${loc.Radius || 4}م</span>
+        </div>
+      </div>
+
+      <div class="sch-loc-qr-wrap">
+        ${qrHtml}
+      </div>
+
+      ${isAdmin ? `
+        <div class="sch-loc-actions">
+          <button class="btn-small" onclick="showLocationQR('${loc.id}')">📷 QR</button>
+          <button class="btn-small" onclick="editLocation('${loc.id}')">✏️ تعديل</button>
+          <button class="btn-small danger" onclick="deleteLocation('${loc.id}')">🗑️ حذف</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   3. Requests View
+// ═══════════════════════════════════════════════════════
+
+function renderRequestsView(container) {
+  container.innerHTML = `
+    <div class="sch-requests-header">
+      <h3>📨 طلبات النقل (${schRequests.length})</h3>
+    </div>
+
+    ${schRequests.length === 0 ? `
+      <div class="sch-empty">
+        <div class="sch-empty-icon">📨</div>
+        <h3>لا يوجد طلبات</h3>
+        <p>مفيش طلبات نقل مقدمها المستخدمين حاليًا</p>
+      </div>
+    ` : `
+      <div class="sch-requests-list">
+        ${schRequests.map(r => renderRequestCard(r, true)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function renderMyRequestsView(container) {
+  container.innerHTML = `
+    <div class="sch-requests-header">
+      <h3>📝 طلباتي (${schMyRequests.length})</h3>
+    </div>
+
+    ${schMyRequests.length === 0 ? `
+      <div class="sch-empty">
+        <div class="sch-empty-icon">📝</div>
+        <h3>لا يوجد طلبات</h3>
+        <p>لسه مقدمتش أي طلب</p>
+      </div>
+    ` : `
+      <div class="sch-requests-list">
+        ${schMyRequests.map(r => renderRequestCard(r, false)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function renderRequestCard(req, showActions) {
+  const requester = schPeople[req.RequesterPersonID];
+  const requesterName = req.RequesterName
+    || (requester ? getPersonFullName(requester) : 'غير معروف');
+
+  const requestedAt = parseDate(req.CreatedAt);
+  const requestedAgo = requestedAt ? formatRelativeTime(requestedAt) : '';
+
+  let statusBadge = '';
+  if (req.Status === 'pending') statusBadge = '<span class="status-badge pending">⏳ في انتظار</span>';
+  else if (req.Status === 'approved') statusBadge = '<span class="status-badge active">✅ موافق عليه</span>';
+  else if (req.Status === 'rejected') statusBadge = '<span class="status-badge inactive">❌ مرفوض</span>';
+
+  return `
+    <div class="sch-request-card">
+      <div class="sch-req-header">
+        <div class="sch-req-person">
+          <strong>👤 ${escapeHtml(requesterName)}</strong>
+        </div>
+        ${statusBadge}
+      </div>
+
+      <div class="sch-req-body">
+        <div class="sch-req-line">
+          <span>من:</span>
+          <strong>${escapeHtml(req.FromEventTitle || '-')}</strong>
+          ${req.FromDate ? `<span class="sch-req-date">${formatDateShort(req.FromDate)}</span>` : ''}
+        </div>
+        <div class="sch-req-line">
+          <span>إلى:</span>
+          <strong>${escapeHtml(req.ToEventTitle || '-')}</strong>
+          ${req.ToDate ? `<span class="sch-req-date">${formatDateShort(req.ToDate)}</span>` : ''}
+        </div>
+        ${req.Reason ? `<div class="sch-req-reason"><strong>السبب:</strong> ${escapeHtml(req.Reason)}</div>` : ''}
+      </div>
+
+      ${requestedAgo ? `<div class="sch-req-time">🕐 منذ ${requestedAgo}</div>` : ''}
+
+      ${showActions && req.Status === 'pending' ? `
+        <div class="sch-req-actions">
+          <button class="att-cancel-btn approve" onclick="approveRequest('${req.id}')">✅ موافقة</button>
+          <button class="att-cancel-btn reject" onclick="rejectRequest('${req.id}')">❌ رفض</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   4. Templates View
+// ═══════════════════════════════════════════════════════
+
+function renderTemplatesView(container) {
+  const isOwner = schWorkspace === 'Owner';
+  const isViewer = !isOwner && ['User', 'Admin', 'Scanner'].includes(schWorkspace);
+
+  container.innerHTML = `
+    <div class="sch-templates-header">
+      <h3>⚙️ الأنماط (${schTemplates.length})</h3>
+      ${isOwner ? `
+        <button class="btn-primary" onclick="openTemplateModal()">➕ نمط جديد</button>
+      ` : ''}
+    </div>
+
+    ${schTemplates.length === 0 ? `
+      <div class="sch-empty">
+        <div class="sch-empty-icon">⚙️</div>
+        <h3>لا يوجد أنماط</h3>
+        <p>ابدأ بإنشاء نمط جديد لتوزيع الأحداث على أيام الأسبوع</p>
+      </div>
+    ` : `
+      <div class="sch-templates-list">
+        ${schTemplates.map(t => renderTemplateCard(t, isOwner, isViewer)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function normalizeSchedule(schedule) {
+  if (!schedule || typeof schedule !== 'object') return {};
+
+  const normalized = {};
+  DAYS_OF_WEEK.forEach(d => {
+    const dayData = schedule[d.value];
+    normalized[d.value] = Array.isArray(dayData) ? dayData : [];
+  });
+  return normalized;
+}
+
+function renderTemplateCard(template, isOwner, isViewer) {
+  const isActive = schSettings.ActiveMassTemplateID === template.id;
+  const schedule = normalizeSchedule(template.Schedule);
+
+  let totalEvents = 0;
+  DAYS_OF_WEEK.forEach(d => {
+    const dayEvents = schedule[d.value] || [];
+    totalEvents += dayEvents.length;
+  });
+
+  const props = template.Properties || {};
+  const hasText = !!(props.Text || '').trim();
+  const hasImages = Array.isArray(props.Images) && props.Images.length > 0;
+  const hasProps = hasText || hasImages;
+
+  return `
+    <div class="sch-template-card ${isActive ? 'active' : ''}">
+      <div class="sch-template-header">
+        <div class="sch-template-title-wrap">
+          <h4>${escapeHtml(template.Name || '')}</h4>
+          <div class="sch-template-meta">
+            ${isActive ? '<span class="status-badge active">✅ النمط النشط</span>' : ''}
+            <span class="status-badge ${template.Status === 'active' ? 'active' : 'inactive'}">
+              ${template.Status === 'active' ? '✅ مفعّل' : '⏸️ معطّل'}
+            </span>
+            <span class="sch-template-events-count">📋 ${totalEvents} حدث</span>
+            ${hasProps ? `<span class="sch-template-props-badge">📖 خصائص</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      ${template.Description ? `<p class="sch-template-desc">${escapeHtml(template.Description)}</p>` : ''}
+
+      <div class="sch-template-days">
+        ${DAYS_OF_WEEK.map(day => {
+          const dayEvents = schedule[day.value] || [];
+          return `
+            <div class="sch-template-day-accordion" data-template="${template.id}" data-day="${day.value}">
+              <button class="sch-template-day-btn" onclick="toggleTemplateDay('${template.id}', '${day.value}')">
+                <span class="sch-tpl-day-icon">${day.icon}</span>
+                <span class="sch-tpl-day-label">${day.label}</span>
+                <span class="sch-tpl-day-count">${dayEvents.length}</span>
+                <span class="sch-tpl-day-arrow">▾</span>
+              </button>
+              <div class="sch-template-day-content" style="display:none;">
+                ${dayEvents.length === 0 ? `
+                  <div class="sch-tpl-day-empty">لا يوجد أحداث في هذا اليوم</div>
+                ` : dayEvents.map((e, idx) => `
+                  <div class="sch-tpl-event-item">
+                    <div class="sch-tpl-event-header">
+                      <strong>${escapeHtml(e.Title || '')}</strong>
+                    </div>
+                    <div class="sch-tpl-event-info">
+                      <span>🕐 ${e.Time || '-'} - ${e.EndTime || '-'}</span>
+                      <span>👥 ${getScopeLabel(e.RegistrationScope)}</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      ${isOwner || isViewer ? `
+        <div class="sch-template-actions">
+          ${hasProps ? `
+            <button class="btn-small" onclick="viewTemplateProperties('${template.id}')">
+              📖 عرض الخصائص
+            </button>
+          ` : ''}
+          ${isOwner ? `
+            ${!isActive ? `<button class="btn-small" onclick="setActiveTemplate('${template.id}')">⭐ تفعيل كنمط</button>` : ''}
+            <button class="btn-small" onclick="editTemplate('${template.id}')">✏️ تعديل</button>
+            <button class="btn-small" onclick="toggleTemplateStatus('${template.id}')">
+              ${template.Status === 'active' ? '⏸️ تعطيل' : '✅ تفعيل'}
+            </button>
+            <button class="btn-small danger" onclick="deleteTemplate('${template.id}')">🗑️ حذف</button>
+          ` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function getScopeLabel(scope) {
+  const s = String(scope || 'all').toLowerCase();
+  if (s === 'optional') return '🟢 اختياري';
+  if (s === 'specific') return '👥 قائمة محددة';
+  return '🌍 للكل';
+}
+
+window.toggleTemplateDay = function(templateId, dayValue) {
+  const el = document.querySelector(`.sch-template-day-accordion[data-template="${templateId}"][data-day="${dayValue}"]`);
+  if (!el) return;
+  const content = el.querySelector('.sch-template-day-content');
+  const arrow = el.querySelector('.sch-tpl-day-arrow');
+  if (!content) return;
+
+  const isOpen = content.style.display !== 'none';
+  content.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▾' : '▴';
+};
+
+// ═══════════════════════════════════════════════════════
+//   Template Properties — Editor (in Modal)
+// ═══════════════════════════════════════════════════════
+
+function renderTemplatePropertiesSection(template) {
+  const props = template?.Properties || {};
+  const text = props.Text || '';
+  const images = Array.isArray(props.Images) ? props.Images : [];
+
+  currentTemplateProps = {
+    text: text,
+    images: [...images]
+  };
+
+  return `
+    <div class="tpl-props-section">
+      <h4>📖 خصائص النمط</h4>
+      <p class="hint">
+        دي معلومات هيشوفها المستخدمين و الأدمن و السكانر عن النمط.
+        تقدر تكتب نص و/أو ترفع صور.
+      </p>
+
+      <div class="form-row">
+        <label>نص الشرح (اختياري)</label>
+        <textarea id="tplPropsText" rows="6" placeholder="اكتب شرح مفصل عن النمط...">${escapeHtml(text)}</textarea>
+      </div>
+
+      <div class="form-row">
+        <label>صور (حتى ${MAX_TEMPLATE_IMAGES} صور)</label>
+
+        <div id="tplPropsImagesList" class="tpl-props-images-list">
+          ${renderTemplatePropsImages()}
+        </div>
+
+        <div class="tpl-props-images-actions">
+          <button type="button" class="btn-secondary" onclick="uploadTemplatePropImage()">
+            📤 رفع صور (متعدد)
+          </button>
+          ${currentTemplateProps.images.length > 0 ? `
+            <button type="button" class="btn-secondary danger clear-all-btn" onclick="clearAllTemplatePropImages()">
+              🗑️ مسح كل الصور
+            </button>
+          ` : ''}
+        </div>
+
+        <p class="hint">
+          عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function renderTemplatePropsImages() {
+  const images = currentTemplateProps.images || [];
+
+  if (images.length === 0) {
+    return `<div class="tpl-props-images-empty">لا يوجد صور</div>`;
+  }
+
+  return images.map((img, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === images.length - 1;
+
+    return `
+      <div class="tpl-props-image-item"
+           draggable="true"
+           data-index="${idx}"
+           ondragstart="handleImageDragStart(event, ${idx})"
+           ondragover="handleImageDragOver(event)"
+           ondrop="handleImageDrop(event, ${idx})"
+           ondragend="handleImageDragEnd(event)">
+
+        <div class="tpl-props-image-number">${idx + 1}</div>
+
+        <img src="${escapeHtml(img.url)}" alt="" class="tpl-props-image-thumb" />
+
+        <div class="tpl-props-image-controls">
+          <button type="button"
+                  class="tpl-props-image-move"
+                  onclick="moveTemplatePropImage(${idx}, -1)"
+                  title="تحريك لليسار"
+                  ${isFirst ? 'disabled' : ''}>◀</button>
+
+          <button type="button"
+                  class="tpl-props-image-move"
+                  onclick="moveTemplatePropImage(${idx}, 1)"
+                  title="تحريك لليمين"
+                  ${isLast ? 'disabled' : ''}>▶</button>
+
+          <button type="button"
+                  class="tpl-props-image-remove"
+                  onclick="removeTemplatePropImage(${idx})"
+                  title="مسح">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══ Drag & Drop Handlers ═══
+let dragSourceIndex = null;
+
+window.handleImageDragStart = function(event, index) {
+  dragSourceIndex = index;
+  event.dataTransfer.effectAllowed = 'move';
+  event.target.classList.add('dragging');
+};
+
+window.handleImageDragOver = function(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  event.target.closest('.tpl-props-image-item')?.classList.add('drag-over');
+};
+
+window.handleImageDrop = function(event, targetIndex) {
+  event.preventDefault();
+  event.target.closest('.tpl-props-image-item')?.classList.remove('drag-over');
+
+  if (dragSourceIndex === null || dragSourceIndex === targetIndex) return;
+
+  const images = currentTemplateProps.images;
+  const [moved] = images.splice(dragSourceIndex, 1);
+  images.splice(targetIndex, 0, moved);
+
+  dragSourceIndex = null;
+  refreshTemplatePropsImages();
+};
+
+window.handleImageDragEnd = function(event) {
+  document.querySelectorAll('.tpl-props-image-item').forEach(el => {
+    el.classList.remove('dragging', 'drag-over');
+  });
+  dragSourceIndex = null;
+};
+
+window.moveTemplatePropImage = function(index, direction) {
+  const images = currentTemplateProps.images;
+  const newIndex = index + direction;
+
+  if (newIndex < 0 || newIndex >= images.length) return;
+
+  [images[index], images[newIndex]] = [images[newIndex], images[index]];
+  refreshTemplatePropsImages();
+};
+
+window.uploadTemplatePropImage = async function() {
+  const remaining = MAX_TEMPLATE_IMAGES - currentTemplateProps.images.length;
+
+  if (remaining <= 0) {
+    alert(`⚠️ الحد الأقصى ${MAX_TEMPLATE_IMAGES} صور`);
     return;
   }
 
-  scheduleNav.click();
+  if (typeof window.pickMultipleImages !== 'function') {
+    alert('⚠️ خدمة رفع الصور غير متوفرة');
+    return;
+  }
+
+  const files = await window.pickMultipleImages();
+  if (!files || files.length === 0) return;
+
+  if (files.length > remaining) {
+    alert(`⚠️ يمكنك رفع ${remaining} صور فقط (المتبقي من ${MAX_TEMPLATE_IMAGES})`);
+    return;
+  }
+
+  await processMultipleImageUploads(files);
+};
+
+async function processMultipleImageUploads(files) {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const MAX_TEMPLATE_PROP_SIZE = 10 * 1024 * 1024;
+
+  const container = document.getElementById('tplPropsImagesList');
+  const originalHtml = container ? container.innerHTML : '';
+
+  let uploaded = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    if (container) {
+      container.innerHTML = `
+        <div class="tpl-props-images-loading">
+          <div class="tpl-props-progress-bar">
+            <div class="tpl-props-progress-fill" style="width: ${(i / files.length) * 100}%"></div>
+          </div>
+          <div class="tpl-props-progress-text">⏳ جاري رفع ${i + 1} من ${files.length}...</div>
+        </div>
+      `;
+    }
+
+    if (!allowedTypes.includes(file.type)) {
+      failed++;
+      errors.push(`"${file.name}": صيغة غير مدعومة`);
+      continue;
+    }
+
+    if (file.size > MAX_TEMPLATE_PROP_SIZE) {
+      failed++;
+      errors.push(`"${file.name}": أكبر من 10 MB`);
+      continue;
+    }
+
+    try {
+      if (typeof window.compressImage !== 'function' || typeof window.uploadToImgBB !== 'function') {
+        throw new Error('خدمة الرفع غير متوفرة');
+      }
+
+      const compressed = await window.compressImage(file, 2400, 2400, 0.98);
+      const hash = await window.getFileHash(file);
+      const result = await window.uploadToImgBB(compressed, `template_prop_${Date.now()}_${i}`);
+
+      currentTemplateProps.images.push({
+        url: result.url,
+        hash: hash,
+        uploadedAt: new Date().toISOString()
+      });
+
+      uploaded++;
+      console.log(`✅ [${i + 1}/${files.length}] Uploaded:`, file.name);
+
+    } catch (err) {
+      console.error(`❌ [${i + 1}/${files.length}] Failed:`, file.name, err);
+      failed++;
+      errors.push(`"${file.name}": ${err.message}`);
+    }
+  }
+
+  refreshTemplatePropsImages();
+
+  if (failed > 0) {
+    alert(
+      `✅ تم رفع ${uploaded} صورة\n` +
+      `❌ فشل ${failed} صورة\n\n` +
+      `الأخطاء:\n${errors.join('\n')}`
+    );
+  } else {
+    console.log(`✅ Uploaded ${uploaded} images successfully`);
+  }
+}
+
+window.removeTemplatePropImage = function(idx) {
+  if (!confirm('⚠️ مسح هذه الصورة؟')) return;
+
+  currentTemplateProps.images.splice(idx, 1);
+  refreshTemplatePropsImages();
+};
+
+window.clearAllTemplatePropImages = function() {
+  if (!confirm('⚠️ مسح كل الصور؟')) return;
+
+  currentTemplateProps.images = [];
+  refreshTemplatePropsImages();
+};
+
+function refreshTemplatePropsImages() {
+  const container = document.getElementById('tplPropsImagesList');
+  if (container) {
+    container.innerHTML = renderTemplatePropsImages();
+  }
+
+  const actionsContainer = document.querySelector('.tpl-props-images-actions');
+  if (actionsContainer) {
+    const allClearBtns = actionsContainer.querySelectorAll('.clear-all-btn');
+    allClearBtns.forEach((btn, idx) => {
+      if (idx > 0) btn.remove();
+    });
+  }
+
+  const hintEl = document.querySelector('.tpl-props-section .hint:last-child');
+  if (hintEl && hintEl.innerHTML.includes('عدد الصور')) {
+    hintEl.innerHTML = `عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   View Template Properties — Modal (with Slider)
+// ═══════════════════════════════════════════════════════
+
+window.viewTemplateProperties = function(templateId) {
+  const template = schTemplates.find(t => t.id === templateId);
+  if (!template) {
+    alert('النمط غير موجود');
+    return;
+  }
+
+  const props = template.Properties || {};
+  const text = (props.Text || '').trim();
+  const images = Array.isArray(props.Images) ? props.Images : [];
+
+  if (!text && images.length === 0) {
+    alert('لا توجد خصائص لهذا النمط');
+    return;
+  }
+
+  let modal = document.getElementById('templatePropsViewModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'templatePropsViewModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  let contentHtml = '';
+
+  if (images.length > 0) {
+    contentHtml += `
+      <div class="tpl-props-slider" id="tplPropsSlider">
+        <div class="tpl-slider-main">
+          ${images.length > 1 ? `
+            <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">▶</button>
+          ` : ''}
+
+          <div class="tpl-slider-image-wrapper" onclick="window.openImageFullscreenByIndex(window.tplSliderCurrentIndex || 0)">
+            <img id="tplSliderImg" src="${escapeHtml(images[0].url)}" alt="" />
+          </div>
+
+          ${images.length > 1 ? `
+            <button class="tpl-slider-nav tpl-slider-next" onclick="tplSliderNext()" aria-label="التالي">◀</button>
+          ` : ''}
+        </div>
+
+        ${images.length > 1 ? `
+          <div class="tpl-slider-dots" id="tplSliderDots">
+            ${images.map((_, i) => `
+              <button class="tpl-slider-dot ${i === 0 ? 'active' : ''}" onclick="tplSliderGoTo(${i})" aria-label="صورة ${i + 1}"></button>
+            `).join('')}
+          </div>
+
+          <div class="tpl-slider-counter" id="tplSliderCounter">
+            1 / ${images.length}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  if (text) {
+    contentHtml += `
+      <div class="tpl-props-view-text">
+        ${escapeHtml(text).replace(/\n/g, '<br>')}
+      </div>
+    `;
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:800px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>📖 خصائص النمط — ${escapeHtml(template.Name || '')}</h2>
+        <button class="modal-close" onclick="closeTemplatePropsView()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+        ${contentHtml}
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTemplatePropsView()">إغلاق</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  if (images.length > 0) {
+    window.tplSliderInit(images);
+
+    setTimeout(() => {
+      const sliderMain = document.querySelector('.tpl-slider-main');
+      if (sliderMain) {
+        let startX = 0;
+        let startY = 0;
+        let isSwiping = false;
+
+        sliderMain.addEventListener('touchstart', (e) => {
+          if (e.touches.length !== 1) return;
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+          isSwiping = false;
+        }, { passive: true });
+
+        sliderMain.addEventListener('touchmove', (e) => {
+          if (e.touches.length !== 1) return;
+
+          const currentX = e.touches[0].clientX;
+          const currentY = e.touches[0].clientY;
+          const diffX = Math.abs(currentX - startX);
+          const diffY = Math.abs(currentY - startY);
+
+          if (diffX > diffY && diffX > 10) {
+            isSwiping = true;
+          }
+        }, { passive: true });
+
+        sliderMain.addEventListener('touchend', (e) => {
+          if (!isSwiping) return;
+
+          const endX = e.changedTouches[0].clientX;
+          const diff = startX - endX;
+
+          if (Math.abs(diff) > 50) {
+            if (diff > 0) {
+              window.tplSliderPrev();
+            } else {
+              window.tplSliderNext();
+            }
+          }
+
+          isSwiping = false;
+        }, { passive: true });
+      }
+    }, 100);
+  }
+};
+
+window.closeTemplatePropsView = function() {
+  const modal = document.getElementById('templatePropsViewModal');
+  if (modal) modal.style.display = 'none';
+
+  window.tplSliderImages = [];
+  window.tplSliderCurrentIndex = 0;
+};
+
+window.tplSliderInit = function(images) {
+  window.tplSliderImages = images || [];
+  window.tplSliderCurrentIndex = 0;
+  window.tplSliderRender();
+};
+
+window.tplSliderRender = function() {
+  const img = document.getElementById('tplSliderImg');
+  const counter = document.getElementById('tplSliderCounter');
+  const dots = document.querySelectorAll('.tpl-slider-dot');
+
+  if (!img) return;
+
+  if (window.tplSliderImages[window.tplSliderCurrentIndex]) {
+    img.src = window.tplSliderImages[window.tplSliderCurrentIndex].url;
+  }
+
+  if (counter) {
+    counter.textContent = `${window.tplSliderCurrentIndex + 1} / ${window.tplSliderImages.length}`;
+  }
+
+  dots.forEach((dot, i) => {
+    dot.classList.toggle('active', i === window.tplSliderCurrentIndex);
+  });
+};
+
+window.tplSliderPrev = function() {
+  if (window.tplSliderImages.length <= 1) return;
+  window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex - 1 + window.tplSliderImages.length) % window.tplSliderImages.length;
+  window.tplSliderRender();
+};
+
+window.tplSliderNext = function() {
+  if (window.tplSliderImages.length <= 1) return;
+  window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex + 1) % window.tplSliderImages.length;
+  window.tplSliderRender();
+};
+
+window.tplSliderGoTo = function(index) {
+  if (index < 0 || index >= window.tplSliderImages.length) return;
+  window.tplSliderCurrentIndex = index;
+  window.tplSliderRender();
+};
+
+window.openImageFullscreenByIndex = function(index) {
+  if (!window.tplSliderImages[index]) return;
+  window.openImageFullscreenAt(index);
+};
+
+// ═══════════════════════════════════════════════════════
+//   Enhanced Image Fullscreen
+// ═══════════════════════════════════════════════════════
+
+window.openImageFullscreen = function(url) {
+  const idx = tplSliderImages.findIndex(i => i.url === url);
+  window.openImageFullscreenAt(idx >= 0 ? idx : 0);
+};
+
+window.openImageFullscreenAt = function(index) {
+  window.imgFsImages = [...window.tplSliderImages];
+  window.imgFsCurrentIndex = index;
+
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+
+  let modal = document.getElementById('imgFullscreenModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'imgFullscreenModal';
+    modal.className = 'modal-overlay img-fullscreen-overlay';
+    document.body.appendChild(modal);
+  }
+
+  window.renderFullscreen();
+  modal.style.display = 'flex';
+
+  document.addEventListener('keydown', window.imgFsKeyHandler);
+};
+
+window.renderFullscreen = function() {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (!modal) return;
+
+  const img = window.imgFsImages[window.imgFsCurrentIndex];
+  if (!img) return;
+
+  const hasMultiple = window.imgFsImages.length > 1;
+
+  modal.innerHTML = `
+    <button class="img-fs-close" onclick="closeImageFullscreen()" aria-label="إغلاق">✕</button>
+
+    ${hasMultiple ? `
+      <button class="img-fs-nav img-fs-prev" onclick="imgFsPrev()" aria-label="السابق">▶</button>
+    ` : ''}
+
+    <div class="img-fs-image-wrapper" id="imgFsWrapper">
+      <img id="imgFsImg" src="${escapeHtml(img.url)}" alt="" draggable="false" />
+    </div>
+
+    ${hasMultiple ? `
+      <button class="img-fs-nav img-fs-next" onclick="imgFsNext()" aria-label="التالي">◀</button>
+    ` : ''}
+
+    ${hasMultiple ? `
+      <div class="img-fs-counter">
+        ${window.imgFsCurrentIndex + 1} / ${window.imgFsImages.length}
+      </div>
+    ` : ''}
+
+    <div class="img-fs-zoom-controls">
+      <button class="img-fs-zoom-btn" onclick="imgFsZoomOut()" title="تصغير" aria-label="تصغير">−</button>
+      <div class="img-fs-zoom-level" id="imgFsZoomLevel">100%</div>
+      <button class="img-fs-zoom-btn" onclick="imgFsZoomIn()" title="تكبير" aria-label="تكبير">+</button>
+      <button class="img-fs-zoom-reset" onclick="imgFsZoomReset()" title="إعادة الحجم" aria-label="إعادة الحجم">↺</button>
+    </div>
+  `;
+
+  window.imgFsZoomReset();
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) {
+    wrapper.addEventListener('wheel', window.handleFsWheel, { passive: false });
+    wrapper.addEventListener('mousedown', window.handleFsMouseDown);
+    wrapper.addEventListener('mousemove', window.handleFsMouseMove);
+    wrapper.addEventListener('mouseup', window.handleFsMouseUp);
+    wrapper.addEventListener('mouseleave', window.handleFsMouseUp);
+    wrapper.addEventListener('touchstart', window.handleFsTouchStartFull, { passive: false });
+    wrapper.addEventListener('touchmove', window.handleFsTouchMove, { passive: false });
+    wrapper.addEventListener('touchend', window.handleFsTouchEndFull, { passive: false });
+    wrapper.addEventListener('dblclick', window.handleFsDoubleClick);
+  }
+};
+
+window.imgFsPrev = function() {
+  if (window.imgFsImages.length <= 1) return;
+  window.imgFsCurrentIndex = (window.imgFsCurrentIndex - 1 + window.imgFsImages.length) % window.imgFsImages.length;
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+  window.renderFullscreen();
+};
+
+window.imgFsNext = function() {
+  if (window.imgFsImages.length <= 1) return;
+  window.imgFsCurrentIndex = (window.imgFsCurrentIndex + 1) % window.imgFsImages.length;
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+  window.renderFullscreen();
+};
+
+window.imgFsKeyHandler = function(e) {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (!modal || modal.style.display === 'none') return;
+
+  if (e.key === 'Escape') {
+    window.closeImageFullscreen();
+  } else if (e.key === 'ArrowLeft') {
+    window.imgFsNext();
+  } else if (e.key === 'ArrowRight') {
+    window.imgFsPrev();
+  }
+};
+
+window.closeImageFullscreen = function() {
+  const modal = document.getElementById('imgFullscreenModal');
+  if (modal) modal.style.display = 'none';
+
+  document.removeEventListener('keydown', window.imgFsKeyHandler);
+
+  window.imgFsZoom.scale = 1;
+  window.imgFsZoom.translateX = 0;
+  window.imgFsZoom.translateY = 0;
+  window.imgFsZoom.initialDistance = 0;
+  window.imgFsZoom.isPanning = false;
+};
+
+window.imgFsUpdateTransform = function() {
+  const img = document.getElementById('imgFsImg');
+  if (!img) return;
+
+  const { scale, translateX, translateY } = window.imgFsZoom;
+
+  img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+
+  const levelEl = document.getElementById('imgFsZoomLevel');
+  if (levelEl) {
+    levelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) {
+    wrapper.style.cursor = scale > 1 ? 'grab' : 'zoom-in';
+  }
+};
+
+window.imgFsZoomIn = function() {
+  const z = window.imgFsZoom;
+  z.scale = Math.min(z.scale + 0.25, z.maxScale);
+  if (z.scale === 1) {
+    z.translateX = 0;
+    z.translateY = 0;
+  }
+  window.imgFsUpdateTransform();
+};
+
+window.imgFsZoomOut = function() {
+  const z = window.imgFsZoom;
+  z.scale = Math.max(z.scale - 0.25, z.minScale);
+  if (z.scale === 1) {
+    z.translateX = 0;
+    z.translateY = 0;
+  }
+  window.imgFsUpdateTransform();
+};
+
+window.imgFsZoomReset = function() {
+  const z = window.imgFsZoom;
+  z.scale = 1;
+  z.translateX = 0;
+  z.translateY = 0;
+  window.imgFsUpdateTransform();
+};
+
+window.handleFsWheel = function(e) {
+  e.preventDefault();
+
+  const z = window.imgFsZoom;
+  const delta = e.deltaY < 0 ? 0.15 : -0.15;
+  const newScale = Math.max(z.minScale, Math.min(z.scale + delta, z.maxScale));
+
+  if (newScale !== z.scale) {
+    z.scale = newScale;
+    if (z.scale === 1) {
+      z.translateX = 0;
+      z.translateY = 0;
+    }
+    window.imgFsUpdateTransform();
+  }
+};
+
+window.handleFsMouseDown = function(e) {
+  const z = window.imgFsZoom;
+  if (z.scale <= 1) return;
+
+  z.isPanning = true;
+  z.panStartX = e.clientX - z.translateX;
+  z.panStartY = e.clientY - z.translateY;
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) wrapper.style.cursor = 'grabbing';
+};
+
+window.handleFsMouseMove = function(e) {
+  const z = window.imgFsZoom;
+  if (!z.isPanning) return;
+
+  if (z._rafPending) return;
+  z._rafPending = true;
+
+  requestAnimationFrame(() => {
+    z.translateX = e.clientX - z.panStartX;
+    z.translateY = e.clientY - z.panStartY;
+
+    const img = document.getElementById('imgFsImg');
+    if (img) {
+      img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+    }
+
+    z._rafPending = false;
+  });
+};
+
+window.handleFsMouseUp = function() {
+  const z = window.imgFsZoom;
+  z.isPanning = false;
+
+  const wrapper = document.getElementById('imgFsWrapper');
+  if (wrapper) {
+    wrapper.style.cursor = z.scale > 1 ? 'grab' : 'zoom-in';
+  }
+};
+
+window.handleFsDoubleClick = function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const z = window.imgFsZoom;
+  if (z.scale > 1) {
+    window.imgFsZoomReset();
+  } else {
+    z.scale = 2;
+    window.imgFsUpdateTransform();
+  }
+};
+
+window.handleFsTouchStartFull = function(e) {
+  const z = window.imgFsZoom;
+  const touches = e.touches;
+
+  const now = Date.now();
+  if (now - window.imgFsLastTap < 300 && touches.length === 1) {
+    e.preventDefault();
+    if (z.scale > 1) {
+      window.imgFsZoomReset();
+    } else {
+      z.scale = 2;
+      window.imgFsUpdateTransform();
+    }
+    window.imgFsLastTap = 0;
+    return;
+  }
+  window.imgFsLastTap = now;
+
+  if (touches.length === 2) {
+    e.preventDefault();
+    z.initialDistance = Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+    z.initialScale = z.scale;
+    z.isPanning = false;
+    return;
+  }
+
+  if (touches.length === 1) {
+    window.imgFsTouchStartX = touches[0].clientX;
+
+    if (z.scale > 1) {
+      e.preventDefault();
+      z.isPanning = true;
+      z.panStartX = touches[0].clientX - z.translateX;
+      z.panStartY = touches[0].clientY - z.translateY;
+    }
+  }
+};
+
+window.handleFsTouchMove = function(e) {
+  const z = window.imgFsZoom;
+  const touches = e.touches;
+
+  if (touches.length === 2 && z.initialDistance > 0) {
+    e.preventDefault();
+
+    const currentDistance = Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+
+    const ratio = currentDistance / z.initialDistance;
+    const newScale = Math.max(z.minScale, Math.min(z.initialScale * ratio, z.maxScale));
+
+    z.scale = newScale;
+    if (z.scale === 1) {
+      z.translateX = 0;
+      z.translateY = 0;
+    }
+
+    if (!z._rafPending) {
+      z._rafPending = true;
+      requestAnimationFrame(() => {
+        const img = document.getElementById('imgFsImg');
+        if (img) {
+          img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+        }
+        z._rafPending = false;
+      });
+    }
+    return;
+  }
+
+  if (touches.length === 1 && z.isPanning && z.scale > 1) {
+    e.preventDefault();
+
+    if (!z._rafPending) {
+      z._rafPending = true;
+      const currentX = touches[0].clientX;
+      const currentY = touches[0].clientY;
+
+      requestAnimationFrame(() => {
+        z.translateX = currentX - z.panStartX;
+        z.translateY = currentY - z.panStartY;
+
+        const img = document.getElementById('imgFsImg');
+        if (img) {
+          img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
+        }
+        z._rafPending = false;
+      });
+    }
+  }
+};
+
+window.handleFsTouchEndFull = function(e) {
+  const z = window.imgFsZoom;
+
+  if (z.initialDistance > 0) {
+    z.initialDistance = 0;
+
+    if (z.scale < 1.1 && z.scale > 0.9) {
+      z.scale = 1;
+      z.translateX = 0;
+      z.translateY = 0;
+      window.imgFsUpdateTransform();
+    }
+    return;
+  }
+
+  if (z.isPanning) {
+    z.isPanning = false;
+    return;
+  }
+
+  if (z.scale <= 1 && e.changedTouches.length === 1) {
+    const touchEndX = e.changedTouches[0].screenX;
+    const diff = window.imgFsTouchStartX - touchEndX;
+
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) {
+        window.imgFsPrev();
+      } else {
+        window.imgFsNext();
+      }
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   Template Modal
+// ═══════════════════════════════════════════════════════
+
+window.openTemplateModal = function(templateId) {
+  const isEdit = !!templateId;
+  currentTemplateId = templateId || null;
+
+  const template = isEdit ? schTemplates.find(t => t.id === templateId) : null;
+
+  const normalized = normalizeSchedule(template?.Schedule);
+  templateDaysState = {};
+  DAYS_OF_WEEK.forEach(d => {
+    templateDaysState[d.value] = [...(normalized[d.value] || [])];
+  });
+
+  let modal = document.getElementById('templateModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'templateModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  renderTemplateModal(modal, template);
+  modal.style.display = 'flex';
+};
+
+function renderTemplateModal(modal, template) {
+  const isEdit = !!template;
+
+  modal.innerHTML = `
+    <div class="modal-content modal-large" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>${isEdit ? '✏️ تعديل نمط' : '➕ نمط جديد'}</h2>
+        <button class="modal-close" onclick="closeTemplateModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <div class="form-row">
+          <label>اسم النمط *</label>
+          <input type="text" id="tplName" value="${template ? escapeHtml(template.Name || '') : ''}" placeholder="مثال: النمط العادي" />
+        </div>
+
+        <div class="form-row">
+          <label>الوصف (اختياري)</label>
+          <textarea id="tplDescription" rows="2" placeholder="وصف مختصر للنمط">${template ? escapeHtml(template.Description || '') : ''}</textarea>
+        </div>
+
+        <div class="form-row checkbox-row">
+          <input type="checkbox" id="tplStatus" ${!template || template.Status === 'active' ? 'checked' : ''} />
+          <label for="tplStatus">مفعّل</label>
+        </div>
+
+        <div id="tplPropsContainer">
+          ${renderTemplatePropertiesSection(template)}
+        </div>
+
+        <div class="tpl-days-section">
+          <h4>📅 جدول الأيام</h4>
+          <p class="hint">أضف الأحداث لكل يوم. لو اليوم فاضي، يبقى مفيش أحداث.</p>
+
+          <div class="tpl-days-list" id="tplDaysList">
+            ${DAYS_OF_WEEK.map(day => renderTemplateDayEditor(day)).join('')}
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTemplateModal()">إلغاء</button>
+        <button class="btn-primary" onclick="saveTemplate()">💾 حفظ</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderTemplateDayEditor(day) {
+  const events = templateDaysState[day.value] || [];
+
+  return `
+    <div class="tpl-day-editor" data-day="${day.value}">
+      <div class="tpl-day-editor-header">
+        <span>${day.icon} ${day.label}</span>
+        <button class="btn-small" onclick="addTemplateDayEvent('${day.value}')">➕ إضافة حدث</button>
+      </div>
+
+      <div class="tpl-day-events" id="tplEvents-${day.value}">
+        ${events.length === 0 ? `
+          <div class="tpl-day-empty-hint">لا يوجد أحداث</div>
+        ` : events.map((e, idx) => renderTemplateEventEditor(day.value, idx, e)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderTemplateEventEditor(dayValue, idx, event) {
+  const eventTypesOptions = schEventTypes.map(t => `
+    <option value="${t.id}" ${event.EventTypeID === t.id ? 'selected' : ''}>${t.Icon || '📅'} ${escapeHtml(t.Name)}</option>
+  `).join('');
+
+  const scope = String(event.RegistrationScope || 'all').toLowerCase();
+
+  return `
+    <div class="tpl-event-editor" data-day="${dayValue}" data-idx="${idx}">
+      <div class="tpl-event-row">
+        <div class="tpl-event-field">
+          <label>العنوان *</label>
+          <input type="text" value="${escapeHtml(event.Title || '')}" 
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'Title', this.value)" />
+        </div>
+      </div>
+
+      <div class="tpl-event-row tpl-event-row-2">
+        <div class="tpl-event-field">
+          <label>من *</label>
+          <input type="time" value="${event.Time || '08:00'}"
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'Time', this.value)" />
+        </div>
+        <div class="tpl-event-field">
+          <label>إلى *</label>
+          <input type="time" value="${event.EndTime || '10:00'}"
+                 onchange="updateTemplateEvent('${dayValue}', ${idx}, 'EndTime', this.value)" />
+        </div>
+      </div>
+
+      <div class="tpl-event-row tpl-event-row-2">
+        <div class="tpl-event-field">
+          <label>النوع *</label>
+          <select onchange="updateTemplateEvent('${dayValue}', ${idx}, 'EventTypeID', this.value)">
+            ${eventTypesOptions}
+          </select>
+        </div>
+        <div class="tpl-event-field">
+          <label>التسجيل *</label>
+          <select onchange="updateTemplateEvent('${dayValue}', ${idx}, 'RegistrationScope', this.value)">
+            <option value="all" ${scope === 'all' ? 'selected' : ''}>🌍 إلزامي للكل</option>
+            <option value="specific" ${scope === 'specific' ? 'selected' : ''}>👥 لقائمة محددة</option>
+            <option value="optional" ${scope === 'optional' ? 'selected' : ''}>🟢 اختياري</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn-small danger tpl-event-remove" onclick="removeTemplateDayEvent('${dayValue}', ${idx})">🗑️ حذف الحدث</button>
+    </div>
+  `;
+}
+
+window.addTemplateDayEvent = function(dayValue) {
+  if (!templateDaysState[dayValue]) templateDaysState[dayValue] = [];
+
+  templateDaysState[dayValue].push({
+    Title: '',
+    Time: '08:00',
+    EndTime: '10:00',
+    EventTypeID: schEventTypes[0]?.id || '',
+    RegistrationScope: 'all',
+    LocationMode: 'any',
+    LocationIds: []
+  });
+
+  refreshTemplateDay(dayValue);
+};
+
+window.removeTemplateDayEvent = function(dayValue, idx) {
+  if (!confirm('⚠️ حذف هذا الحدث؟')) return;
+  templateDaysState[dayValue].splice(idx, 1);
+  refreshTemplateDay(dayValue);
+};
+
+window.updateTemplateEvent = function(dayValue, idx, field, value) {
+  if (!templateDaysState[dayValue]?.[idx]) return;
+  templateDaysState[dayValue][idx][field] = value;
+};
+
+function refreshTemplateDay(dayValue) {
+  const container = document.getElementById('tplEvents-' + dayValue);
+  if (!container) return;
+
+  const events = templateDaysState[dayValue] || [];
+
+  if (events.length === 0) {
+    container.innerHTML = '<div class="tpl-day-empty-hint">لا يوجد أحداث</div>';
+    return;
+  }
+
+  container.innerHTML = events.map((e, idx) => renderTemplateEventEditor(dayValue, idx, e)).join('');
+}
+
+window.closeTemplateModal = function() {
+  const modal = document.getElementById('templateModal');
+  if (modal) modal.style.display = 'none';
+  currentTemplateId = null;
+  templateDaysState = {};
+  currentTemplateProps = { text: '', images: [] };
+};
+
+window.saveTemplate = async function() {
+  const name = document.getElementById('tplName')?.value.trim();
+  const description = document.getElementById('tplDescription')?.value.trim() || '';
+  const status = document.getElementById('tplStatus')?.checked ? 'active' : 'inactive';
+
+  const propsText = document.getElementById('tplPropsText')?.value.trim() || '';
+
+  if (!name) { alert('⚠️ اسم النمط مطلوب'); return; }
+
+  let hasError = false;
+  DAYS_OF_WEEK.forEach(d => {
+    const events = templateDaysState[d.value] || [];
+    events.forEach((e, idx) => {
+      if (!e.Title) { alert(`⚠️ في ${d.label}: الحدث ${idx + 1} بدون عنوان`); hasError = true; }
+      if (!e.Time || !e.EndTime) { alert(`⚠️ في ${d.label}: الحدث ${idx + 1} بدون وقت`); hasError = true; }
+    });
+  });
+
+  if (hasError) return;
+
+  const data = {
+    Name: name,
+    Description: description,
+    Status: status,
+    Schedule: templateDaysState,
+    Properties: {
+      Text: propsText,
+      Images: currentTemplateProps.images || [],
+      UpdatedAt: new Date().toISOString()
+    },
+    UpdatedAt: new Date().toISOString()
+  };
+
+  try {
+    if (currentTemplateId) {
+      await updateDoc(doc(db, 'massTemplates', currentTemplateId), data);
+      alert('✅ تم التعديل');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'template_updated',
+          type: 'template',
+          title: `تعديل نمط: ${name}`,
+          description: `تم تعديل النمط`,
+          relatedID: currentTemplateId,
+          relatedTitle: name
+        });
+      }
+    } else {
+      data.CreatedAt = new Date().toISOString();
+      data.CreatedBy = schUser?.email || '';
+      data.IsDefault = false;
+      const docRef = await addDoc(collection(db, 'massTemplates'), data);
+      alert('✅ تمت الإضافة');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'template_added',
+          type: 'template',
+          title: `إضافة نمط: ${name}`,
+          description: description || '',
+          relatedID: docRef.id,
+          relatedTitle: name
+        });
+      }
+    }
+
+    closeTemplateModal();
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.editTemplate = function(templateId) {
+  openTemplateModal(templateId);
+};
+
+window.deleteTemplate = async function(templateId) {
+  const t = schTemplates.find(x => x.id === templateId);
+  if (!t) return;
+  if (!confirm(`⚠️ هل تريد حذف "${t.Name}"؟`)) return;
+
+  try {
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_deleted',
+        type: 'template',
+        title: `حذف نمط: ${t.Name}`,
+        description: `تم حذف النمط نهائيًا`,
+        relatedID: templateId,
+        relatedTitle: t.Name
+      });
+    }
+
+    await deleteDoc(doc(db, 'massTemplates', templateId));
+    alert('✅ تم الحذف');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.toggleTemplateStatus = async function(templateId) {
+  const t = schTemplates.find(x => x.id === templateId);
+  if (!t) return;
+
+  const newStatus = t.Status === 'active' ? 'inactive' : 'active';
+
+  try {
+    await updateDoc(doc(db, 'massTemplates', templateId), { Status: newStatus });
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_status_changed',
+        type: 'template',
+        title: `${newStatus === 'active' ? 'تفعيل' : 'تعطيل'} نمط: ${t.Name}`,
+        description: `الحالة: ${newStatus === 'active' ? 'مفعّل' : 'معطّل'}`,
+        relatedID: templateId,
+        relatedTitle: t.Name
+      });
+    }
+
+    alert(newStatus === 'active' ? '✅ تم التفعيل' : '⏸️ تم التعطيل');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.setActiveTemplate = async function(templateId) {
+  if (!confirm('⭐ هل تريد تعيين هذا النمط كنمط نشط؟')) return;
+
+  const t = schTemplates.find(x => x.id === templateId);
+
+  try {
+    await updateDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC), {
+      ActiveMassTemplateID: templateId
+    });
+    schSettings.ActiveMassTemplateID = templateId;
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'template_set_active',
+        type: 'template',
+        title: `تعيين نمط نشط: ${t?.Name || templateId}`,
+        description: `تم تعيينه كنمط نشط للنظام`,
+        relatedID: templateId,
+        relatedTitle: t?.Name || ''
+      });
+    }
+
+    alert('✅ تم تعيين النمط النشط');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Location Modal — مع زر "استخدم موقعي"
+// ═══════════════════════════════════════════════════════
+
+window.openLocationModal = function(locId) {
+  const isEdit = !!locId;
+  const loc = isEdit ? schLocations.find(l => l.id === locId) : null;
+
+  let modal = document.getElementById('locationModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'locationModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <h2>${isEdit ? '✏️ تعديل مكان' : '➕ إضافة مكان جديد'}</h2>
+        <button class="modal-close" onclick="closeLocationModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-row">
+          <label>اسم المكان *</label>
+          <input type="text" id="locName" value="${loc ? escapeHtml(loc.Name || '') : ''}" placeholder="مثال: كنيسة مارمرقس" />
+        </div>
+
+        <!-- ═══ ⚡ زر استخدام الموقع الحالي ═══ -->
+        <button type="button" class="btn-location-current" id="getCurrentLocationBtn">
+          <span id="getCurrentLocationIcon">📍</span>
+          <span id="getCurrentLocationText">استخدم موقعي الحالي</span>
+        </button>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>Latitude *</label>
+            <input type="number" id="locLat" step="0.000001" value="${loc?.Lat || ''}" placeholder="27.179216" />
+          </div>
+          <div class="form-row">
+            <label>Longitude *</label>
+            <input type="number" id="locLng" step="0.000001" value="${loc?.Lng || ''}" placeholder="31.175953" />
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>النطاق (بالأمتار)</label>
+            <input type="number" id="locRadius" value="${loc?.Radius || 100}" min="1" max="5000" />
+          </div>
+          <div class="form-row">
+            <label>السماحية (بالأمتار)</label>
+            <input type="number" id="locTolerance" value="${loc?.Tolerance || 100}" min="1" max="5000" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>QR Code (اتركه فاضي لتوليده تلقائيًا)</label>
+          <input type="text" id="locQR" value="${loc ? escapeHtml(loc.QRCode || '') : ''}" placeholder="ATTENDANCELOC..." />
+        </div>
+
+        <div class="form-row">
+          <label>الحالة</label>
+          <select id="locStatus">
+            <option value="active" ${!loc || loc.Status === 'active' ? 'selected' : ''}>✅ نشط</option>
+            <option value="inactive" ${loc && loc.Status === 'inactive' ? 'selected' : ''}>⏸️ معطل</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeLocationModal()">إلغاء</button>
+        <button class="btn-primary" onclick="saveLocation('${locId || ''}')">💾 حفظ</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const getLocBtn = document.getElementById('getCurrentLocationBtn');
+  if (getLocBtn) {
+    getLocBtn.onclick = () => window.getCurrentLocationForForm();
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Get Current Location for Location Form
+// ═══════════════════════════════════════════════════════
+
+window.getCurrentLocationForForm = function() {
+  const btn = document.getElementById('getCurrentLocationBtn');
+  const icon = document.getElementById('getCurrentLocationIcon');
+  const text = document.getElementById('getCurrentLocationText');
+  const latInput = document.getElementById('locLat');
+  const lngInput = document.getElementById('locLng');
+
+  if (!btn || !latInput || !lngInput) return;
+
+  if (!navigator.geolocation) {
+    alert('⚠️ متصفحك لا يدعم تحديد الموقع');
+    return;
+  }
+
+  btn.disabled = true;
+  icon.textContent = '⏳';
+  text.textContent = 'جاري تحديد الموقع...';
+
+  let watchId = null;
+  let bestPosition = null;
+  let bestAccuracy = Infinity;
+  let attempts = 0;
+  let resolved = false;
+
+  const startTime = Date.now();
+  const MAX_ACCURACY = 50;
+  const GOOD_ACCURACY = 15;
+  const TIMEOUT = 20000;
+
+  const finish = (position) => {
+    if (resolved) return;
+    resolved = true;
+
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+
+    btn.disabled = false;
+
+    if (!position) {
+      icon.textContent = '❌';
+      text.textContent = 'فشل تحديد الموقع';
+      setTimeout(() => {
+        icon.textContent = '📍';
+        text.textContent = 'استخدم موقعي الحالي';
+      }, 2000);
+      return;
+    }
+
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const accuracy = position.coords.accuracy;
+
+    latInput.value = lat.toFixed(6);
+    lngInput.value = lng.toFixed(6);
+
+    icon.textContent = '✅';
+    text.textContent = `تم! دقة: ${Math.round(accuracy)}م`;
+
+    console.log(`✅ Location captured: ${lat.toFixed(6)}, ${lng.toFixed(6)} (±${Math.round(accuracy)}m)`);
+
+    setTimeout(() => {
+      icon.textContent = '📍';
+      text.textContent = 'استخدم موقعي الحالي';
+    }, 3000);
+  };
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if (resolved) return;
+
+      attempts++;
+      const accuracy = pos.coords.accuracy;
+      const elapsed = Date.now() - startTime;
+
+      console.log(`📍 Attempt ${attempts}: accuracy=${Math.round(accuracy)}m`);
+
+      if (accuracy < bestAccuracy) {
+        bestAccuracy = accuracy;
+        bestPosition = pos;
+      }
+
+      text.textContent = `تحسين الدقة... (${Math.round(accuracy)}م)`;
+
+      const shouldStop =
+        accuracy <= GOOD_ACCURACY ||
+        elapsed >= TIMEOUT ||
+        (attempts >= 3 && accuracy <= MAX_ACCURACY);
+
+      if (shouldStop) {
+        finish(bestPosition);
+      }
+    },
+    (err) => {
+      if (resolved) return;
+
+      if (bestPosition) {
+        finish(bestPosition);
+        return;
+      }
+
+      finish(null);
+
+      let msg = 'فشل تحديد الموقع';
+      if (err.code === 1) msg = 'لم تسمح بالوصول للموقع';
+      else if (err.code === 2) msg = 'الموقع غير متاح';
+      else if (err.code === 3) msg = 'انتهت المهلة';
+
+      alert('⚠️ ' + msg);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: TIMEOUT,
+      maximumAge: 0
+    }
+  );
 
   setTimeout(() => {
-    const subTabBtn = document.querySelector(`.sch-tab[data-tab="${subTab}"]`);
-
-    if (subTabBtn) {
-      subTabBtn.click();
-      console.log(`✅ Navigated to schedule sub-tab: ${subTab}`);
-    }
-  }, 800);
-}
-
-function navigateToChat(notif) {
-  const chatNav = document.querySelector('.nav-item[data-page="chat"]');
-
-  if (!chatNav) {
-    console.warn('⚠️ Chat tab not available');
-    return;
-  }
-
-  chatNav.click();
-
-  const chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
-
-  if (chatId) {
-    setTimeout(() => {
-      if (typeof window.openChat === 'function') {
-        window.openChat(chatId);
-        console.log(`✅ Opened chat: ${chatId}`);
-      }
-    }, 1000);
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-//   Actions
-// ═══════════════════════════════════════════════════════
-
-async function markAsRead(notifId) {
-  const notif = notificationsData.find(n => n.id === notifId);
-  if (!notif) return;
-  if (isReadByMe(notif)) return;
-
-  try {
-    await updateDoc(doc(db, 'notifications', notifId), {
-      ReadBy: arrayUnion(currentUser.email)
-    });
-  } catch (err) {
-    console.warn('Mark as read error:', err.message);
-  }
-}
-
-window.markAllAsRead = async function() {
-  const unread = notificationsData.filter(n => !isReadByMe(n));
-
-  for (const n of unread) {
-    try {
-      await updateDoc(doc(db, 'notifications', n.id), {
-        ReadBy: arrayUnion(currentUser.email)
-      });
-    } catch (err) {
-      console.warn('Mark all error:', err.message);
-    }
-  }
-
-  const modal = document.getElementById('notificationsModal');
-  if (modal && modal.style.display === 'flex') {
-    renderNotificationsModal(modal);
-  }
-};
-
-window.deleteNotification = async function(notifId) {
-  if (!confirm('هل تريد حذف هذا الإشعار؟')) return;
-
-  try {
-    await deleteDoc(doc(db, 'notifications', notifId));
-  } catch (err) {
-    alert('خطأ في الحذف: ' + err.message);
-  }
-};
-
-window.clearAllNotifications = async function() {
-  if (!confirm('⚠️ هل أنت متأكد من حذف كل الإشعارات؟')) return;
-
-  for (const n of notificationsData) {
-    try {
-      await deleteDoc(doc(db, 'notifications', n.id));
-    } catch (err) {
-      console.warn('Clear error:', err.message);
-    }
-  }
+    if (resolved) return;
+    finish(bestPosition);
+  }, TIMEOUT + 1000);
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Browser Notifications
+//   Close & Save Location
 // ═══════════════════════════════════════════════════════
 
-function isNotificationSupported() {
-  return 'Notification' in window && 'serviceWorker' in navigator;
-}
-
-window.requestNotificationPermission = async function() {
-  if (!isNotificationSupported()) {
-    alert('⚠️ المتصفح لا يدعم الإشعارات');
-    return false;
-  }
-
-  if (Notification.permission === 'granted') {
-    if (window.showToast) window.showToast('✅ الإشعارات مفعّلة بالفعل');
-    else alert('✅ الإشعارات مفعّلة بالفعل');
-    return true;
-  }
-
-  if (Notification.permission === 'denied') {
-    alert('⚠️ الإشعارات محظورة. افتح إعدادات المتصفح → Notifications → Allow');
-    return false;
-  }
-
-  try {
-    const permission = await Notification.requestPermission();
-
-    if (permission === 'granted') {
-      console.log('✅ Notification permission granted');
-
-      if (window.showToast) window.showToast('✅ تم تفعيل الإشعارات');
-      else alert('✅ تم تفعيل الإشعارات');
-
-      await showBrowserNotification({
-        title: '🎉 تم تفعيل الإشعارات',
-        body: 'هتستقبل إشعارات فورية من النظام',
-        tag: 'welcome',
-        data: { url: '/attendance-system/pages/dashboard.html' },
-        force: true
-      });
-
-      updateNotifPermissionBadge();
-      return true;
-    } else {
-      console.log('❌ Notification permission denied');
-      return false;
-    }
-
-  } catch (err) {
-    console.error('❌ Notification permission error:', err);
-    return false;
-  }
+window.closeLocationModal = function() {
+  const modal = document.getElementById('locationModal');
+  if (modal) modal.style.display = 'none';
 };
 
-async function showBrowserNotification(options) {
-  if (!isNotificationSupported()) return false;
-  if (Notification.permission !== 'granted') return false;
+window.saveLocation = async function(locId) {
+  const name = document.getElementById('locName')?.value.trim();
+  const lat = parseFloat(document.getElementById('locLat')?.value || '');
+  const lng = parseFloat(document.getElementById('locLng')?.value || '');
+  const radius = parseInt(document.getElementById('locRadius')?.value || '100');
+  const tolerance = parseInt(document.getElementById('locTolerance')?.value || '100');
+  let qrCode = document.getElementById('locQR')?.value.trim() || '';
+  const status = document.getElementById('locStatus')?.value || 'active';
 
-  // ⚡ لو الموقع مفتوح → ما نعرضش (إلا لو force)
-  if (document.visibilityState === 'visible' && !options.force) {
-    return false;
+  if (!name) { alert('اسم المكان مطلوب'); return; }
+  if (isNaN(lat) || isNaN(lng)) { alert('الـCoordinates مطلوبة'); return; }
+
+  if (!qrCode) {
+    const randomPart = Math.random().toString(36).substring(2, 18);
+    qrCode = 'ATTENDANCELOC' + randomPart;
   }
 
-  try {
-    const registration = await navigator.serviceWorker.ready;
-
-    await registration.showNotification(options.title || '🔔 إشعار جديد', {
-      body: options.body || '',
-      icon: options.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
-      badge: options.badge || 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
-      tag: options.tag || 'default',
-      dir: 'rtl',
-      lang: 'ar',
-      vibrate: [200, 100, 200],
-      requireInteraction: false,
-      data: options.data || { url: '/attendance-system/pages/dashboard.html' }
-    });
-
-    console.log('✅ Browser notification shown');
-    return true;
-  } catch (err) {
-    console.error('❌ showBrowserNotification error:', err);
-
-    // ⚡ Fallback
-    try {
-      new Notification(options.title || '🔔 إشعار', {
-        body: options.body || '',
-        icon: options.icon,
-        dir: 'rtl',
-        lang: 'ar',
-        tag: options.tag
-      });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-window.showBrowserNotification = showBrowserNotification;
-
-function updateNotifPermissionBadge() {
-  const btn = document.getElementById('enableNotifBtn');
-  if (!btn) return;
-
-  if (!isNotificationSupported()) {
-    btn.style.display = 'none';
-    return;
-  }
-
-  if (Notification.permission === 'granted') {
-    btn.style.display = 'none';
-  } else if (Notification.permission === 'denied') {
-    btn.style.display = 'none';
-  } else {
-    btn.style.display = 'flex';
-  }
-}
-
-function renderEnableNotifButton() {
-  const topbarRight = document.querySelector('.topbar-right');
-  if (!topbarRight) return;
-
-  if (document.getElementById('enableNotifBtn')) {
-    updateNotifPermissionBadge();
-    return;
-  }
-
-  const btn = document.createElement('button');
-  btn.id = 'enableNotifBtn';
-  btn.className = 'enable-notif-btn';
-  btn.title = 'تفعيل الإشعارات';
-  btn.setAttribute('aria-label', 'تفعيل الإشعارات');
-  btn.innerHTML = '🔕';
-
-  btn.onclick = () => {
-    window.requestNotificationPermission();
-  };
-
-  const notifBtn = document.getElementById('notificationsBtn');
-  if (notifBtn) {
-    topbarRight.insertBefore(btn, notifBtn);
-  } else {
-    topbarRight.appendChild(btn);
-  }
-
-  updateNotifPermissionBadge();
-}
-
-function notifyNewNotification(notif) {
-  if (!notif) return;
-
-  // ⚡ ما تعرضش إشعارات قديمة (أكتر من 30 ثانية)
-  const created = notif.CreatedAt ? new Date(notif.CreatedAt).getTime() : 0;
-  const now = Date.now();
-  if (now - created > 30000) return;
-
-  const typeIcon = getTypeIcon(notif.Type);
-  const bodyText = (notif.Body || '').substring(0, 120);
-  const notifData = buildNotifData(notif);
-
-  showBrowserNotification({
-    title: `${typeIcon} ${notif.Title || 'إشعار جديد'}`,
-    body: bodyText,
-    tag: `notif_${notif.id}`,
-    data: notifData
-  });
-}
-
-function buildNotifData(notif) {
-  const type = String(notif.Type || '').toLowerCase();
   const data = {
-    url: '/attendance-system/pages/dashboard.html',
-    notifId: notif.id
+    Name: name,
+    Lat: lat,
+    Lng: lng,
+    Radius: radius,
+    Tolerance: tolerance,
+    QRCode: qrCode,
+    Status: status,
+    Category: 'church',
+    UpdatedAt: new Date().toISOString()
   };
 
-  if (type === 'chat_message') {
-    data.tab = 'chat';
-    data.chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
-  } else if (type === 'transfer_request') {
-    data.tab = 'schedule';
-  } else if (type === 'transfer_approved' || type === 'transfer_rejected') {
-    data.tab = 'schedule';
-  } else if (type.startsWith('event_')) {
-    data.tab = 'events';
-  } else if (type === 'rsvp_request') {
-    data.tab = 'my-events';
-  } else if (type.startsWith('person_')) {
-    data.tab = 'attendance';
+  try {
+    if (locId) {
+      await updateDoc(doc(db, 'locations', locId), data);
+      alert('✅ تم التعديل');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'location_updated',
+          type: 'event',
+          title: `تعديل مكان: ${name}`,
+          description: `تم تعديل بيانات المكان`,
+          relatedID: locId,
+          relatedTitle: name
+        });
+      }
+    } else {
+      data.CreatedAt = new Date().toISOString();
+      data.CreatedBy = schUser?.email || '';
+      const docRef = await addDoc(collection(db, 'locations'), data);
+      alert('✅ تمت الإضافة');
+
+      if (typeof window.logAction === 'function') {
+        await window.logAction({
+          action: 'location_added',
+          type: 'event',
+          title: `إضافة مكان: ${name}`,
+          description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          relatedID: docRef.id,
+          relatedTitle: name
+        });
+      }
+    }
+
+    closeLocationModal();
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.editLocation = function(locId) {
+  window.openLocationModal(locId);
+};
+
+window.deleteLocation = async function(locId) {
+  const loc = schLocations.find(l => l.id === locId);
+  if (!loc) return;
+  if (!confirm(`⚠️ هل تريد حذف "${loc.Name}"؟`)) return;
+
+  try {
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'location_deleted',
+        type: 'event',
+        title: `حذف مكان: ${loc.Name}`,
+        description: `تم حذف المكان نهائيًا`,
+        relatedID: locId,
+        relatedTitle: loc.Name
+      });
+    }
+
+    await deleteDoc(doc(db, 'locations', locId));
+    alert('✅ تم الحذف');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.showLocationQR = function(locId) {
+  const loc = schLocations.find(l => l.id === locId);
+  if (!loc || !loc.QRCode) {
+    alert('لا يوجد QR لهذا المكان');
+    return;
   }
 
-  return data;
-}
+  let modal = document.getElementById('qrModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'qrModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:400px;text-align:center;">
+      <div class="modal-header">
+        <h2>📷 QR - ${escapeHtml(loc.Name)}</h2>
+        <button class="modal-close" onclick="closeQRModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:30px;">
+        <div id="qrBigContainer" style="display:flex;justify-content:center;background:#fff;padding:20px;border-radius:12px;"></div>
+        <p style="margin-top:16px;font-size:12px;color:#64748b;word-break:break-all;">${escapeHtml(loc.QRCode)}</p>
+        <button class="btn-primary" onclick="printQR('${loc.id}')" style="margin-top:16px;width:100%;">🖨️ طباعة</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  setTimeout(() => {
+    const container = document.getElementById('qrBigContainer');
+    if (container && typeof QRCode !== 'undefined') {
+      container.innerHTML = '';
+      new QRCode(container, {
+        text: loc.QRCode,
+        width: 250,
+        height: 250,
+        colorDark: '#000',
+        colorLight: '#fff'
+      });
+    }
+  }, 100);
+};
+
+window.closeQRModal = function() {
+  const modal = document.getElementById('qrModal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.printQR = function(locId) {
+  const loc = schLocations.find(l => l.id === locId);
+  if (!loc) return;
+
+  const container = document.getElementById('qrBigContainer');
+  if (!container) return;
+
+  const canvas = container.querySelector('canvas');
+  if (!canvas) return;
+
+  const imgData = canvas.toDataURL();
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html dir="rtl">
+      <head><title>QR - ${escapeHtml(loc.Name)}</title></head>
+      <body style="text-align:center;font-family:Arial;padding:40px;">
+        <h1>${escapeHtml(loc.Name)}</h1>
+        <img src="${imgData}" style="width:400px;height:400px;" />
+        <p style="margin-top:20px;font-size:14px;color:#666;">${escapeHtml(loc.QRCode)}</p>
+        <script>window.onload=function(){setTimeout(function(){window.print();},500);};<\/script>
+      </body>
+    </html>
+  `);
+  win.document.close();
+};
+
+// ═══════════════════════════════════════════════════════
+//   Requests — Approve / Reject
+// ═══════════════════════════════════════════════════════
+
+window.approveRequest = async function(reqId) {
+  if (!confirm('✅ هل تريد الموافقة على الطلب؟\n\nسيتم نقل تسجيل الشخص من الحدث الأصلي للجديد.')) return;
+
+  try {
+    const reqDoc = await getDoc(doc(db, 'massChangeRequests', reqId));
+    if (!reqDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return;
+    }
+
+    const req = { id: reqDoc.id, ...reqDoc.data() };
+
+    if (req.Status !== 'pending') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار');
+      return;
+    }
+
+    const personId = req.RequesterPersonID;
+    const fromEventId = req.FromEventID;
+    const toEventId = req.ToEventID;
+
+    let fromRegId = null;
+    try {
+      const q1 = query(
+        collection(db, 'eventRegistrations'),
+        where('EventID', '==', fromEventId),
+        where('PersonID', '==', personId)
+      );
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        fromRegId = snap1.docs[0].id;
+        await updateDoc(doc(db, 'eventRegistrations', fromRegId), {
+          Status: 'cancelled',
+          CancelledAt: new Date().toISOString(),
+          CancelApprovedAt: new Date().toISOString(),
+          CancelApprovedBy: schUser.email,
+          TransferedTo: toEventId,
+          UpdatedAt: new Date().toISOString()
+        });
+      }
+    } catch (e) {
+      console.warn('Update from registration error:', e);
+    }
+
+    let toRegId = null;
+    try {
+      const q2 = query(
+        collection(db, 'eventRegistrations'),
+        where('EventID', '==', toEventId),
+        where('PersonID', '==', personId)
+      );
+      const snap2 = await getDocs(q2);
+
+      if (!snap2.empty) {
+        toRegId = snap2.docs[0].id;
+        await updateDoc(doc(db, 'eventRegistrations', toRegId), {
+          Status: 'confirmed',
+          ConfirmedAt: new Date().toISOString(),
+          ConfirmedVia: 'transfer',
+          TransferedFrom: fromEventId,
+          UpdatedAt: new Date().toISOString()
+        });
+      } else {
+        const person = schPeople[personId];
+        const newRef = await addDoc(collection(db, 'eventRegistrations'), {
+          EventID: toEventId,
+          PersonID: personId,
+          PersonName: person ? getPersonFullName(person) : req.RequesterName,
+          PersonEmail: req.RequesterEmail || '',
+          Status: 'confirmed',
+          ConfirmedAt: new Date().toISOString(),
+          ConfirmedVia: 'transfer',
+          TransferedFrom: fromEventId,
+          RegisteredBy: schUser.email,
+          RegisteredAt: new Date().toISOString(),
+          RejectedBefore: false,
+          CreatedAt: new Date().toISOString()
+        });
+        toRegId = newRef.id;
+      }
+    } catch (e) {
+      console.error('Create/update to registration error:', e);
+    }
+
+    await updateDoc(doc(db, 'massChangeRequests', reqId), {
+      Status: 'approved',
+      ApprovedAt: new Date().toISOString(),
+      ApprovedBy: schUser.email,
+      FromRegistrationID: fromRegId,
+      ToRegistrationID: toRegId
+    });
+
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_approved',
+        Title: '✅ تمت الموافقة على طلب النقل',
+        Body: `تم نقل حضورك:\nمن: ${req.FromEventTitle || ''}\nإلى: ${req.ToEventTitle || ''}`,
+        RelatedEventID: toEventId,
+        RelatedPersonID: personId,
+        TargetType: 'person',
+        TargetPersonID: personId,
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Notification error:', e);
+    }
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'transfer_approved',
+        type: 'request',
+        title: `موافقة على نقل: ${req.RequesterName || ''}`,
+        description: `من: ${req.FromEventTitle || ''} → إلى: ${req.ToEventTitle || ''}`,
+        relatedID: reqId,
+        relatedTitle: req.RequesterName || ''
+      });
+    }
+
+    alert('✅ تمت الموافقة\n\nتم نقل التسجيل بنجاح.');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    console.error('❌ approveRequest error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.rejectRequest = async function(reqId) {
+  if (!confirm('❌ هل تريد رفض الطلب؟\n\nتسجيل الشخص في الحدث الأصلي هيفضل كما هو.')) return;
+
+  try {
+    const reqDoc = await getDoc(doc(db, 'massChangeRequests', reqId));
+    if (!reqDoc.exists()) {
+      alert('❌ الطلب غير موجود');
+      return;
+    }
+
+    const req = { id: reqDoc.id, ...reqDoc.data() };
+
+    if (req.Status !== 'pending') {
+      alert('⚠️ هذا الطلب مش في حالة انتظار');
+      return;
+    }
+
+    await updateDoc(doc(db, 'massChangeRequests', reqId), {
+      Status: 'rejected',
+      RejectedAt: new Date().toISOString(),
+      RejectedBy: schUser.email
+    });
+
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        Type: 'transfer_rejected',
+        Title: '❌ تم رفض طلب النقل',
+        Body: `تم رفض طلب نقل حضورك:\nمن: ${req.FromEventTitle || ''}\nإلى: ${req.ToEventTitle || ''}\n\nتسجيلك في الحدث الأصلي كما هو.`,
+        RelatedEventID: req.FromEventID,
+        RelatedPersonID: req.RequesterPersonID,
+        TargetType: 'person',
+        TargetPersonID: req.RequesterPersonID,
+        SentBy: 'system',
+        SentAt: new Date().toISOString(),
+        ReadBy: [],
+        CreatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Notification error:', e);
+    }
+
+    if (typeof window.logAction === 'function') {
+      await window.logAction({
+        action: 'transfer_rejected',
+        type: 'request',
+        title: `رفض نقل: ${req.RequesterName || ''}`,
+        description: `من: ${req.FromEventTitle || ''} → إلى: ${req.ToEventTitle || ''}`,
+        relatedID: reqId,
+        relatedTitle: req.RequesterName || ''
+      });
+    }
+
+    alert('❌ تم رفض الطلب');
+    await loadSchedulePage(document.getElementById('contentArea'));
+  } catch (err) {
+    console.error('❌ rejectRequest error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   Helpers
 // ═══════════════════════════════════════════════════════
 
-function getTypeIcon(type) {
-  const map = {
-    event_added: '🎯',
-    event_updated: '✏️',
-    event_cancelled: '❌',
-    person_confirmed: '✅',
-    person_cancelled_admin: '📢',
-    person_cancelled_member: '⚠️',
-    person_cancelled_public: '🎟️',
-    rsvp_request: '📝',
-    transfer_request: '🔄',
-    transfer_approved: '✅',
-    transfer_rejected: '❌',
-    chat_message: '💬'
-  };
-  return map[type] || '🔔';
+function getEventEndTime(event) {
+  if (!event) return '';
+  if (event.EndTime) return String(event.EndTime);
+  const time = String(event.Time || '00:00');
+  const [h, m] = time.split(':').map(Number);
+  const total = (h || 0) * 60 + (m || 0) + 120;
+  const newH = Math.floor(total / 60) % 24;
+  const newM = total % 60;
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
-function formatRelativeTime(isoStr) {
-  if (!isoStr) return '';
+function parseDate(value) {
+  if (!value) return null;
+  if (value.toDate) return value.toDate();
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+}
 
+function formatDateISO(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '-';
   try {
-    const date = new Date(isoStr);
-    const now = new Date();
-    const diff = (now - date) / 1000;
-
-    if (diff < 60) return 'الآن';
-    if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
-    if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
-    if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
-
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
   } catch (e) {
-    return '';
+    return dateStr;
   }
 }
 
-function formatBody(body) {
-  if (!body) return '';
-  return escapeHtml(body).replace(/\n/g, '<br>');
+function formatRelativeTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const diff = (now - date) / 1000;
+
+  if (diff < 60) return 'الآن';
+  if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
+  if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
+  if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
+  return date.toLocaleDateString('ar-EG');
+}
+
+function isSameDay(d1, d2) {
+  return d1.getFullYear() === d2.getFullYear()
+    && d1.getMonth() === d2.getMonth()
+    && d1.getDate() === d2.getDate();
+}
+
+function getPersonFullName(p) {
+  if (!p) return '';
+  return [p.FirstName, p.SecondName, p.ThirdName, p.FourthName].filter(Boolean).join(' ');
+}
+
+function getEventLocationText(event) {
+  const mode = String(event.LocationMode || 'any').toLowerCase();
+  if (mode === 'any') return 'أي مكان';
+
+  const ids = Array.isArray(event.LocationIds) ? event.LocationIds : [];
+  if (ids.length === 0) return 'لم يحدد';
+
+  const names = ids.map(id => {
+    const loc = schLocations.find(l => l.id === id);
+    return loc ? loc.Name : null;
+  }).filter(Boolean);
+
+  return names.length > 0 ? names.join(' • ') : 'مكان محذوف';
 }
 
 function escapeHtml(str) {
@@ -711,18 +3170,4 @@ function escapeHtml(str) {
 //   Expose
 // ═══════════════════════════════════════════════════════
 
-window.initNotifications = initNotifications;
-window.openNotificationsModal = openNotificationsModal;
-window.closeNotificationsModal = closeNotificationsModal;
-window.renderEnableNotifButton = renderEnableNotifButton;
-window.updateNotifPermissionBadge = updateNotifPermissionBadge;
-window.notifyNewNotification = notifyNewNotification;
-
-// ═══ Auto-init ═══
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    if (typeof window.initNotifications === 'function') {
-      window.initNotifications();
-    }
-  }, 1000);
-});
+window.loadSchedulePage = loadSchedulePage;
