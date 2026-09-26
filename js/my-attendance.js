@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   My Attendance (سجل حضورك بنفسك) — Events
+//   ⚡ محدّث: GPS محسّن + watchPosition + Tolerance
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -30,11 +31,15 @@ let maLastScanTime = 0;
 let maUserLocation = null;
 let maAvailableLocations = [];
 let maAvailableEventTypes = [];
+let maLocationWatchId = null;
 
 // ═══ Constants ═══
 const MA_SCAN_COOLDOWN = 2000;
-const MA_MAX_ACCURACY = 15;
-const MA_STRICT_RADIUS = true;
+const MA_MAX_ACCURACY = 50;            // ⚡ 50 متر (بدل 15)
+const MA_GOOD_ACCURACY = 25;           // ⚡ دقة جيدة (نتوقف عندها)
+const MA_STRICT_RADIUS = false;         // ⚡ يستخدم Radius + Tolerance
+const MA_LOCATION_TIMEOUT = 20000;     // ⚡ 20 ثانية كحد أقصى
+const MA_MIN_ATTEMPTS = 3;             // ⚡ 3 قراءات على الأقل
 
 // ═══════════════════════════════════════════════════════
 //   Load Page
@@ -50,7 +55,6 @@ async function loadMyAttendancePage(area) {
       return;
     }
 
-    // ⚡ اجلب الإعدادات + الأماكن + أنواع الأحداث
     const [settingsDoc, locationsSnap, eventTypesSnap] = await Promise.all([
       getDoc(doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC)),
       getDocs(collection(db, 'locations')).catch(() => ({ docs: [] })),
@@ -59,17 +63,14 @@ async function loadMyAttendancePage(area) {
 
     maSettings = settingsDoc.exists() ? settingsDoc.data() : {};
 
-    // ⚡ الأماكن من Collection منفصل
     maAvailableLocations = locationsSnap.docs
       ? locationsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
       : [];
 
-    // ⚡ أنواع الأحداث
     maAvailableEventTypes = eventTypesSnap.docs
       ? eventTypesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
       : [];
 
-    // ⚡ اجلب الشخص
     maPerson = null;
     const personId = maUser.personId || maUser.account?.PersonID;
 
@@ -95,10 +96,8 @@ async function loadMyAttendancePage(area) {
       }
     }
 
-    // ⚡ اجلب الأحداث من events
     const eventsSnap = await getDocs(collection(db, 'events'));
 
-    // ⚡ فلتر: Active + عنده موعد النهاردة
     maEvents = eventsSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(e => String(e.Status || '').toLowerCase() === 'active')
@@ -155,7 +154,6 @@ function renderMyAttendancePage(area) {
     maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName
   ].filter(Boolean).join(' ');
 
-  // ⚡ لو مفيش أحداث النهاردة
   if (maEvents.length === 0) {
     container.innerHTML = `
       <div style="text-align:center;margin-bottom:20px;">
@@ -270,7 +268,6 @@ function renderEventInfo() {
   const type = String(maSelectedEvent.Type || 'once').toLowerCase();
   const endTime = getEventEndTime(maSelectedEvent);
 
-  // ⚡ نوع الحدث
   const eventType = maAvailableEventTypes.find(t => t.id === maSelectedEvent.EventTypeID);
   const eventTypeText = eventType ? `${eventType.Icon || '📅'} ${eventType.Name}` : '';
 
@@ -330,7 +327,7 @@ function renderEventInfo() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Location Check
+//   ⚡ Check Location (Enhanced with watchPosition)
 // ═══════════════════════════════════════════════════════
 
 function checkLocation() {
@@ -353,51 +350,156 @@ function checkLocation() {
     return;
   }
 
+  // ⚡ اوقف أي watch سابق
+  stopLocationWatch();
+
   statusEl.className = 'ma-location-status checking';
-  statusEl.innerHTML = '<span class="dot"></span><span>جاري التحقق من الموقع...</span>';
+  statusEl.innerHTML = '<span class="dot"></span><span>📡 جاري تحديد الموقع بدقة...</span>';
 
-  navigator.geolocation.getCurrentPosition(
+  // ⚡ ابدأ watchPosition
+  let attempts = 0;
+  let bestPosition = null;
+  let bestAccuracy = Infinity;
+  let resolved = false;
+
+  const startTime = Date.now();
+
+  maLocationWatchId = navigator.geolocation.watchPosition(
     (pos) => {
-      maUserLocation = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy
-      };
+      if (resolved) return;
 
-      if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
-        statusEl.className = 'ma-location-status invalid';
-        statusEl.innerHTML = `<span class="dot"></span><span>⚠️ دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)}م). اقترب من المكان.</span>`;
-        updateScanButton();
+      attempts++;
+
+      const accuracy = pos.coords.accuracy;
+      const elapsed = Date.now() - startTime;
+
+      console.log(`📍 Location attempt ${attempts}: accuracy=${Math.round(accuracy)}m, elapsed=${Math.round(elapsed/1000)}s`);
+
+      // ⚡ احفظ الأحسن
+      if (accuracy < bestAccuracy) {
+        bestAccuracy = accuracy;
+        bestPosition = pos;
+      }
+
+      // ⚡ شرط الإنهاء:
+      // 1. دقة جيدة (≤ 25 متر) → توقف فورًا
+      // 2. أو مرت 20 ثانية → توقف وخد الأحسن
+      // 3. أو 5 محاولات + دقة مقبولة (≤ 50 متر)
+
+      const shouldStop =
+        accuracy <= MA_GOOD_ACCURACY ||
+        elapsed >= MA_LOCATION_TIMEOUT ||
+        (attempts >= MA_MIN_ATTEMPTS && accuracy <= MA_MAX_ACCURACY);
+
+      if (shouldStop) {
+        resolved = true;
+        stopLocationWatch();
+        finalizeLocationCheck(bestPosition, statusEl);
+      } else {
+        // ⚡ حدّث الحالة
+        statusEl.className = 'ma-location-status checking';
+        statusEl.innerHTML = `<span class="dot"></span><span>📡 تحسين الدقة... (${Math.round(accuracy)}م)</span>`;
+      }
+    },
+    (err) => {
+      if (resolved) return;
+
+      // ⚡ لو فيه قراءة أحسن → استخدمها
+      if (bestPosition) {
+        resolved = true;
+        stopLocationWatch();
+        finalizeLocationCheck(bestPosition, statusEl);
         return;
       }
 
-      const check = validateLocation(maUserLocation);
+      resolved = true;
+      stopLocationWatch();
 
-      if (check.valid) {
-        statusEl.className = 'ma-location-status valid';
-        const locName = check.location ? check.location.Name : '';
-        const distStr = check.distance ? ` (${Math.round(check.distance)}م)` : '';
-        statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}${distStr}</span>`;
-      } else {
-        statusEl.className = 'ma-location-status invalid';
-        statusEl.innerHTML = `<span class="dot"></span><span>❌ أنت خارج النطاق المسموح</span>`;
-      }
-
-      updateScanButton();
-    },
-    (err) => {
-      statusEl.className = 'ma-location-status invalid';
       let msg = 'فشل تحديد الموقع';
       if (err.code === 1) msg = 'لم تسمح بالوصول للموقع';
+      else if (err.code === 2) msg = 'الموقع غير متاح';
+      else if (err.code === 3) msg = 'انتهت مهلة تحديد الموقع';
+
+      statusEl.className = 'ma-location-status invalid';
       statusEl.innerHTML = `<span class="dot"></span><span>❌ ${msg}</span>`;
       updateScanButton();
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    {
+      enableHighAccuracy: true,
+      timeout: MA_LOCATION_TIMEOUT,
+      maximumAge: 0
+    }
   );
+
+  // ⚡ Timeout إجباري بعد 20 ثانية
+  setTimeout(() => {
+    if (resolved) return;
+    resolved = true;
+    stopLocationWatch();
+    if (bestPosition) {
+      finalizeLocationCheck(bestPosition, statusEl);
+    } else {
+      statusEl.className = 'ma-location-status invalid';
+      statusEl.innerHTML = '<span class="dot"></span><span>❌ انتهت المهلة</span>';
+      updateScanButton();
+    }
+  }, MA_LOCATION_TIMEOUT);
+}
+
+function stopLocationWatch() {
+  if (maLocationWatchId !== null) {
+    navigator.geolocation.clearWatch(maLocationWatchId);
+    maLocationWatchId = null;
+  }
+}
+
+function finalizeLocationCheck(position, statusEl) {
+  if (!position) {
+    statusEl.className = 'ma-location-status invalid';
+    statusEl.innerHTML = '<span class="dot"></span><span>❌ فشل تحديد الموقع</span>';
+    updateScanButton();
+    return;
+  }
+
+  maUserLocation = {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: position.coords.accuracy
+  };
+
+  console.log(`✅ Final location: accuracy=${Math.round(maUserLocation.accuracy)}m`);
+
+  // ⚡ لو الدقة سيئة جدًا → رفض
+  if (maUserLocation.accuracy > MA_MAX_ACCURACY) {
+    statusEl.className = 'ma-location-status invalid';
+    statusEl.innerHTML = `<span class="dot"></span><span>⚠️ دقة GPS ضعيفة (${Math.round(maUserLocation.accuracy)}م). اقترب من نافذة/باب وحاول مجددًا.</span>`;
+    updateScanButton();
+    return;
+  }
+
+  const check = validateLocation(maUserLocation);
+
+  if (check.valid) {
+    statusEl.className = 'ma-location-status valid';
+    const locName = check.location ? check.location.Name : '';
+    const distStr = check.distance ? ` (${Math.round(check.distance)}م)` : '';
+    const accStr = ` [دقة: ${Math.round(maUserLocation.accuracy)}م]`;
+    statusEl.innerHTML = `<span class="dot"></span><span>✅ داخل النطاق${locName ? ' — ' + escapeHtml(locName) : ''}${distStr}${accStr}</span>`;
+  } else {
+    statusEl.className = 'ma-location-status invalid';
+
+    let reasonText = 'أنت خارج النطاق المسموح';
+    if (check.reason === 'no_locations') reasonText = 'الحدث غير مرتبط بأماكن';
+    else if (check.reason === 'low_accuracy') reasonText = 'دقة GPS ضعيفة';
+
+    statusEl.innerHTML = `<span class="dot"></span><span>❌ ${reasonText}</span>`;
+  }
+
+  updateScanButton();
 }
 
 // ═══════════════════════════════════════════════════════
-//   Validate Location (Strict)
+//   Validate Location
 // ═══════════════════════════════════════════════════════
 
 function validateLocation(loc) {
@@ -424,6 +526,7 @@ function validateLocation(loc) {
   for (const targetLoc of allowedLocations) {
     const distance = getDistance(loc.lat, loc.lng, targetLoc.Lat, targetLoc.Lng);
 
+    // ⚡ السماحية = Radius + Tolerance
     const allowed = MA_STRICT_RADIUS
       ? (targetLoc.Radius || 4)
       : ((targetLoc.Radius || 4) + (targetLoc.Tolerance || 15));
@@ -651,7 +754,6 @@ async function processScan(scannedText) {
       return showResult('error', 'الحدث غير مرتبط بأماكن', 'تواصل مع المسؤول.');
     }
 
-    // ⚡ ابحث عن المكان اللي الـ QR بتاعه
     const scannedLocation = allowedLocations.find(loc => loc.QRCode === scannedText);
 
     if (!scannedLocation) {
@@ -694,7 +796,6 @@ async function processScan(scannedText) {
       }
     }
 
-    // ═══ منع التكرار ═══
     const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedEvent.id, occurrenceDate);
     const preventDup = maSettings.PreventDuplicateAttendance !== false;
 
@@ -702,7 +803,6 @@ async function processScan(scannedText) {
       return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الحدث.');
     }
 
-    // ═══ التسجيل ═══
     await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
       PersonID: maPerson.id,
       PersonName: [maPerson.FirstName, maPerson.SecondName, maPerson.ThirdName, maPerson.FourthName].filter(Boolean).join(' '),
@@ -936,7 +1036,16 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   Cleanup on page unload
+// ═══════════════════════════════════════════════════════
+
+window.addEventListener('beforeunload', () => {
+  stopLocationWatch();
+});
+
+// ═══════════════════════════════════════════════════════
 //   Expose
 // ═══════════════════════════════════════════════════════
 
 window.loadMyAttendancePage = loadMyAttendancePage;
+window.stopLocationWatch = stopLocationWatch;
