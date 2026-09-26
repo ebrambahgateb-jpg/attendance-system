@@ -1989,3 +1989,175 @@ html[data-theme="dark"] .me-request-card {
   background: #1e293b !important;
   border-color: #334155 !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Profile (حسابي) — Dark Mode
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Status Badge / Toggle ═══ */
+html[data-theme="dark"] .profile-status-badge,
+html[data-theme="dark"] .profile-status,
+html[data-theme="dark"] .pf-status-badge,
+html[data-theme="dark"] .pf-status,
+html[data-theme="dark"] .profile-status-toggle,
+html[data-theme="dark"] .pf-status-toggle,
+html[data-theme="dark"] [class*="status-toggle"],
+html[data-theme="dark"] [class*="status-switch"] {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+  color: #cbd5e1 !important;
+}
+
+/* ═══ Active / Green State ═══ */
+html[data-theme="dark"] .profile-status-badge.active,
+html[data-theme="dark"] .profile-status.active,
+html[data-theme="dark"] .pf-status-badge.active,
+html[data-theme="dark"] .pf-status.active,
+html[data-theme="dark"] .profile-status-toggle.active,
+html[data-theme="dark"] .pf-status-toggle.active,
+html[data-theme="dark"] .profile-status-badge.green,
+html[data-theme="dark"] .profile-status.green {
+  background: rgba(34, 197, 94, 0.25) !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+  color: #4ade80 !important;
+}
+
+/* ═══ أزرار الصفحة ═══ */
+html[data-theme="dark"] .profile-btn,
+html[data-theme="dark"] .pf-btn,
+html[data-theme="dark"] .profile-edit-btn,
+html[data-theme="dark"] .pf-edit-btn {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .profile-btn:hover,
+html[data-theme="dark"] .pf-btn:hover {
+  background: #475569 !important;
+}
+
+/* ═══ Info Cards ═══ */
+html[data-theme="dark"] .profile-info-card,
+html[data-theme="dark"] .pf-info-card,
+html[data-theme="dark"] .profile-stats-card,
+html[data-theme="dark"] .pf-stats-card {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+/* ═══ Stat Items ═══ */
+html[data-theme="dark"] .profile-stat,
+html[data-theme="dark"] .pf-stat {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .profile-stat-value,
+html[data-theme="dark"] .pf-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .profile-stat-label,
+html[data-theme="dark"] .pf-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Info Rows ═══ */
+html[data-theme="dark"] .profile-info-row,
+html[data-theme="dark"] .pf-info-row {
+  color: #cbd5e1 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .profile-info-row strong,
+html[data-theme="dark"] .pf-info-row strong {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .profile-info-label,
+html[data-theme="dark"] .pf-info-label {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .profile-info-value,
+html[data-theme="dark"] .pf-info-value {
+  color: #ffffff !important;
+}
+
+/* ═══ Section Headers ═══ */
+html[data-theme="dark"] .profile-section-title,
+html[data-theme="dark"] .pf-section-title {
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+/* ═══ Header Title ═══ */
+html[data-theme="dark"] .profile-header h2,
+html[data-theme="dark"] .profile-name,
+html[data-theme="dark"] .pf-header h2,
+html[data-theme="dark"] .pf-name {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .profile-email,
+html[data-theme="dark"] .pf-email {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Avatar ═══ */
+html[data-theme="dark"] .profile-avatar-placeholder,
+html[data-theme="dark"] .pf-avatar-placeholder {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+/* ═══ QR Section ═══ */
+html[data-theme="dark"] .profile-qr-section,
+html[data-theme="dark"] .pf-qr-section {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .profile-qr-hint,
+html[data-theme="dark"] .pf-qr-hint {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ All Badges in Profile ═══ */
+html[data-theme="dark"] .profile-badge,
+html[data-theme="dark"] .pf-badge {
+  background: #334155 !important;
+  color: #cbd5e1 !important;
+  border-color: var(--border) !important;
+}
+
+/* ═══ ⚡ Toggle Switch (لو الدايرة Toggle) ═══ */
+html[data-theme="dark"] .toggle,
+html[data-theme="dark"] .switch,
+html[data-theme="dark"] .toggle-switch,
+html[data-theme="dark"] [class*="toggle"]:not(button),
+html[data-theme="dark"] [class*="switch"]:not(button) {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .toggle.active,
+html[data-theme="dark"] .switch.active,
+html[data-theme="dark"] .toggle-switch.active {
+  background: #3b82f6 !important;
+}
+
+/* ═══ Indicator Circles ═══ */
+html[data-theme="dark"] .indicator-circle,
+html[data-theme="dark"] .status-circle,
+html[data-theme="dark"] .status-dot {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .indicator-circle.active,
+html[data-theme="dark"] .status-circle.active,
+html[data-theme="dark"] .status-dot.active {
+  background: #4ade80 !important;
+}
