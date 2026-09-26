@@ -1826,3 +1826,166 @@ html[data-theme="dark"] .me-card + .me-section-title::before,
 html[data-theme="dark"] .me-section-title::before {
   background: #60a5fa !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ My Events — Section Toggle / Any Circles
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ All Possible Toggle Classes ═══ */
+html[data-theme="dark"] .me-section-title > span:not(.me-section-count),
+html[data-theme="dark"] .me-section-title > input[type="checkbox"],
+html[data-theme="dark"] .me-section-title > input[type="radio"],
+html[data-theme="dark"] .me-toggle,
+html[data-theme="dark"] .me-toggle-btn,
+html[data-theme="dark"] .me-filter-toggle,
+html[data-theme="dark"] .me-show-toggle,
+html[data-theme="dark"] .toggle-switch,
+html[data-theme="dark"] .switch,
+html[data-theme="dark"] .toggle {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+/* ═══ أي عنصر بـborder-radius: 50% في me-section ═══ */
+html[data-theme="dark"] .me-section-title [class*="circle"],
+html[data-theme="dark"] .me-section-title [class*="indicator"],
+html[data-theme="dark"] .me-section-title [class*="dot"],
+html[data-theme="dark"] .me-section-title [class*="toggle"],
+html[data-theme="dark"] .me-section-title [class*="switch"] {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+/* ═══ Section Count Badges ═══ */
+html[data-theme="dark"] .me-section-count {
+  background: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .me-section-count.pending {
+  background: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+}
+
+html[data-theme="dark"] .me-section-count.confirmed {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #4ade80 !important;
+}
+
+html[data-theme="dark"] .me-section-count.warning {
+  background: rgba(249, 115, 22, 0.2) !important;
+  color: #fb923c !important;
+}
+
+html[data-theme="dark"] .me-section-count.cancelled {
+  background: rgba(220, 38, 38, 0.2) !important;
+  color: #f87171 !important;
+}
+
+html[data-theme="dark"] .me-section-count.optional {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #6ee7b7 !important;
+}
+
+/* ═══ Buttons — المتبقية ═══ */
+html[data-theme="dark"] .me-btn {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-btn-confirm {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-btn-confirm:hover {
+  background: #15803d !important;
+}
+
+html[data-theme="dark"] .me-btn-cancel {
+  background: rgba(220, 38, 38, 0.2) !important;
+  color: #f87171 !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-btn-cancel:hover {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-btn-revert {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-btn-revert:hover {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-btn-transfer {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-btn-transfer:hover {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Status Banners ═══ */
+html[data-theme="dark"] .me-status-banner.warning {
+  background: rgba(249, 115, 22, 0.15) !important;
+  color: #fb923c !important;
+  border-color: rgba(249, 115, 22, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-status-banner.cancelled {
+  background: rgba(220, 38, 38, 0.15) !important;
+  color: #f87171 !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+
+html[data-theme="dark"] .me-status-banner.optional {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+/* ═══ Card Info ═══ */
+html[data-theme="dark"] .me-card-icon {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-info-row {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .me-cancel-reason {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .me-cancel-reason strong {
+  color: #ffffff !important;
+}
+
+/* ═══ Attendance List ═══ */
+html[data-theme="dark"] .me-attendance-icon {
+  background: rgba(34, 197, 94, 0.2) !important;
+}
+
+html[data-theme="dark"] .me-attendance-empty {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+}
+
+/* ═══ Request Card ═══ */
+html[data-theme="dark"] .me-request-card {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
