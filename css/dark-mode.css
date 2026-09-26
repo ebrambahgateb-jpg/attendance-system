@@ -1236,3 +1236,359 @@ html[data-theme="dark"] .people-stat-value {
 html[data-theme="dark"] .people-stat-label {
   color: var(--text-muted) !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Event Attendees Modal — Stats & Groups
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Stats Box — الأربع مربعات ═══ */
+html[data-theme="dark"] .att-stat-item {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .att-stat-item.confirmed {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border: 1px solid rgba(34, 197, 94, 0.4) !important;
+}
+
+html[data-theme="dark"] .att-stat-item.pending {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border: 1px solid rgba(245, 158, 11, 0.4) !important;
+}
+
+html[data-theme="dark"] .att-stat-item.cancel-req {
+  background: rgba(249, 115, 22, 0.15) !important;
+  border: 1px solid rgba(249, 115, 22, 0.4) !important;
+}
+
+html[data-theme="dark"] .att-stat-item.cancelled {
+  background: rgba(220, 38, 38, 0.15) !important;
+  border: 1px solid rgba(220, 38, 38, 0.4) !important;
+}
+
+html[data-theme="dark"] .att-stat-number {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .att-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Group Count Badge ═══ */
+html[data-theme="dark"] .att-group-count {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Mini Photo Placeholder ═══ */
+html[data-theme="dark"] .att-mini-photo-placeholder {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Day Events Modal (من الجدول)
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .sch-day-event-card {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .sch-day-event-card:hover {
+  background: #334155 !important;
+}
+
+html[data-theme="dark"] .sch-day-event-title {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sch-day-event-line {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .sch-day-event-icon {
+  color: #60a5fa !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Templates Modal (الأنماط)
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .tpl-day-editor {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .tpl-event-editor {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .tpl-day-empty-hint {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .tpl-event-field label {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .tpl-event-field input,
+html[data-theme="dark"] .tpl-event-field select {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Template Days Accordion ═══ */
+html[data-theme="dark"] .sch-template-day-accordion {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .sch-template-day-btn {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sch-template-day-btn:hover {
+  background: #334155 !important;
+}
+
+html[data-theme="dark"] .sch-template-day-content {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .sch-tpl-event-item {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  border-right-color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .sch-tpl-event-header {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sch-tpl-event-info {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .sch-tpl-day-empty {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Template Properties (خصائص النمط)
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .tpl-props-section {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .tpl-props-section textarea {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .tpl-props-images-empty {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .tpl-props-image-item {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .tpl-props-view-text {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Chat — تحسينات إضافية
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .chat-container {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-sidebar {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-main {
+  background: #0f172a !important;
+}
+
+html[data-theme="dark"] .chat-header {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-header-name {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .chat-header-status {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .chat-item:hover {
+  background: #334155 !important;
+}
+
+html[data-theme="dark"] .chat-item-name {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .chat-item-time,
+html[data-theme="dark"] .chat-item-preview {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .chat-message-bubble {
+  background: #1e293b !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-message-text {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .chat-message-sender {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .chat-message-time {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .chat-input {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .chat-input-wrapper {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-input-btn {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-input-btn:hover {
+  background: #475569 !important;
+}
+
+html[data-theme="dark"] .chat-send-btn {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .chat-reply-preview {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .chat-reply-preview-name {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .chat-reply-preview-text {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .chat-message-reply {
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+html[data-theme="dark"] .chat-message.mine .chat-message-reply {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+html[data-theme="dark"] .chat-message-reply-name {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .chat-message-reply-text {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .chat-message.mine .chat-message-reply-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+html[data-theme="dark"] .chat-message-deleted-text {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Image Cropper
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .image-cropper-viewport {
+  background: #020617 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Env Attach (schedule events day modal scope badges)
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .sch-month-event:hover {
+  background: #3b82f6 !important;
+}
+
+html[data-theme="dark"] .sch-month-event:hover * {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .sch-week-event:hover {
+  background: #1e293b !important;
+}
+
+html[data-theme="dark"] .sch-tpl-day-arrow {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Sync Result Box
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .sync-result.success {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+  color: #4ade80 !important;
+}
+
+html[data-theme="dark"] .sync-result.error {
+  background: rgba(220, 38, 38, 0.15) !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+  color: #f87171 !important;
+}
+
+html[data-theme="dark"] .sync-info-box {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .sync-info-row {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .sync-info-row strong {
+  color: #ffffff !important;
+}
