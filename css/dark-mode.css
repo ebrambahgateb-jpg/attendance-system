@@ -2374,3 +2374,69 @@ html[data-theme="dark"] .logs-empty {
 html[data-theme="dark"] .logs-empty h3 {
   color: #ffffff !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logs — Action Dots (النوع)
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ القاعدة العامة — أي دايرة في عمود النوع ═══ */
+html[data-theme="dark"] .logs-action-dot,
+html[data-theme="dark"] .log-action-dot,
+html[data-theme="dark"] .logs-dot,
+html[data-theme="dark"] .log-dot,
+html[data-theme="dark"] .logs-type-dot,
+html[data-theme="dark"] .log-type-dot,
+html[data-theme="dark"] .logs-type-badge,
+html[data-theme="dark"] .logs-type {
+  background: #334155 !important;
+  border-color: #475569 !important;
+}
+
+/* ═══ Variations — لو بتستخدم كلاسات ═══ */
+html[data-theme="dark"] .logs-action-dot.confirmed,
+html[data-theme="dark"] .logs-action-dot.approved,
+html[data-theme="dark"] .logs-action-dot.success,
+html[data-theme="dark"] .logs-action-dot.green,
+html[data-theme="dark"] .log-action-dot.confirmed,
+html[data-theme="dark"] .log-action-dot.approved {
+  background: #16a34a !important;
+  border-color: #22c55e !important;
+}
+
+html[data-theme="dark"] .logs-action-dot.rejected,
+html[data-theme="dark"] .logs-action-dot.cancelled,
+html[data-theme="dark"] .logs-action-dot.danger,
+html[data-theme="dark"] .logs-action-dot.red,
+html[data-theme="dark"] .log-action-dot.rejected {
+  background: #dc2626 !important;
+  border-color: #ef4444 !important;
+}
+
+html[data-theme="dark"] .logs-action-dot.pending,
+html[data-theme="dark"] .logs-action-dot.warning,
+html[data-theme="dark"] .logs-action-dot.yellow,
+html[data-theme="dark"] .log-action-dot.pending {
+  background: #f59e0b !important;
+  border-color: #fbbf24 !important;
+}
+
+html[data-theme="dark"] .logs-action-dot.info,
+html[data-theme="dark"] .logs-action-dot.updated,
+html[data-theme="dark"] .logs-action-dot.blue,
+html[data-theme="dark"] .log-action-dot.info {
+  background: #3b82f6 !important;
+  border-color: #60a5fa !important;
+}
+
+/* ═══ أي span فاضي جوه الخلية ═══ */
+html[data-theme="dark"] .logs-table td > span:empty,
+html[data-theme="dark"] .logs-table td > div:empty {
+  background: #334155 !important;
+  border-color: #475569 !important;
+}
+
+/* ═══ لو الدايرة دي SVG أو pseudo-element ═══ */
+html[data-theme="dark"] .logs-table td::before,
+html[data-theme="dark"] .logs-table td::after {
+  border-color: #475569 !important;
+}
