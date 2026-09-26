@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Schedule (الجدول) — عرض شهري + أسبوعي + إدارة الأنماط
-//   ⚡ محدّث: Properties (نص + صور) + Active Template Banner + Image Slider
+//   ⚡ محدّث: Properties + Active Template Banner + Image Slider
+//   ⚡ محدّث: GPS Location Picker for Locations Modal
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -47,11 +48,11 @@ let currentTemplateProps = {
   images: []
 };
 
-// ═══ Slider State (exposed to window for inline onclick) ═══
+// ═══ Slider State ═══
 window.tplSliderImages = [];
 window.tplSliderCurrentIndex = 0;
 
-// ═══ Fullscreen Slider State (exposed to window) ═══
+// ═══ Fullscreen Slider State ═══
 window.imgFsImages = [];
 window.imgFsCurrentIndex = 0;
 window.imgFsTouchStartX = 0;
@@ -63,16 +64,13 @@ window.imgFsZoom = {
   maxScale: 3,
   translateX: 0,
   translateY: 0,
-  // ⚡ Pinch state
   initialDistance: 0,
   initialScale: 1,
-  // ═══ Pan state ═══
   isPanning: false,
   panStartX: 0,
   panStartY: 0
 };
 
-// ═══ Double Tap State ═══
 window.imgFsLastTap = 0;
 
 // ═══ Constants ═══
@@ -259,7 +257,7 @@ function renderGridView(container) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Active Template Banner
+//   Active Template Banner
 // ═══════════════════════════════════════════════════════
 
 function renderActiveTemplateBanner() {
@@ -314,7 +312,7 @@ function renderGridHeader() {
         </button>
       </div>
 
-           <div class="sch-nav">
+      <div class="sch-nav">
         <button class="sch-nav-btn" onclick="changeScheduleRange(-1)">▶</button>
         <div class="sch-nav-title">${title}</div>
         <button class="sch-nav-btn" onclick="changeScheduleRange(1)">◀</button>
@@ -1310,11 +1308,11 @@ function renderTemplatePropertiesSection(template) {
           ${renderTemplatePropsImages()}
         </div>
 
-                      <div class="tpl-props-images-actions">
+        <div class="tpl-props-images-actions">
           <button type="button" class="btn-secondary" onclick="uploadTemplatePropImage()">
             📤 رفع صور (متعدد)
           </button>
-                    ${currentTemplateProps.images.length > 0 ? `
+          ${currentTemplateProps.images.length > 0 ? `
             <button type="button" class="btn-secondary danger clear-all-btn" onclick="clearAllTemplatePropImages()">
               🗑️ مسح كل الصور
             </button>
@@ -1397,7 +1395,6 @@ window.handleImageDrop = function(event, targetIndex) {
 
   if (dragSourceIndex === null || dragSourceIndex === targetIndex) return;
 
-  // ⚡ انقل الصورة
   const images = currentTemplateProps.images;
   const [moved] = images.splice(dragSourceIndex, 1);
   images.splice(targetIndex, 0, moved);
@@ -1413,14 +1410,12 @@ window.handleImageDragEnd = function(event) {
   dragSourceIndex = null;
 };
 
-// ═══ Move Image (أزرار ⬅️ ➡️) ═══
 window.moveTemplatePropImage = function(index, direction) {
   const images = currentTemplateProps.images;
   const newIndex = index + direction;
 
   if (newIndex < 0 || newIndex >= images.length) return;
 
-  // ⚡ بدّل
   [images[index], images[newIndex]] = [images[newIndex], images[index]];
   refreshTemplatePropsImages();
 };
@@ -1438,11 +1433,9 @@ window.uploadTemplatePropImage = async function() {
     return;
   }
 
-  // ⚡ File picker متعدد
   const files = await window.pickMultipleImages();
   if (!files || files.length === 0) return;
 
-  // ⚡ تحقق من الحد الأقصى
   if (files.length > remaining) {
     alert(`⚠️ يمكنك رفع ${remaining} صور فقط (المتبقي من ${MAX_TEMPLATE_IMAGES})`);
     return;
@@ -1451,10 +1444,9 @@ window.uploadTemplatePropImage = async function() {
   await processMultipleImageUploads(files);
 };
 
-// ═══ Multi-Upload Function ═══
 async function processMultipleImageUploads(files) {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-  const MAX_TEMPLATE_PROP_SIZE = 10 * 1024 * 1024; // 10 MB
+  const MAX_TEMPLATE_PROP_SIZE = 10 * 1024 * 1024;
 
   const container = document.getElementById('tplPropsImagesList');
   const originalHtml = container ? container.innerHTML : '';
@@ -1466,7 +1458,6 @@ async function processMultipleImageUploads(files) {
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
-    // ⚡ Progress
     if (container) {
       container.innerHTML = `
         <div class="tpl-props-images-loading">
@@ -1478,14 +1469,12 @@ async function processMultipleImageUploads(files) {
       `;
     }
 
-    // ⚡ تحقق من النوع
     if (!allowedTypes.includes(file.type)) {
       failed++;
       errors.push(`"${file.name}": صيغة غير مدعومة`);
       continue;
     }
 
-    // ⚡ تحقق من الحجم
     if (file.size > MAX_TEMPLATE_PROP_SIZE) {
       failed++;
       errors.push(`"${file.name}": أكبر من 10 MB`);
@@ -1517,10 +1506,8 @@ async function processMultipleImageUploads(files) {
     }
   }
 
-  // ⚡ أعد الرسم
   refreshTemplatePropsImages();
 
-  // ⚡ ملخص
   if (failed > 0) {
     alert(
       `✅ تم رفع ${uploaded} صورة\n` +
@@ -1552,17 +1539,14 @@ function refreshTemplatePropsImages() {
     container.innerHTML = renderTemplatePropsImages();
   }
 
-  // ⚡ شيل كل أزرار "مسح كل الصور" المكررة
   const actionsContainer = document.querySelector('.tpl-props-images-actions');
   if (actionsContainer) {
-    // ⚡ شيل كل الأزرار اللي فيها "مسح كل الصور" (ما عدا الأصلية لو موجودة)
     const allClearBtns = actionsContainer.querySelectorAll('.clear-all-btn');
     allClearBtns.forEach((btn, idx) => {
-      if (idx > 0) btn.remove(); // ⚡ سيب الأول بس، شيل الباقي
+      if (idx > 0) btn.remove();
     });
   }
 
-  // ⚡ حدّث العدّاد
   const hintEl = document.querySelector('.tpl-props-section .hint:last-child');
   if (hintEl && hintEl.innerHTML.includes('عدد الصور')) {
     hintEl.innerHTML = `عدد الصور: <strong>${currentTemplateProps.images.length}</strong> / ${MAX_TEMPLATE_IMAGES}`;
@@ -1570,7 +1554,7 @@ function refreshTemplatePropsImages() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ View Template Properties — Modal (with Slider)
+//   View Template Properties — Modal (with Slider)
 // ═══════════════════════════════════════════════════════
 
 window.viewTemplateProperties = function(templateId) {
@@ -1599,12 +1583,11 @@ window.viewTemplateProperties = function(templateId) {
 
   let contentHtml = '';
 
-  // ═══ Slider للصور ═══
   if (images.length > 0) {
     contentHtml += `
       <div class="tpl-props-slider" id="tplPropsSlider">
         <div class="tpl-slider-main">
-                   ${images.length > 1 ? `
+          ${images.length > 1 ? `
             <button class="tpl-slider-nav tpl-slider-prev" onclick="tplSliderPrev()" aria-label="السابق">▶</button>
           ` : ''}
 
@@ -1632,7 +1615,6 @@ window.viewTemplateProperties = function(templateId) {
     `;
   }
 
-  // ═══ النص ═══
   if (text) {
     contentHtml += `
       <div class="tpl-props-view-text">
@@ -1656,13 +1638,11 @@ window.viewTemplateProperties = function(templateId) {
     </div>
   `;
 
-   modal.style.display = 'flex';
+  modal.style.display = 'flex';
 
-    // ⚡ Init slider
   if (images.length > 0) {
     window.tplSliderInit(images);
 
-    // ⚡ Swipe on slider (RTL: swipe left = prev, swipe right = next)
     setTimeout(() => {
       const sliderMain = document.querySelector('.tpl-slider-main');
       if (sliderMain) {
@@ -1685,7 +1665,6 @@ window.viewTemplateProperties = function(templateId) {
           const diffX = Math.abs(currentX - startX);
           const diffY = Math.abs(currentY - startY);
 
-          // ⚡ لو الحركة أفقية أكثر من العمودية → swipe
           if (diffX > diffY && diffX > 10) {
             isSwiping = true;
           }
@@ -1699,10 +1678,8 @@ window.viewTemplateProperties = function(templateId) {
 
           if (Math.abs(diff) > 50) {
             if (diff > 0) {
-              // ⚡ Swipe يسار (RTL): السابق
               window.tplSliderPrev();
             } else {
-              // ⚡ Swipe يمين (RTL): التالي
               window.tplSliderNext();
             }
           }
@@ -1718,14 +1695,9 @@ window.closeTemplatePropsView = function() {
   const modal = document.getElementById('templatePropsViewModal');
   if (modal) modal.style.display = 'none';
 
-  // ⚡ Cleanup
   window.tplSliderImages = [];
   window.tplSliderCurrentIndex = 0;
 };
-
-// ═══════════════════════════════════════════════════════
-//   ⚡ Template Properties — Slider Logic
-// ═══════════════════════════════════════════════════════
 
 window.tplSliderInit = function(images) {
   window.tplSliderImages = images || [];
@@ -1755,14 +1727,12 @@ window.tplSliderRender = function() {
 
 window.tplSliderPrev = function() {
   if (window.tplSliderImages.length <= 1) return;
-
   window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex - 1 + window.tplSliderImages.length) % window.tplSliderImages.length;
   window.tplSliderRender();
 };
 
 window.tplSliderNext = function() {
   if (window.tplSliderImages.length <= 1) return;
-
   window.tplSliderCurrentIndex = (window.tplSliderCurrentIndex + 1) % window.tplSliderImages.length;
   window.tplSliderRender();
 };
@@ -1777,8 +1747,9 @@ window.openImageFullscreenByIndex = function(index) {
   if (!window.tplSliderImages[index]) return;
   window.openImageFullscreenAt(index);
 };
+
 // ═══════════════════════════════════════════════════════
-//   ⚡ Enhanced Image Fullscreen (with navigation)
+//   Enhanced Image Fullscreen
 // ═══════════════════════════════════════════════════════
 
 window.openImageFullscreen = function(url) {
@@ -1790,7 +1761,6 @@ window.openImageFullscreenAt = function(index) {
   window.imgFsImages = [...window.tplSliderImages];
   window.imgFsCurrentIndex = index;
 
-  // ⚡ Reset Zoom
   window.imgFsZoom.scale = 1;
   window.imgFsZoom.translateX = 0;
   window.imgFsZoom.translateY = 0;
@@ -1821,7 +1791,7 @@ window.renderFullscreen = function() {
   modal.innerHTML = `
     <button class="img-fs-close" onclick="closeImageFullscreen()" aria-label="إغلاق">✕</button>
 
-       ${hasMultiple ? `
+    ${hasMultiple ? `
       <button class="img-fs-nav img-fs-prev" onclick="imgFsPrev()" aria-label="السابق">▶</button>
     ` : ''}
 
@@ -1839,7 +1809,6 @@ window.renderFullscreen = function() {
       </div>
     ` : ''}
 
-    <!-- ═══ Zoom Controls ═══ -->
     <div class="img-fs-zoom-controls">
       <button class="img-fs-zoom-btn" onclick="imgFsZoomOut()" title="تصغير" aria-label="تصغير">−</button>
       <div class="img-fs-zoom-level" id="imgFsZoomLevel">100%</div>
@@ -1848,32 +1817,18 @@ window.renderFullscreen = function() {
     </div>
   `;
 
-  // ⚡ Reset Zoom
   window.imgFsZoomReset();
 
-  // ═══ Wheel (Desktop) ═══
   const wrapper = document.getElementById('imgFsWrapper');
   if (wrapper) {
     wrapper.addEventListener('wheel', window.handleFsWheel, { passive: false });
-  }
-
-  // ═══ Mouse Drag (Pan) ═══
-  if (wrapper) {
     wrapper.addEventListener('mousedown', window.handleFsMouseDown);
     wrapper.addEventListener('mousemove', window.handleFsMouseMove);
     wrapper.addEventListener('mouseup', window.handleFsMouseUp);
     wrapper.addEventListener('mouseleave', window.handleFsMouseUp);
-  }
-
-  // ═══ Touch (Pinch + Swipe + Pan) ═══
-  if (wrapper) {
     wrapper.addEventListener('touchstart', window.handleFsTouchStartFull, { passive: false });
     wrapper.addEventListener('touchmove', window.handleFsTouchMove, { passive: false });
     wrapper.addEventListener('touchend', window.handleFsTouchEndFull, { passive: false });
-  }
-
-  // ═══ Double Click (Desktop) ═══
-  if (wrapper) {
     wrapper.addEventListener('dblclick', window.handleFsDoubleClick);
   }
 };
@@ -1909,30 +1864,12 @@ window.imgFsKeyHandler = function(e) {
   }
 };
 
-window.handleFsTouchStart = function(e) {
-  window.imgFsTouchStartX = e.changedTouches[0].screenX;
-};
-
-window.handleFsTouchEnd = function(e) {
-  const touchEndX = e.changedTouches[0].screenX;
-  const diff = window.imgFsTouchStartX - touchEndX;
-
-  if (Math.abs(diff) > 50) {
-    if (diff > 0) {
-      window.imgFsNext();
-    } else {
-      window.imgFsPrev();
-    }
-  }
-};
-
 window.closeImageFullscreen = function() {
   const modal = document.getElementById('imgFullscreenModal');
   if (modal) modal.style.display = 'none';
 
   document.removeEventListener('keydown', window.imgFsKeyHandler);
 
-  // ⚡ Reset Zoom
   window.imgFsZoom.scale = 1;
   window.imgFsZoom.translateX = 0;
   window.imgFsZoom.translateY = 0;
@@ -1940,34 +1877,25 @@ window.closeImageFullscreen = function() {
   window.imgFsZoom.isPanning = false;
 };
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Image Fullscreen — Zoom Controls
-// ═══════════════════════════════════════════════════════
-
-// ═══ Update Image Transform ═══
 window.imgFsUpdateTransform = function() {
   const img = document.getElementById('imgFsImg');
   if (!img) return;
 
   const { scale, translateX, translateY } = window.imgFsZoom;
 
-  // ⚡ translate الأول (بدون تضاعف) ثم scale
   img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
 
-  // ⚡ حدّث نسبة الزوم
   const levelEl = document.getElementById('imgFsZoomLevel');
   if (levelEl) {
     levelEl.textContent = Math.round(scale * 100) + '%';
   }
 
-  // ⚡ cursor
   const wrapper = document.getElementById('imgFsWrapper');
   if (wrapper) {
     wrapper.style.cursor = scale > 1 ? 'grab' : 'zoom-in';
   }
 };
 
-// ═══ Zoom In / Out (أزرار) ═══
 window.imgFsZoomIn = function() {
   const z = window.imgFsZoom;
   z.scale = Math.min(z.scale + 0.25, z.maxScale);
@@ -1988,7 +1916,6 @@ window.imgFsZoomOut = function() {
   window.imgFsUpdateTransform();
 };
 
-// ═══ Reset Zoom ═══
 window.imgFsZoomReset = function() {
   const z = window.imgFsZoom;
   z.scale = 1;
@@ -1997,7 +1924,6 @@ window.imgFsZoomReset = function() {
   window.imgFsUpdateTransform();
 };
 
-// ═══ Wheel Zoom (Desktop) ═══
 window.handleFsWheel = function(e) {
   e.preventDefault();
 
@@ -2015,7 +1941,6 @@ window.handleFsWheel = function(e) {
   }
 };
 
-// ═══ Mouse Drag (Pan) ═══
 window.handleFsMouseDown = function(e) {
   const z = window.imgFsZoom;
   if (z.scale <= 1) return;
@@ -2032,7 +1957,6 @@ window.handleFsMouseMove = function(e) {
   const z = window.imgFsZoom;
   if (!z.isPanning) return;
 
-  // ⚡ requestAnimationFrame لسلاسة أعلى
   if (z._rafPending) return;
   z._rafPending = true;
 
@@ -2042,7 +1966,6 @@ window.handleFsMouseMove = function(e) {
 
     const img = document.getElementById('imgFsImg');
     if (img) {
-      // ⚡ استخدم translate3d للـ GPU acceleration
       img.style.transform = `translate3d(${z.translateX}px, ${z.translateY}px, 0) scale(${z.scale})`;
     }
 
@@ -2060,7 +1983,6 @@ window.handleFsMouseUp = function() {
   }
 };
 
-// ═══ Double Click (Desktop) ═══
 window.handleFsDoubleClick = function(e) {
   e.preventDefault();
   e.stopPropagation();
@@ -2074,12 +1996,10 @@ window.handleFsDoubleClick = function(e) {
   }
 };
 
-// ═══ Touch Start (Pinch + Swipe + Pan + Double Tap) ═══
 window.handleFsTouchStartFull = function(e) {
   const z = window.imgFsZoom;
   const touches = e.touches;
 
-  // ═══ Double Tap Detection ═══
   const now = Date.now();
   if (now - window.imgFsLastTap < 300 && touches.length === 1) {
     e.preventDefault();
@@ -2094,7 +2014,6 @@ window.handleFsTouchStartFull = function(e) {
   }
   window.imgFsLastTap = now;
 
-  // ═══ 2 Fingers = Pinch Zoom ═══
   if (touches.length === 2) {
     e.preventDefault();
     z.initialDistance = Math.hypot(
@@ -2106,11 +2025,9 @@ window.handleFsTouchStartFull = function(e) {
     return;
   }
 
-  // ═══ 1 Finger ═══
   if (touches.length === 1) {
     window.imgFsTouchStartX = touches[0].clientX;
 
-    // ⚡ لو مكبّر → Pan، لو لأ → Swipe
     if (z.scale > 1) {
       e.preventDefault();
       z.isPanning = true;
@@ -2120,12 +2037,10 @@ window.handleFsTouchStartFull = function(e) {
   }
 };
 
-// ═══ Touch Move ═══
 window.handleFsTouchMove = function(e) {
   const z = window.imgFsZoom;
   const touches = e.touches;
 
-  // ═══ Pinch Zoom ═══
   if (touches.length === 2 && z.initialDistance > 0) {
     e.preventDefault();
 
@@ -2143,7 +2058,6 @@ window.handleFsTouchMove = function(e) {
       z.translateY = 0;
     }
 
-    // ⚡ requestAnimationFrame
     if (!z._rafPending) {
       z._rafPending = true;
       requestAnimationFrame(() => {
@@ -2157,7 +2071,6 @@ window.handleFsTouchMove = function(e) {
     return;
   }
 
-  // ═══ Pan (1 finger, zoomed) ═══
   if (touches.length === 1 && z.isPanning && z.scale > 1) {
     e.preventDefault();
 
@@ -2180,15 +2093,12 @@ window.handleFsTouchMove = function(e) {
   }
 };
 
-// ═══ Touch End ═══
 window.handleFsTouchEndFull = function(e) {
   const z = window.imgFsZoom;
 
-  // ═══ Reset Pinch ═══
   if (z.initialDistance > 0) {
     z.initialDistance = 0;
 
-    // ⚡ Snap back to 1 if < 1.1
     if (z.scale < 1.1 && z.scale > 0.9) {
       z.scale = 1;
       z.translateX = 0;
@@ -2198,13 +2108,11 @@ window.handleFsTouchEndFull = function(e) {
     return;
   }
 
-  // ═══ End Pan ═══
   if (z.isPanning) {
     z.isPanning = false;
     return;
   }
 
-  // ═══ Swipe (لو مفيش زوم) ═══
   if (z.scale <= 1 && e.changedTouches.length === 1) {
     const touchEndX = e.changedTouches[0].screenX;
     const diff = window.imgFsTouchStartX - touchEndX;
@@ -2577,7 +2485,7 @@ window.setActiveTemplate = async function(templateId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Location Modal
+//   ⚡ Location Modal — مع زر "استخدم موقعي"
 // ═══════════════════════════════════════════════════════
 
 window.openLocationModal = function(locId) {
@@ -2605,6 +2513,12 @@ window.openLocationModal = function(locId) {
           <input type="text" id="locName" value="${loc ? escapeHtml(loc.Name || '') : ''}" placeholder="مثال: كنيسة مارمرقس" />
         </div>
 
+        <!-- ═══ ⚡ زر استخدام الموقع الحالي ═══ -->
+        <button type="button" class="btn-location-current" id="getCurrentLocationBtn">
+          <span id="getCurrentLocationIcon">📍</span>
+          <span id="getCurrentLocationText">استخدم موقعي الحالي</span>
+        </button>
+
         <div class="form-grid-2">
           <div class="form-row">
             <label>Latitude *</label>
@@ -2619,11 +2533,11 @@ window.openLocationModal = function(locId) {
         <div class="form-grid-2">
           <div class="form-row">
             <label>النطاق (بالأمتار)</label>
-            <input type="number" id="locRadius" value="${loc?.Radius || 4}" min="1" max="1000" />
+            <input type="number" id="locRadius" value="${loc?.Radius || 100}" min="1" max="5000" />
           </div>
           <div class="form-row">
             <label>السماحية (بالأمتار)</label>
-            <input type="number" id="locTolerance" value="${loc?.Tolerance || 15}" min="1" max="1000" />
+            <input type="number" id="locTolerance" value="${loc?.Tolerance || 100}" min="1" max="5000" />
           </div>
         </div>
 
@@ -2649,7 +2563,146 @@ window.openLocationModal = function(locId) {
   `;
 
   modal.style.display = 'flex';
+
+  // ⚡ اربط زر "استخدم موقعي"
+  const getLocBtn = document.getElementById('getCurrentLocationBtn');
+  if (getLocBtn) {
+    getLocBtn.onclick = () => window.getCurrentLocationForForm();
+  }
 };
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Get Current Location for Location Form
+// ═══════════════════════════════════════════════════════
+
+window.getCurrentLocationForForm = function() {
+  const btn = document.getElementById('getCurrentLocationBtn');
+  const icon = document.getElementById('getCurrentLocationIcon');
+  const text = document.getElementById('getCurrentLocationText');
+  const latInput = document.getElementById('locLat');
+  const lngInput = document.getElementById('locLng');
+
+  if (!btn || !latInput || !lngInput) return;
+
+  if (!navigator.geolocation) {
+    alert('⚠️ متصفحك لا يدعم تحديد الموقع');
+    return;
+  }
+
+  // ⚡ UI Loading
+  btn.disabled = true;
+  icon.textContent = '⏳';
+  text.textContent = 'جاري تحديد الموقع...';
+
+  let watchId = null;
+  let bestPosition = null;
+  let bestAccuracy = Infinity;
+  let attempts = 0;
+  let resolved = false;
+
+  const startTime = Date.now();
+  const MAX_ACCURACY = 50;
+  const GOOD_ACCURACY = 15;
+  const TIMEOUT = 20000;
+
+  const finish = (position) => {
+    if (resolved) return;
+    resolved = true;
+
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+
+    btn.disabled = false;
+
+    if (!position) {
+      icon.textContent = '❌';
+      text.textContent = 'فشل تحديد الموقع';
+      setTimeout(() => {
+        icon.textContent = '📍';
+        text.textContent = 'استخدم موقعي الحالي';
+      }, 2000);
+      return;
+    }
+
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const accuracy = position.coords.accuracy;
+
+    latInput.value = lat.toFixed(6);
+    lngInput.value = lng.toFixed(6);
+
+    icon.textContent = '✅';
+    text.textContent = `تم! دقة: ${Math.round(accuracy)}م`;
+
+    console.log(`✅ Location captured: ${lat.toFixed(6)}, ${lng.toFixed(6)} (±${Math.round(accuracy)}m)`);
+
+    setTimeout(() => {
+      icon.textContent = '📍';
+      text.textContent = 'استخدم موقعي الحالي';
+    }, 3000);
+  };
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if (resolved) return;
+
+      attempts++;
+      const accuracy = pos.coords.accuracy;
+      const elapsed = Date.now() - startTime;
+
+      console.log(`📍 Attempt ${attempts}: accuracy=${Math.round(accuracy)}m`);
+
+      if (accuracy < bestAccuracy) {
+        bestAccuracy = accuracy;
+        bestPosition = pos;
+      }
+
+      text.textContent = `تحسين الدقة... (${Math.round(accuracy)}م)`;
+
+      const shouldStop =
+        accuracy <= GOOD_ACCURACY ||
+        elapsed >= TIMEOUT ||
+        (attempts >= 3 && accuracy <= MAX_ACCURACY);
+
+      if (shouldStop) {
+        finish(bestPosition);
+      }
+    },
+    (err) => {
+      if (resolved) return;
+
+      if (bestPosition) {
+        finish(bestPosition);
+        return;
+      }
+
+      finish(null);
+
+      let msg = 'فشل تحديد الموقع';
+      if (err.code === 1) msg = 'لم تسمح بالوصول للموقع';
+      else if (err.code === 2) msg = 'الموقع غير متاح';
+      else if (err.code === 3) msg = 'انتهت المهلة';
+
+      alert('⚠️ ' + msg);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: TIMEOUT,
+      maximumAge: 0
+    }
+  );
+
+  setTimeout(() => {
+    if (resolved) return;
+    finish(bestPosition);
+  }, TIMEOUT + 1000);
+};
+
+// ═══════════════════════════════════════════════════════
+//   Close & Save Location
+// ═══════════════════════════════════════════════════════
 
 window.closeLocationModal = function() {
   const modal = document.getElementById('locationModal');
@@ -2660,8 +2713,8 @@ window.saveLocation = async function(locId) {
   const name = document.getElementById('locName')?.value.trim();
   const lat = parseFloat(document.getElementById('locLat')?.value || '');
   const lng = parseFloat(document.getElementById('locLng')?.value || '');
-  const radius = parseInt(document.getElementById('locRadius')?.value || '4');
-  const tolerance = parseInt(document.getElementById('locTolerance')?.value || '15');
+  const radius = parseInt(document.getElementById('locRadius')?.value || '100');
+  const tolerance = parseInt(document.getElementById('locTolerance')?.value || '100');
   let qrCode = document.getElementById('locQR')?.value.trim() || '';
   const status = document.getElementById('locStatus')?.value || 'active';
 
