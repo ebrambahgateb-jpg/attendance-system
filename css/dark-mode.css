@@ -2575,3 +2575,190 @@ html[data-theme="dark"] .logs-page-btn {
   color: #ffffff !important;
   border-color: #334155 !important;
 }
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logs — Type Badge (Default — بدون variant)
+   ═══════════════════════════════════════════════════════ */
+
+/* ⚡ القاعدة الأساسية — أي logs-type-badge في الوضع الليلي */
+html[data-theme="dark"] .logs-type-badge {
+  background: #334155 !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #475569 !important;
+}
+
+/* ⚡ الـvariants (لو موجودة) */
+html[data-theme="dark"] .logs-type-event {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+html[data-theme="dark"] .logs-type-person {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+html[data-theme="dark"] .logs-type-attendance {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+}
+
+html[data-theme="dark"] .logs-type-request {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+html[data-theme="dark"] .logs-type-account {
+  background: rgba(139, 92, 246, 0.25) !important;
+  color: #c4b5fd !important;
+  border-color: rgba(139, 92, 246, 0.5) !important;
+}
+
+html[data-theme="dark"] .logs-type-settings {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+html[data-theme="dark"] .logs-type-template {
+  background: rgba(236, 72, 153, 0.25) !important;
+  color: #f9a8d4 !important;
+  border-color: rgba(236, 72, 153, 0.5) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logs — Action Icon (العمود الأول)
+   ═══════════════════════════════════════════════════════ */
+
+/* ⚡ القاعدة الأساسية */
+html[data-theme="dark"] .logs-action-icon {
+  background: #334155 !important;
+  border-color: #475569 !important;
+  color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logs — Table & Container
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .logs-results {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-results-header {
+  border-bottom-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-table thead {
+  background: #0f172a !important;
+}
+
+html[data-theme="dark"] .logs-table th {
+  color: #94a3b8 !important;
+  border-bottom-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-table td {
+  border-bottom-color: #334155 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .logs-table tr:hover {
+  background: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-desc {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .logs-user-name {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .logs-user-role {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .logs-time {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .logs-action-title {
+  color: #ffffff !important;
+}
+
+/* ═══ Stats + Filters ═══ */
+html[data-theme="dark"] .logs-stat {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-stat-value {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .logs-stat-label {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .logs-filters {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-filter-group label {
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .logs-filter-group input,
+html[data-theme="dark"] .logs-filter-group select {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Pagination ═══ */
+html[data-theme="dark"] .logs-page-btn {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-page-btn:hover:not(:disabled) {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .logs-page-btn.active {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Empty State ═══ */
+html[data-theme="dark"] .logs-empty {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .logs-empty h3 {
+  color: #ffffff !important;
+}
+
+/* ═══ CSV Button ═══ */
+html[data-theme="dark"] .logs-csv-btn,
+html[data-theme="dark"] .btn-export-csv {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-csv-btn:hover,
+html[data-theme="dark"] .btn-export-csv:hover {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
