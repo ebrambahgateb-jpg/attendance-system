@@ -1756,3 +1756,73 @@ html[data-theme="dark"] .me-transfer-info {
   border-color: rgba(59, 130, 246, 0.4) !important;
   color: #60a5fa !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ My Events — Toggles & Controls
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Toggle Switch ═══ */
+html[data-theme="dark"] .me-toggle,
+html[data-theme="dark"] .me-switch,
+html[data-theme="dark"] .toggle-switch {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-toggle.active,
+html[data-theme="dark"] .me-switch.active,
+html[data-theme="dark"] .toggle-switch.active {
+  background: #3b82f6 !important;
+}
+
+html[data-theme="dark"] .me-toggle::before,
+html[data-theme="dark"] .me-switch::before,
+html[data-theme="dark"] .toggle-switch::before {
+  background: #cbd5e1 !important;
+}
+
+/* ═══ Filter Checkboxes ═══ */
+html[data-theme="dark"] .me-filter input[type="checkbox"],
+html[data-theme="dark"] .me-filter input[type="radio"] {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-filter input[type="checkbox"]:checked,
+html[data-theme="dark"] .me-filter input[type="radio"]:checked {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+/* ═══ Filter Buttons ═══ */
+html[data-theme="dark"] .me-filter-btn,
+html[data-theme="dark"] .me-tab-btn {
+  background: var(--card-bg) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .me-filter-btn.active,
+html[data-theme="dark"] .me-tab-btn.active {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  border-color: #3b82f6 !important;
+}
+
+/* ═══ Section Headers ═══ */
+html[data-theme="dark"] .me-section-header {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .me-section-icon,
+html[data-theme="dark"] .me-legend-circle {
+  background: #334155 !important;
+  border-color: var(--border) !important;
+  color: #60a5fa !important;
+}
+
+/* ═══ All Circles / Indicators ═══ */
+html[data-theme="dark"] .me-card + .me-section-title::before,
+html[data-theme="dark"] .me-section-title::before {
+  background: #60a5fa !important;
+}
