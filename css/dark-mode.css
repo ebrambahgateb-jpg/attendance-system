@@ -2161,3 +2161,216 @@ html[data-theme="dark"] .status-circle.active,
 html[data-theme="dark"] .status-dot.active {
   background: #4ade80 !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logs Page — Dark Mode (Comprehensive)
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Stats Cards ═══ */
+html[data-theme="dark"] .logs-stat,
+html[data-theme="dark"] .logs-stat-card {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-stat-value,
+html[data-theme="dark"] .logs-stat-number {
+  color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .logs-stat-label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Filters Box ═══ */
+html[data-theme="dark"] .logs-filters {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-filters input,
+html[data-theme="dark"] .logs-filters select {
+  background: #0f172a !important;
+  border-color: var(--border) !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .logs-filters label {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Results Container ═══ */
+html[data-theme="dark"] .logs-results {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-results-header h3,
+html[data-theme="dark"] .logs-results-header h2 {
+  color: #ffffff !important;
+}
+
+/* ═══ Table ═══ */
+html[data-theme="dark"] .logs-table {
+  background: var(--card-bg) !important;
+}
+
+html[data-theme="dark"] .logs-table thead {
+  background: #334155 !important;
+}
+
+html[data-theme="dark"] .logs-table th {
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-table td {
+  color: #cbd5e1 !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-table tr:hover {
+  background: #334155 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Action Badges — العمود الأول (المشكلة الأساسية)
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .logs-action-badge,
+html[data-theme="dark"] .logs-action-icon,
+html[data-theme="dark"] .log-action-icon,
+html[data-theme="dark"] .logs-badge {
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ═══ Approved / Success (أخضر) ═══ */
+html[data-theme="dark"] .logs-action-badge.approved,
+html[data-theme="dark"] .logs-action-badge.confirmed,
+html[data-theme="dark"] .logs-action-badge.added,
+html[data-theme="dark"] .logs-action-icon.approved,
+html[data-theme="dark"] .logs-action-icon.confirmed,
+html[data-theme="dark"] .logs-action-icon.added,
+html[data-theme="dark"] .logs-badge.success {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+/* ═══ Rejected / Cancelled (أحمر) ═══ */
+html[data-theme="dark"] .logs-action-badge.rejected,
+html[data-theme="dark"] .logs-action-badge.cancelled,
+html[data-theme="dark"] .logs-action-badge.deleted,
+html[data-theme="dark"] .logs-action-icon.rejected,
+html[data-theme="dark"] .logs-action-icon.cancelled,
+html[data-theme="dark"] .logs-action-icon.deleted,
+html[data-theme="dark"] .logs-badge.danger {
+  background: rgba(220, 38, 38, 0.25) !important;
+  color: #f87171 !important;
+  border-color: rgba(220, 38, 38, 0.5) !important;
+}
+
+/* ═══ Pending / Warning (أصفر) ═══ */
+html[data-theme="dark"] .logs-action-badge.pending,
+html[data-theme="dark"] .logs-action-badge.warning,
+html[data-theme="dark"] .logs-action-badge.requested,
+html[data-theme="dark"] .logs-action-icon.pending,
+html[data-theme="dark"] .logs-action-icon.warning,
+html[data-theme="dark"] .logs-badge.warning {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+/* ═══ Updated / Edited (أزرق) ═══ */
+html[data-theme="dark"] .logs-action-badge.updated,
+html[data-theme="dark"] .logs-action-badge.edited,
+html[data-theme="dark"] .logs-action-badge.info,
+html[data-theme="dark"] .logs-action-icon.updated,
+html[data-theme="dark"] .logs-action-icon.edited,
+html[data-theme="dark"] .logs-action-icon.info,
+html[data-theme="dark"] .logs-badge.info {
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+/* ═══ Neutral / Gray ═══ */
+html[data-theme="dark"] .logs-action-badge.neutral,
+html[data-theme="dark"] .logs-action-icon.neutral {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ User Info Column
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .logs-user-name {
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .logs-user-role {
+  color: var(--text-muted) !important;
+}
+
+/* ═══ Description ═══ */
+html[data-theme="dark"] .logs-desc,
+html[data-theme="dark"] .logs-description {
+  color: #cbd5e1 !important;
+}
+
+/* ═══ Time ═══ */
+html[data-theme="dark"] .logs-time,
+html[data-theme="dark"] .logs-date {
+  color: var(--text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Pagination
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .logs-page-btn,
+html[data-theme="dark"] .logs-pagination button {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-page-btn:hover,
+html[data-theme="dark"] .logs-pagination button:hover {
+  background: #475569 !important;
+}
+
+html[data-theme="dark"] .logs-page-btn.active,
+html[data-theme="dark"] .logs-pagination button.active {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  border-color: #3b82f6 !important;
+}
+
+/* ═══ Export Button (CSV) ═══ */
+html[data-theme="dark"] .logs-export-btn,
+html[data-theme="dark"] .btn-export-csv {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .logs-export-btn:hover,
+html[data-theme="dark"] .btn-export-csv:hover {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+/* ═══ Empty State ═══ */
+html[data-theme="dark"] .logs-empty {
+  background: var(--card-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .logs-empty h3 {
+  color: #ffffff !important;
+}
