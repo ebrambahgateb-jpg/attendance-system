@@ -244,17 +244,52 @@ async function ensurePersonLink(firebaseUser, account) {
 
 // ═══ Find Account by Email ═══
 async function findAccountByEmail(email) {
+  if (!email) return null;
+
+  const emailLower = String(email).toLowerCase().trim();
+
   try {
-    const q = query(
+    // ⚡ محاولة 1: البحث بالإيميل زي ما هو
+    let q = query(
       collection(db, COLLECTIONS.ACCOUNTS),
-      where('Email', '==', email)
+      where('Email', '==', emailLower)
     );
-    const snapshot = await getDocs(q);
+    let snapshot = await getDocs(q);
 
-    if (snapshot.empty) return null;
+    if (!snapshot.empty) {
+      const docSnap = snapshot.docs[0];
+      return { id: docSnap.id, data: docSnap.data() };
+    }
 
-    const docSnap = snapshot.docs[0];
-    return { id: docSnap.id, data: docSnap.data() };
+    // ⚡ محاولة 2: البحث بالإيميل الأصلي
+    if (email !== emailLower) {
+      q = query(
+        collection(db, COLLECTIONS.ACCOUNTS),
+        where('Email', '==', email)
+      );
+      snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        const docSnap = snapshot.docs[0];
+        return { id: docSnap.id, data: docSnap.data() };
+      }
+    }
+
+    // ⚡ محاولة 3: جيب كل الحسابات وابحث يدويًا (case-insensitive)
+    console.log('🔍 Searching all accounts manually...');
+    const allSnap = await getDocs(collection(db, COLLECTIONS.ACCOUNTS));
+
+    for (const docSnap of allSnap.docs) {
+      const accEmail = String(docSnap.data().Email || '').toLowerCase().trim();
+      if (accEmail === emailLower) {
+        console.log('✅ Found by manual search:', docSnap.id);
+        return { id: docSnap.id, data: docSnap.data() };
+      }
+    }
+
+    console.warn('❌ No account found for:', emailLower);
+    return null;
+
   } catch (error) {
     console.error('❌ findAccountByEmail error:', error);
     return null;
@@ -264,31 +299,47 @@ async function findAccountByEmail(email) {
 // ═══ Link Account to UID ═══
 async function linkAccountToUid(oldDocId, newUid, firebaseUser) {
   try {
+    console.log(`🔗 Linking account: ${oldDocId} → ${newUid}`);
+
     const oldRef = doc(db, COLLECTIONS.ACCOUNTS, oldDocId);
     const oldSnap = await getDoc(oldRef);
 
-    if (!oldSnap.exists()) return;
+    if (!oldSnap.exists()) {
+      console.warn('⚠️ Old account not found');
+      return;
+    }
 
     const data = oldSnap.data();
 
+    // ⚡ اعمل doc جديد بالـUID
     const newRef = doc(db, COLLECTIONS.ACCOUNTS, newUid);
+
     await setDoc(newRef, {
       ...data,
       UID: newUid,
+      Email: String(data.Email || firebaseUser.email).toLowerCase().trim(),
+      LinkedAt: new Date().toISOString(),
       UpdatedAt: new Date().toISOString()
     });
 
+    console.log('✅ New account created with UID:', newUid);
+
+    // ⚡ احذف القديم (لو مختلف)
     if (oldDocId !== newUid) {
-      await deleteDoc(oldRef);
+      try {
+        await deleteDoc(oldRef);
+        console.log('🗑️ Old account removed:', oldDocId);
+      } catch (e) {
+        console.warn('⚠️ Could not delete old account:', e.message);
+      }
     }
 
-    console.log('✅ Account linked to UID:', newUid);
-
+    // ⚡ تحقق مرة تانية
     await checkUserInFirestore(firebaseUser);
 
   } catch (error) {
     console.error('❌ linkAccountToUid error:', error);
-    showMessage('خطأ في ربط الحساب', 'error');
+    showMessage('خطأ في ربط الحساب: ' + error.message, 'error');
   }
 }
 
