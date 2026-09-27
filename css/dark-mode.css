@@ -2800,3 +2800,25 @@ html[data-theme="dark"] .att-badge.manual {
   color: #fbbf24;
   border-color: rgba(245, 158, 11, 0.5);
 }
+
+/* ═══════════════════════════════════════════
+   ⚡ Manual Events — Dark Mode
+   ═══════════════════════════════════════════ */
+
+html[data-theme="dark"] .manual-events-container {
+  background: #0f172a;
+}
+
+html[data-theme="dark"] .manual-events-group-title {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+html[data-theme="dark"] .manual-event-item:hover {
+  background: #334155;
+}
+
+html[data-theme="dark"] .manual-event-item.selected {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+}
