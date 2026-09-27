@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   Attendance Viewer (عرض سجل الحضور + طلبات الإلغاء)
+//   Attendance Viewer + Manual Attendance
+//   ⚡ محدّث: عرض سجل الحضور + طلبات الإلغاء + تسجيل يدوي
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -8,6 +9,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  addDoc,
   query,
   where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -38,6 +40,12 @@ let attFilters = {
   method: ''
 };
 
+// ═══ ⚡ Manual Attendance State ═══
+let attCurrentUser = null;
+let attCurrentWorkspace = null;
+let manualSelectedPeople = [];
+const ATT_MANUAL_MAX_DAYS = 30;
+
 // ═══════════════════════════════════════════════════════
 //   Load Page
 // ═══════════════════════════════════════════════════════
@@ -46,6 +54,15 @@ async function loadAttendancePage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
+    // ⚡ حمّل المستخدم
+    try {
+      attCurrentUser = JSON.parse(localStorage.getItem('currentUser'));
+      attCurrentWorkspace = attCurrentUser?.currentWorkspace || attCurrentUser?.selectedRole || 'User';
+    } catch (e) {
+      attCurrentUser = null;
+      attCurrentWorkspace = 'User';
+    }
+
     const [attSnap, peopleSnap, eventsSnap, settingsDoc, cancelReqSnap] = await Promise.all([
       getDocs(collection(db, COLLECTIONS.ATTENDANCE)),
       getDocs(collection(db, COLLECTIONS.PEOPLE)),
@@ -70,7 +87,6 @@ async function loadAttendancePage(area) {
       attEvents[d.id] = { id: d.id, ...d.data() };
     });
 
-    // ⚡ طلبات الإلغاء
     attCancelRequests = cancelReqSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     attCancelRequests.sort((a, b) => {
       const da = parseDate(a.CancelRequestedAt) || new Date(0);
@@ -103,176 +119,9 @@ async function loadAttendancePage(area) {
 // ═══════════════════════════════════════════════════════
 
 function renderAttendancePage(area) {
+  const isAdmin = ['Owner', 'Admin'].includes(attCurrentWorkspace);
+
   area.innerHTML = `
-    <style>
-      /* ═══ Cancel Requests Section ═══ */
-      .att-cancel-section {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border: 2px solid #f59e0b;
-        border-radius: 14px;
-        padding: 16px 18px;
-        margin-bottom: 20px;
-      }
-
-      .att-cancel-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 14px;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
-      .att-cancel-title {
-        font-size: 16px;
-        font-weight: 800;
-        color: #92400e;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 0;
-      }
-
-      .att-cancel-count {
-        background: #dc2626;
-        color: #fff;
-        font-size: 12px;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-weight: 700;
-      }
-
-      .att-cancel-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .att-cancel-item {
-        background: #fff;
-        border-radius: 12px;
-        padding: 14px 16px;
-        border: 1px solid #fcd34d;
-        display: flex;
-        gap: 12px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-      }
-
-      .att-cancel-info {
-        flex: 1;
-        min-width: 220px;
-      }
-
-      .att-cancel-name {
-        font-size: 15px;
-        font-weight: 700;
-        color: #1e293b;
-        margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .att-cancel-line {
-        font-size: 13px;
-        color: #475569;
-        margin: 4px 0;
-        line-height: 1.5;
-      }
-
-      .att-cancel-line strong {
-        color: #0f172a;
-      }
-
-      .att-cancel-reason {
-        background: #fef2f2;
-        border-right: 3px solid #dc2626;
-        padding: 8px 12px;
-        border-radius: 8px;
-        margin-top: 8px;
-        font-size: 13px;
-        color: #7f1d1d;
-      }
-
-      .att-cancel-reason-label {
-        font-weight: 700;
-        color: #991b1b;
-        display: block;
-        margin-bottom: 3px;
-        font-size: 12px;
-      }
-
-      .att-cancel-time {
-        font-size: 11px;
-        color: #94a3b8;
-        margin-top: 6px;
-        font-weight: 600;
-      }
-
-      .att-cancel-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        align-self: center;
-      }
-
-      .att-cancel-btn {
-        padding: 10px 18px;
-        border-radius: 10px;
-        border: none;
-        font-size: 13px;
-        font-weight: 700;
-        font-family: inherit;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        white-space: nowrap;
-      }
-
-      .att-cancel-btn.approve {
-        background: #16a34a;
-        color: #fff;
-      }
-
-      .att-cancel-btn.approve:hover {
-        background: #15803d;
-        transform: translateY(-1px);
-      }
-
-      .att-cancel-btn.reject {
-        background: #fff;
-        color: #dc2626;
-        border: 1px solid #fecaca;
-      }
-
-      .att-cancel-btn.reject:hover {
-        background: #dc2626;
-        color: #fff;
-        border-color: #dc2626;
-      }
-
-      .att-cancel-btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-        transform: none;
-      }
-
-      @media (max-width: 600px) {
-        .att-cancel-item {
-          flex-direction: column;
-        }
-        .att-cancel-actions {
-          width: 100%;
-        }
-        .att-cancel-btn {
-          flex: 1;
-        }
-      }
-    </style>
-
     <div class="att-container">
 
       ${renderCancelRequestsSection()}
@@ -281,6 +130,11 @@ function renderAttendancePage(area) {
         <div class="att-search">
           <input type="text" id="attSearchInput" placeholder="🔍 ابحث بالاسم أو الاجتماع..." value="${escapeHtml(attFilters.search)}" />
         </div>
+        ${isAdmin ? `
+          <button class="btn-primary att-manual-btn" onclick="openManualAttendanceModal()">
+            ➕ تسجيل حضور يدوي
+          </button>
+        ` : ''}
         <button class="btn-secondary" onclick="exportAttendanceCSV()">📥 CSV</button>
         <button class="btn-primary" onclick="exportAttendancePDF()">📄 PDF</button>
       </div>
@@ -331,6 +185,7 @@ function renderAttendancePage(area) {
             <option value="">الكل</option>
             <option value="self" ${attFilters.method === 'self' ? 'selected' : ''}>📱 تسجيل ذاتي</option>
             <option value="scanner" ${attFilters.method === 'scanner' ? 'selected' : ''}>📷 ماسح</option>
+            <option value="manual" ${attFilters.method === 'manual' ? 'selected' : ''}>✍️ يدوي</option>
           </select>
         </div>
 
@@ -348,6 +203,7 @@ function renderAttendancePage(area) {
               <th>الطريقة</th>
               <th>الموقع</th>
               <th>بواسطة</th>
+              <th>إجراءات</th>
             </tr>
           </thead>
           <tbody id="attTableBody"></tbody>
@@ -512,6 +368,7 @@ function renderAttendanceTable() {
   if (emptyState) emptyState.style.display = 'none';
   if (tableWrapper) tableWrapper.style.display = 'block';
 
+  const isAdmin = ['Owner', 'Admin'].includes(attCurrentWorkspace);
   const totalPages = Math.ceil(attFiltered.length / ATT_PER_PAGE);
   const start = (attCurrentPage - 1) * ATT_PER_PAGE;
   const end = start + ATT_PER_PAGE;
@@ -529,14 +386,20 @@ function renderAttendanceTable() {
       ? `<img src="${person.PhotoURL}" class="att-avatar" alt="" />`
       : `<div class="att-avatar-placeholder">${personName.charAt(0)}</div>`;
 
-    const method = record.Method === 'self'
-      ? '<span class="att-badge self">📱 ذاتي</span>'
-      : '<span class="att-badge scanner">📷 ماسح</span>';
+    let method = '';
+    if (record.Method === 'self') {
+      method = '<span class="att-badge self">📱 ذاتي</span>';
+    } else if (record.Method === 'manual') {
+      method = '<span class="att-badge manual">✍️ يدوي</span>';
+    } else {
+      method = '<span class="att-badge scanner">📷 ماسح</span>';
+    }
 
     const dateStr = scanDate ? formatDateShort(scanDate) : '-';
     const timeStr = scanDate ? formatTimeShort(scanDate) : '-';
-
     const locationName = record.Location?.name || '-';
+
+    const canDelete = isAdmin && record.Method === 'manual';
 
     return `
       <tr>
@@ -558,7 +421,12 @@ function renderAttendanceTable() {
         <td class="ltr">${timeStr}</td>
         <td>${method}</td>
         <td>${escapeHtml(locationName)}</td>
-        <td>${escapeHtml(record.ScannerName || record.ScannerEmail || '-')}</td>
+        <td>${escapeHtml(record.ManualByName || record.ScannerName || record.ScannerEmail || '-')}</td>
+        <td class="actions-cell">
+          ${canDelete ? `
+            <button class="btn-icon danger" onclick="deleteManualAttendance('${record.id}')" title="حذف السجل اليدوي">🗑️</button>
+          ` : '-'}
+        </td>
       </tr>
     `;
   }).join('');
@@ -718,6 +586,393 @@ window.clearAttendanceFilters = function() {
 };
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Manual Attendance — Open Modal
+// ═══════════════════════════════════════════════════════
+
+window.openManualAttendanceModal = function() {
+  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
+    alert('⚠️ غير مصرح لك');
+    return;
+  }
+
+  manualSelectedPeople = [];
+
+  let modal = document.getElementById('manualAttModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'manualAttModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const todayISO = formatDateISO(new Date());
+
+  const eventsList = Object.values(attEvents)
+    .filter(e => String(e.Status || '').toLowerCase() === 'active')
+    .sort((a, b) => String(a.Title || '').localeCompare(String(b.Title || ''), 'ar'));
+
+  const peopleList = Object.values(attPeople)
+    .filter(p => String(p.Status || 'active').toLowerCase() === 'active')
+    .sort((a, b) => {
+      const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
+      const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
+      return aN.localeCompare(bN, 'ar');
+    });
+
+  modal.innerHTML = `
+    <div class="modal-content modal-large" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>➕ تسجيل حضور يدوي</h2>
+        <button class="modal-close" onclick="closeManualAttModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <div class="form-row">
+          <label>🎯 الحدث *</label>
+          <select id="manual_EventID">
+            <option value="">-- اختر الحدث --</option>
+            ${eventsList.map(e => `
+              <option value="${e.id}">${escapeHtml(e.Title || '')}</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>📅 التاريخ *</label>
+          <input type="date" id="manual_Date" value="${todayISO}" max="${todayISO}" />
+          <p class="hint">يمكن التسجيل خلال آخر ${ATT_MANUAL_MAX_DAYS} يوم</p>
+        </div>
+
+        <div class="form-row">
+          <label>👤 ابحث عن شخص *</label>
+          <input type="text" id="manual_PersonSearch" placeholder="🔍 ابحث بالاسم أو الموبايل..." />
+
+          <div class="manual-people-list" id="manualPeopleList">
+            ${peopleList.slice(0, 20).map(p => renderManualPersonItem(p)).join('')}
+          </div>
+        </div>
+
+        <div class="manual-selected-box" id="manualSelectedBox" style="display:none;">
+          <div class="manual-selected-title">✅ المحددون (<span id="manualSelectedCount">0</span>)</div>
+          <div class="manual-selected-list" id="manualSelectedList"></div>
+        </div>
+
+        <div class="form-row">
+          <label>✍️ ملاحظة (اختياري)</label>
+          <textarea id="manual_Note" rows="2" placeholder="مثال: نسى يسجل حضوره..."></textarea>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeManualAttModal()">إلغاء</button>
+        <button class="btn-primary" id="manualSaveBtn" onclick="saveManualAttendance()">
+          💾 تسجيل الحضور
+        </button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  // ⚡ Events
+  const searchInput = document.getElementById('manual_PersonSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      renderManualPeopleList(peopleList, term);
+    });
+  }
+
+  renderManualSelected();
+};
+
+function renderManualPersonItem(person) {
+  const name = [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ');
+  const initial = (person.FirstName || '?').charAt(0);
+  const isSelected = manualSelectedPeople.includes(person.id);
+
+  const avatar = person.PhotoURL
+    ? `<img src="${person.PhotoURL}" class="manual-person-avatar" alt="" />`
+    : `<div class="manual-person-avatar-placeholder">${escapeHtml(initial)}</div>`;
+
+  return `
+    <div class="manual-person-item ${isSelected ? 'selected' : ''}"
+         data-person-id="${person.id}"
+         onclick="toggleManualPerson('${person.id}')">
+      ${avatar}
+      <div class="manual-person-info">
+        <div class="manual-person-name">${escapeHtml(name)}</div>
+        <div class="manual-person-sub">${escapeHtml(person.Mobile || '')}</div>
+      </div>
+      <div class="manual-person-check">${isSelected ? '✅' : ''}</div>
+    </div>
+  `;
+}
+
+function renderManualPeopleList(peopleList, term = '') {
+  const container = document.getElementById('manualPeopleList');
+  if (!container) return;
+
+  let filtered = peopleList;
+
+  if (term) {
+    filtered = peopleList.filter(p => {
+      const name = [p.FirstName, p.SecondName, p.ThirdName, p.FourthName].filter(Boolean).join(' ').toLowerCase();
+      const mobile = String(p.Mobile || '');
+      return name.includes(term) || mobile.includes(term);
+    });
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="manual-person-empty">لا يوجد نتائج</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.slice(0, 30).map(p => renderManualPersonItem(p)).join('');
+}
+
+window.toggleManualPerson = function(personId) {
+  const idx = manualSelectedPeople.indexOf(personId);
+
+  if (idx === -1) {
+    manualSelectedPeople.push(personId);
+  } else {
+    manualSelectedPeople.splice(idx, 1);
+  }
+
+  // ⚡ Re-render
+  const searchInput = document.getElementById('manual_PersonSearch');
+  const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const peopleList = Object.values(attPeople)
+    .filter(p => String(p.Status || 'active').toLowerCase() === 'active')
+    .sort((a, b) => {
+      const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
+      const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
+      return aN.localeCompare(bN, 'ar');
+    });
+
+  renderManualPeopleList(peopleList, term);
+  renderManualSelected();
+};
+
+function renderManualSelected() {
+  const box = document.getElementById('manualSelectedBox');
+  const countEl = document.getElementById('manualSelectedCount');
+  const listEl = document.getElementById('manualSelectedList');
+
+  if (!box || !countEl || !listEl) return;
+
+  if (manualSelectedPeople.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+  countEl.textContent = manualSelectedPeople.length;
+
+  listEl.innerHTML = manualSelectedPeople.map(pid => {
+    const person = attPeople[pid];
+    if (!person) return '';
+
+    const name = [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ');
+
+    return `
+      <div class="manual-selected-chip">
+        <span>${escapeHtml(name)}</span>
+        <button type="button" onclick="event.stopPropagation(); toggleManualPerson('${pid}')">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+window.closeManualAttModal = function() {
+  const modal = document.getElementById('manualAttModal');
+  if (modal) modal.style.display = 'none';
+  manualSelectedPeople = [];
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Manual Attendance — Save
+// ═══════════════════════════════════════════════════════
+
+window.saveManualAttendance = async function() {
+  const eventId = document.getElementById('manual_EventID')?.value;
+  const dateISO = document.getElementById('manual_Date')?.value;
+  const note = document.getElementById('manual_Note')?.value.trim() || '';
+
+  if (!eventId) { alert('⚠️ اختر الحدث'); return; }
+  if (!dateISO) { alert('⚠️ اختر التاريخ'); return; }
+  if (manualSelectedPeople.length === 0) { alert('⚠️ اختر شخص واحد على الأقل'); return; }
+
+  // ⚡ تحقق من التاريخ
+  const selectedDate = new Date(dateISO + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (selectedDate > today) {
+    alert('⚠️ لا يمكن تسجيل حضور بتاريخ مستقبلي');
+    return;
+  }
+
+  const daysDiff = Math.floor((today - selectedDate) / (1000 * 60 * 60 * 24));
+  if (daysDiff > ATT_MANUAL_MAX_DAYS) {
+    alert(`⚠️ لا يمكن تسجيل حضور قبل ${ATT_MANUAL_MAX_DAYS} يوم`);
+    return;
+  }
+
+  const event = attEvents[eventId];
+  if (!event) {
+    alert('⚠️ الحدث غير موجود');
+    return;
+  }
+
+  const saveBtn = document.getElementById('manualSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '⏳ جاري التسجيل...';
+  }
+
+  let successCount = 0;
+  let duplicateCount = 0;
+  let errorCount = 0;
+
+  const manualByName = attCurrentUser?.name || attCurrentUser?.email || '';
+
+  for (const personId of manualSelectedPeople) {
+    try {
+      // ⚡ تحقق من عدم التكرار
+      const dupQ = query(
+        collection(db, COLLECTIONS.ATTENDANCE),
+        where('PersonID', '==', personId),
+        where('EventID', '==', eventId),
+        where('OccurrenceDate', '==', dateISO)
+      );
+      const dupSnap = await getDocs(dupQ);
+
+      if (!dupSnap.empty) {
+        duplicateCount++;
+        continue;
+      }
+
+      const person = attPeople[personId];
+      const personName = person
+        ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ')
+        : 'غير معروف';
+
+      const scanTime = new Date(dateISO + 'T12:00:00').toISOString();
+
+      await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
+        PersonID: personId,
+        PersonName: personName,
+        EventID: eventId,
+        EventTitle: event.Title || '',
+        EventTypeID: event.EventTypeID || '',
+        OccurrenceDate: dateISO,
+        ScanTime: scanTime,
+        Status: 'present',
+        Method: 'manual',
+        ManualBy: attCurrentUser?.email || '',
+        ManualByName: manualByName,
+        ManualAt: new Date().toISOString(),
+        Note: note,
+        Location: {
+          id: 'manual',
+          name: 'تسجيل يدوي',
+          lat: null,
+          lng: null,
+          accuracy: null
+        }
+      });
+
+      successCount++;
+
+      // ⚡ Log
+      if (typeof window.logAction === 'function') {
+        try {
+          await window.logAction({
+            action: 'manual_attendance_added',
+            type: 'attendance',
+            title: `تسجيل حضور يدوي: ${personName}`,
+            description: `الحدث: ${event.Title || ''} — التاريخ: ${dateISO}`,
+            relatedID: eventId,
+            relatedTitle: event.Title || ''
+          });
+        } catch (e) {}
+      }
+
+    } catch (err) {
+      console.error('❌ Manual attendance error for', personId, ':', err);
+      errorCount++;
+    }
+  }
+
+  // ⚡ النتيجة
+  let msg = `✅ تم التسجيل بنجاح\n\n`;
+  msg += `✔️ مسجّلين: ${successCount}\n`;
+  if (duplicateCount > 0) msg += `⚠️ مسجّلين مسبقًا: ${duplicateCount}\n`;
+  if (errorCount > 0) msg += `❌ فشل: ${errorCount}\n`;
+
+  alert(msg);
+
+  closeManualAttModal();
+
+  // ⚡ أعد تحميل الصفحة
+  await loadAttendancePage(document.getElementById('contentArea'));
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Delete Manual Attendance
+// ═══════════════════════════════════════════════════════
+
+window.deleteManualAttendance = async function(recordId) {
+  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
+    alert('⚠️ غير مصرح لك');
+    return;
+  }
+
+  const record = attData.find(r => r.id === recordId);
+  if (!record) {
+    alert('❌ السجل غير موجود');
+    return;
+  }
+
+  const person = attPeople[record.PersonID];
+  const personName = record.PersonName
+    || (person ? [person.FirstName, person.SecondName].filter(Boolean).join(' ') : 'غير معروف');
+
+  if (!confirm(`⚠️ حذف سجل الحضور اليدوي؟\n\n👤 ${personName}\n🎯 ${record.EventTitle || ''}\n📅 ${record.OccurrenceDate || ''}`)) {
+    return;
+  }
+
+  try {
+    const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
+    await deleteDoc(doc(db, COLLECTIONS.ATTENDANCE, recordId));
+
+    // ⚡ Log
+    if (typeof window.logAction === 'function') {
+      try {
+        await window.logAction({
+          action: 'manual_attendance_deleted',
+          type: 'attendance',
+          title: `حذف سجل حضور يدوي: ${personName}`,
+          description: `الحدث: ${record.EventTitle || ''}`,
+          relatedID: recordId,
+          relatedTitle: personName
+        });
+      } catch (e) {}
+    }
+
+    alert('✅ تم الحذف بنجاح');
+    await loadAttendancePage(document.getElementById('contentArea'));
+  } catch (err) {
+    console.error('❌ Delete manual attendance error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
 //   Export CSV
 // ═══════════════════════════════════════════════════════
 
@@ -737,15 +992,19 @@ window.exportAttendanceCSV = function() {
     const personName = record.PersonName
       || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
 
+    let method = 'ماسح';
+    if (record.Method === 'self') method = 'تسجيل ذاتي';
+    else if (record.Method === 'manual') method = 'يدوي';
+
     return [
       personName,
       person?.Mobile || '',
       event?.Title || record.EventTitle || '',
       scanDate ? formatDateShort(scanDate) : '',
       scanDate ? formatTimeShort(scanDate) : '',
-      record.Method === 'self' ? 'تسجيل ذاتي' : 'ماسح',
+      method,
       record.Location?.name || '',
-      record.ScannerName || record.ScannerEmail || ''
+      record.ManualByName || record.ScannerName || record.ScannerEmail || ''
     ];
   });
 
@@ -795,7 +1054,10 @@ window.exportAttendancePDF = function() {
     filterInfo += ` • الحدث: ${eventTitle}`;
   }
   if (attFilters.method) {
-    filterInfo += ` • النوع: ${attFilters.method === 'self' ? 'تسجيل ذاتي' : 'ماسح'}`;
+    let methodText = 'ماسح';
+    if (attFilters.method === 'self') methodText = 'تسجيل ذاتي';
+    else if (attFilters.method === 'manual') methodText = 'يدوي';
+    filterInfo += ` • النوع: ${methodText}`;
   }
   if (attFilters.search) {
     filterInfo += ` • بحث: "${attFilters.search}"`;
@@ -816,7 +1078,9 @@ window.exportAttendancePDF = function() {
     const personName = record.PersonName
       || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
 
-    const methodText = record.Method === 'self' ? 'ذاتي' : 'ماسح';
+    let methodText = 'ماسح';
+    if (record.Method === 'self') methodText = 'ذاتي';
+    else if (record.Method === 'manual') methodText = 'يدوي';
 
     return `
       <tr>
