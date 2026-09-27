@@ -763,9 +763,7 @@ function getEventsForDate(dateISO) {
   const once = [];
 
   Object.values(attEvents).forEach(e => {
-    const status = String(e.Status || '').toLowerCase();
-    if (status !== 'active') return;
-
+    // ⚡ بنعرض كل الأحداث (نشطة + غير نشطة) عشان الـAdmin يقدر يسجل حضور يدوي في أي حدث
     const type = String(e.Type || 'once').toLowerCase();
 
     if (type === 'weekly') {
@@ -780,7 +778,6 @@ function getEventsForDate(dateISO) {
 
   return { weekly, once };
 }
-
 // ═══════════════════════════════════════════════════════
 //   ⚡ Render Event Item
 // ═══════════════════════════════════════════════════════
@@ -788,14 +785,18 @@ function getEventsForDate(dateISO) {
 function renderManualEventItem(event) {
   const endTime = getEventEndTime(event);
   const isSelected = manualSelectedEventId === event.id;
+  const isInactive = String(event.Status || 'active').toLowerCase() !== 'active';
 
   return `
-    <div class="manual-event-item ${isSelected ? 'selected' : ''}"
+    <div class="manual-event-item ${isSelected ? 'selected' : ''} ${isInactive ? 'inactive' : ''}"
          data-event-id="${event.id}"
          onclick="selectManualEvent('${event.id}')">
       <div class="manual-event-radio"></div>
       <div class="manual-event-info">
-        <div class="manual-event-title">${escapeHtml(event.Title || '')}</div>
+        <div class="manual-event-title">
+          ${escapeHtml(event.Title || '')}
+          ${isInactive ? '<span class="manual-event-inactive-badge">⏸️ معطّل</span>' : ''}
+        </div>
         <div class="manual-event-time">🕐 ${event.Time || '-'} - ${endTime}</div>
       </div>
     </div>
