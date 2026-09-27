@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Event RSVP + Cancel (with Admin Approval)
-//   ⚡ تأكيد الحضور + طلب الإلغاء + طلب النقل
+//   ⚡ تأكيد الحضور + طلب الإلغاء + طلب النقل + فحص التعارض
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -118,7 +118,7 @@ async function confirmRsvp(eventId) {
     return false;
   }
 
-    // ⚡ فحص التعارض
+  // ⚡ فحص التعارض
   const conflictCheck = await checkEventConflict(
     rsvpPerson.id,
     eventId,
@@ -140,7 +140,7 @@ async function confirmRsvp(eventId) {
     return false;
   }
 
-    const existing = await getRegistration(eventId);
+  const existing = await getRegistration(eventId);
 
   if (existing && existing.Status === 'cancel_requested') {
     if (!confirm(`هل تريد التراجع عن طلب إلغاء الحضور في:\n"${event.Title}"؟\n\nسيبقى حضورك مؤكدًا.`)) return false;
@@ -156,7 +156,6 @@ async function confirmRsvp(eventId) {
 
       await createAdminReconfirmNotification(event, rsvpPerson);
 
-      // ⚡ سجل التراجع
       if (typeof window.logAction === 'function') {
         await window.logAction({
           action: 'rsvp_reconfirmed',
@@ -214,7 +213,6 @@ async function confirmRsvp(eventId) {
 
     await createAdminNotification(event, rsvpPerson);
 
-    // ⚡ سجل التأكيد
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'rsvp_confirmed',
@@ -348,7 +346,6 @@ async function performCancel(eventId, eventTitle, occurrenceDate, reason) {
 
     await createCancelRequestNotification(event, rsvpPerson, occurrenceDate, reason);
 
-    // ⚡ سجل الطلب
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'rsvp_cancel_requested',
@@ -422,7 +419,6 @@ async function approveCancel(registrationId) {
       CreatedAt: new Date().toISOString()
     });
 
-    // ⚡ سجل الموافقة
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'rsvp_cancel_approved',
@@ -485,7 +481,6 @@ async function rejectCancel(registrationId) {
       CreatedAt: new Date().toISOString()
     });
 
-    // ⚡ سجل الرفض
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'rsvp_cancel_rejected',
@@ -712,7 +707,6 @@ async function submitTransferRequest(fromEventId, fromEventTitle, toEventId, rea
       console.warn('Admin notification error:', e);
     }
 
-    // ⚡ سجل الطلب
     if (typeof window.logAction === 'function') {
       await window.logAction({
         action: 'transfer_requested',
@@ -929,6 +923,17 @@ function formatDate(dateStr) {
   } catch (e) {
     return dateStr;
   }
+}
+
+// ⚡ ⚡ ⚡ Helper — formatDateISO (كان ناقص)
+function formatDateISO(date) {
+  if (!date) return '';
+  const d = (date instanceof Date) ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 function escapeHtml(str) {
