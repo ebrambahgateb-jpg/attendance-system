@@ -18,6 +18,10 @@ import {
   SETTINGS_DOC
 } from './firebase-config.js';
 
+import {
+  checkEventConflict
+} from './conflict-checker.js';
+
 // ═══ State ═══
 let currentUser = null;
 let events = [];
@@ -432,7 +436,27 @@ async function processScan(decodedText) {
       return;
     }
 
-    // ═══ Check 8: هل سجّل حضور بالفعل؟ ═══
+        // ═══ Check 8: هل فيه تعارض؟ ═══
+    const conflictCheck = await checkEventConflict(
+      personId,
+      selectedEvent.id,
+      occurrenceDate,
+      selectedEvent
+    );
+
+    if (conflictCheck.hasConflict) {
+      const conflict = conflictCheck.conflicts[0];
+      await showResult({
+        type: 'error',
+        title: '⚠️ تعارض في المواعيد',
+        message: `${personName} عنده تسجيل في "${conflict.eventTitle}" (${conflict.time} - ${conflict.endTime})`,
+        person: person,
+        playSound: 'error'
+      });
+      return;
+    }
+
+    // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
     const alreadyRegistered = await checkAlreadyRegistered(
       personId,
       selectedEvent.id,
