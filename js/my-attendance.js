@@ -19,6 +19,10 @@ import {
   SETTINGS_DOC
 } from './firebase-config.js';
 
+import {
+  checkEventConflict
+} from './conflict-checker.js';
+
 // ═══ State ═══
 let maUser = null;
 let maPerson = null;
@@ -794,6 +798,23 @@ async function processScan(scannedText) {
           `أنت على بعد ${Math.round(distance)} متر من "${scannedLocation.Name}". النطاق المسموح ${allowed} متر.`
         );
       }
+    }
+
+        // ⚡ فحص التعارض
+    const conflictCheck = await checkEventConflict(
+      maPerson.id,
+      maSelectedEvent.id,
+      occurrenceDate,
+      maSelectedEvent
+    );
+
+    if (conflictCheck.hasConflict) {
+      const conflict = conflictCheck.conflicts[0];
+      return showResult(
+        'error',
+        '⚠️ تعارض في المواعيد',
+        `عندك تسجيل في "${conflict.eventTitle}" (${conflict.time} - ${conflict.endTime}) — نفس الوقت.`
+      );
     }
 
     const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedEvent.id, occurrenceDate);
