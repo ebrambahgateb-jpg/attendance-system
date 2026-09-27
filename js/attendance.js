@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   Attendance Viewer + Manual Attendance
-//   ⚡ محدّث: عرض + طلبات إلغاء + تسجيل يدوي بالساعة
+//   Attendance Viewer + Manual Attendance + Conflict Check
+//   ⚡ محدّث: منع تسجيل حدثين متعارضين في نفس اليوم
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -20,6 +20,11 @@ import {
   COLLECTIONS,
   SETTINGS_DOC
 } from './firebase-config.js';
+
+import {
+  checkEventConflict,
+  showConflictAlert
+} from './conflict-checker.js';
 
 // ═══ State ═══
 let attData = [];
@@ -609,7 +614,6 @@ window.openManualAttendanceModal = function() {
 
   const todayISO = formatDateISO(new Date());
 
-  // ⚡ كل الناس (active + inactive)
   const allPeople = Object.values(attPeople).sort((a, b) => {
     const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
     const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
@@ -625,27 +629,23 @@ window.openManualAttendanceModal = function() {
 
       <div class="modal-body" style="overflow-y:auto;flex:1;">
 
-        <!-- ═══ 1. التاريخ ═══ -->
         <div class="form-row">
           <label>📅 التاريخ *</label>
           <input type="date" id="manual_Date" value="${todayISO}" max="${todayISO}" />
           <p class="hint">يمكن التسجيل خلال آخر ${ATT_MANUAL_MAX_DAYS} يوم</p>
         </div>
 
-        <!-- ═══ 2. الأحداث ═══ -->
         <div class="form-row" id="manualEventsWrap" style="display:none;">
           <label>🎯 الحدث *</label>
           <div class="manual-events-container" id="manualEventsContainer"></div>
         </div>
 
-        <!-- ═══ 3. الساعة ═══ -->
         <div class="form-row" id="manualTimeWrap" style="display:none;">
           <label>🕐 الساعة *</label>
           <input type="time" id="manual_Time" step="60" />
           <p class="hint" id="manual_TimeHint"></p>
         </div>
 
-        <!-- ═══ 4. الأشخاص ═══ -->
         <div class="form-row">
           <label>👤 ابحث عن شخص *</label>
           <input type="text" id="manual_PersonSearch" placeholder="🔍 ابحث بالاسم أو الموبايل..." />
@@ -678,7 +678,6 @@ window.openManualAttendanceModal = function() {
 
   modal.style.display = 'flex';
 
-  // ⚡ Events
   const searchInput = document.getElementById('manual_PersonSearch');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -687,7 +686,6 @@ window.openManualAttendanceModal = function() {
     });
   }
 
-  // ⚡ Date change
   const dateInput = document.getElementById('manual_Date');
   if (dateInput) {
     dateInput.onchange = () => onManualDateChange();
@@ -763,7 +761,6 @@ function getEventsForDate(dateISO) {
   const once = [];
 
   Object.values(attEvents).forEach(e => {
-    // ⚡ بنعرض كل الأحداث (نشطة + غير نشطة) عشان الـAdmin يقدر يسجل حضور يدوي في أي حدث
     const type = String(e.Type || 'once').toLowerCase();
 
     if (type === 'weekly') {
@@ -778,6 +775,7 @@ function getEventsForDate(dateISO) {
 
   return { weekly, once };
 }
+
 // ═══════════════════════════════════════════════════════
 //   ⚡ Render Event Item
 // ═══════════════════════════════════════════════════════
@@ -985,7 +983,7 @@ window.closeManualAttModal = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Manual Attendance — Save
+//   ⚡ Manual Attendance — Save (with Conflict Check)
 // ═══════════════════════════════════════════════════════
 
 window.saveManualAttendance = async function() {
@@ -999,7 +997,6 @@ window.saveManualAttendance = async function() {
   if (!timeStr) { alert('⚠️ اختر الساعة'); return; }
   if (manualSelectedPeople.length === 0) { alert('⚠️ اختر شخص واحد على الأقل'); return; }
 
-  // ⚡ تحقق من التاريخ
   const selectedDate = new Date(dateISO + 'T00:00:00');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1052,12 +1049,29 @@ window.saveManualAttendance = async function() {
 
   let successCount = 0;
   let duplicateCount = 0;
+  let conflictCount = 0;
   let errorCount = 0;
+  const conflictNames = [];
 
   const manualByName = attCurrentUser?.name || attCurrentUser?.email || '';
 
   for (const personId of manualSelectedPeople) {
     try {
+      // ⚡ 1. فحص التعارض
+      const conflictCheck = await checkEventConflict(personId, eventId, dateISO, event);
+
+      if (conflictCheck.hasConflict) {
+        conflictCount++;
+        const person = attPeople[personId];
+        const pName = person
+          ? [person.FirstName, person.SecondName].filter(Boolean).join(' ')
+          : personId;
+        conflictNames.push(pName);
+        console.warn(`⚠️ تعارض للشخص ${pName}:`, conflictCheck.conflicts);
+        continue;
+      }
+
+      // ⚡ 2. فحص التكرار
       const dupQ = query(
         collection(db, COLLECTIONS.ATTENDANCE),
         where('PersonID', '==', personId),
@@ -1122,9 +1136,15 @@ window.saveManualAttendance = async function() {
     }
   }
 
-  let msg = `✅ تم التسجيل بنجاح\n\n`;
+  let msg = `✅ تم التسجيل\n\n`;
   msg += `✔️ مسجّلين: ${successCount}\n`;
-  if (duplicateCount > 0) msg += `⚠️ مسجّلين مسبقًا: ${duplicateCount}\n`;
+  if (duplicateCount > 0) msg += `🔁 مسجّلين مسبقًا: ${duplicateCount}\n`;
+  if (conflictCount > 0) {
+    msg += `⚠️ تعارض في المواعيد: ${conflictCount}\n`;
+    if (conflictNames.length > 0) {
+      msg += `   (${conflictNames.join(' • ')})\n`;
+    }
+  }
   if (errorCount > 0) msg += `❌ فشل: ${errorCount}\n`;
 
   alert(msg);
