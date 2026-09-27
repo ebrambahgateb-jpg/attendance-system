@@ -140,10 +140,7 @@ async function confirmRsvp(eventId) {
     return false;
   }
 
-  const existing = await getRegistration(eventId);
-
-  if (existing && existing.Status === 'cancel_requested') {
-  const existing = await getRegistration(eventId);
+    const existing = await getRegistration(eventId);
 
   if (existing && existing.Status === 'cancel_requested') {
     if (!confirm(`هل تريد التراجع عن طلب إلغاء الحضور في:\n"${event.Title}"؟\n\nسيبقى حضورك مؤكدًا.`)) return false;
