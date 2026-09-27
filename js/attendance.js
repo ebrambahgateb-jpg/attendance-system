@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Attendance Viewer + Manual Attendance
-//   ⚡ محدّث: عرض سجل الحضور + طلبات الإلغاء + تسجيل يدوي
+//   ⚡ محدّث: عرض + طلبات إلغاء + تسجيل يدوي بالساعة
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -10,6 +10,7 @@ import {
   getDoc,
   updateDoc,
   addDoc,
+  deleteDoc,
   query,
   where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -44,6 +45,7 @@ let attFilters = {
 let attCurrentUser = null;
 let attCurrentWorkspace = null;
 let manualSelectedPeople = [];
+let manualSelectedEventId = null;
 const ATT_MANUAL_MAX_DAYS = 30;
 
 // ═══════════════════════════════════════════════════════
@@ -54,7 +56,6 @@ async function loadAttendancePage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    // ⚡ حمّل المستخدم
     try {
       attCurrentUser = JSON.parse(localStorage.getItem('currentUser'));
       attCurrentWorkspace = attCurrentUser?.currentWorkspace || attCurrentUser?.selectedRole || 'User';
@@ -596,6 +597,7 @@ window.openManualAttendanceModal = function() {
   }
 
   manualSelectedPeople = [];
+  manualSelectedEventId = null;
 
   let modal = document.getElementById('manualAttModal');
   if (!modal) {
@@ -607,20 +609,15 @@ window.openManualAttendanceModal = function() {
 
   const todayISO = formatDateISO(new Date());
 
-  const eventsList = Object.values(attEvents)
-    .filter(e => String(e.Status || '').toLowerCase() === 'active')
-    .sort((a, b) => String(a.Title || '').localeCompare(String(b.Title || ''), 'ar'));
-
-  const peopleList = Object.values(attPeople)
-    .filter(p => String(p.Status || 'active').toLowerCase() === 'active')
-    .sort((a, b) => {
-      const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
-      const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
-      return aN.localeCompare(bN, 'ar');
-    });
+  // ⚡ كل الناس (active + inactive)
+  const allPeople = Object.values(attPeople).sort((a, b) => {
+    const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
+    const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
+    return aN.localeCompare(bN, 'ar');
+  });
 
   modal.innerHTML = `
-    <div class="modal-content modal-large" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-content modal-large" style="max-width:680px;max-height:90vh;display:flex;flex-direction:column;">
       <div class="modal-header">
         <h2>➕ تسجيل حضور يدوي</h2>
         <button class="modal-close" onclick="closeManualAttModal()">✕</button>
@@ -628,28 +625,33 @@ window.openManualAttendanceModal = function() {
 
       <div class="modal-body" style="overflow-y:auto;flex:1;">
 
-        <div class="form-row">
-          <label>🎯 الحدث *</label>
-          <select id="manual_EventID">
-            <option value="">-- اختر الحدث --</option>
-            ${eventsList.map(e => `
-              <option value="${e.id}">${escapeHtml(e.Title || '')}</option>
-            `).join('')}
-          </select>
-        </div>
-
+        <!-- ═══ 1. التاريخ ═══ -->
         <div class="form-row">
           <label>📅 التاريخ *</label>
           <input type="date" id="manual_Date" value="${todayISO}" max="${todayISO}" />
           <p class="hint">يمكن التسجيل خلال آخر ${ATT_MANUAL_MAX_DAYS} يوم</p>
         </div>
 
+        <!-- ═══ 2. الأحداث ═══ -->
+        <div class="form-row" id="manualEventsWrap" style="display:none;">
+          <label>🎯 الحدث *</label>
+          <div class="manual-events-container" id="manualEventsContainer"></div>
+        </div>
+
+        <!-- ═══ 3. الساعة ═══ -->
+        <div class="form-row" id="manualTimeWrap" style="display:none;">
+          <label>🕐 الساعة *</label>
+          <input type="time" id="manual_Time" step="60" />
+          <p class="hint" id="manual_TimeHint"></p>
+        </div>
+
+        <!-- ═══ 4. الأشخاص ═══ -->
         <div class="form-row">
           <label>👤 ابحث عن شخص *</label>
           <input type="text" id="manual_PersonSearch" placeholder="🔍 ابحث بالاسم أو الموبايل..." />
 
           <div class="manual-people-list" id="manualPeopleList">
-            ${peopleList.slice(0, 20).map(p => renderManualPersonItem(p)).join('')}
+            ${allPeople.slice(0, 20).map(p => renderManualPersonItem(p)).join('')}
           </div>
         </div>
 
@@ -681,29 +683,219 @@ window.openManualAttendanceModal = function() {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       const term = e.target.value.toLowerCase().trim();
-      renderManualPeopleList(peopleList, term);
+      renderManualPeopleList(allPeople, term);
     });
+  }
+
+  // ⚡ Date change
+  const dateInput = document.getElementById('manual_Date');
+  if (dateInput) {
+    dateInput.onchange = () => onManualDateChange();
+    onManualDateChange();
   }
 
   renderManualSelected();
 };
 
+// ═══════════════════════════════════════════════════════
+//   ⚡ Manual — Date Change
+// ═══════════════════════════════════════════════════════
+
+function onManualDateChange() {
+  const dateInput = document.getElementById('manual_Date');
+  const eventsWrap = document.getElementById('manualEventsWrap');
+  const eventsContainer = document.getElementById('manualEventsContainer');
+  const timeWrap = document.getElementById('manualTimeWrap');
+
+  if (!dateInput || !eventsWrap || !eventsContainer || !timeWrap) return;
+
+  const dateISO = dateInput.value;
+  manualSelectedEventId = null;
+
+  if (!dateISO) {
+    eventsWrap.style.display = 'none';
+    timeWrap.style.display = 'none';
+    return;
+  }
+
+  const eventsForDate = getEventsForDate(dateISO);
+
+  eventsWrap.style.display = 'block';
+  timeWrap.style.display = 'none';
+
+  if (eventsForDate.weekly.length === 0 && eventsForDate.once.length === 0) {
+    eventsContainer.innerHTML = `
+      <div class="manual-no-events">
+        📭 لا يوجد أحداث في هذا التاريخ
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+
+  if (eventsForDate.weekly.length > 0) {
+    html += `<div class="manual-events-group">
+      <div class="manual-events-group-title">🔄 أحداث أسبوعية</div>
+      ${eventsForDate.weekly.map(e => renderManualEventItem(e)).join('')}
+    </div>`;
+  }
+
+  if (eventsForDate.once.length > 0) {
+    html += `<div class="manual-events-group">
+      <div class="manual-events-group-title">⭐ أحداث مرة واحدة</div>
+      ${eventsForDate.once.map(e => renderManualEventItem(e)).join('')}
+    </div>`;
+  }
+
+  eventsContainer.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Get Events For Date
+// ═══════════════════════════════════════════════════════
+
+function getEventsForDate(dateISO) {
+  const d = new Date(dateISO + 'T00:00:00');
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
+
+  const weekly = [];
+  const once = [];
+
+  Object.values(attEvents).forEach(e => {
+    const status = String(e.Status || '').toLowerCase();
+    if (status !== 'active') return;
+
+    const type = String(e.Type || 'once').toLowerCase();
+
+    if (type === 'weekly') {
+      if (e.DayOfWeek === dayName) weekly.push(e);
+    } else if (type === 'once') {
+      if (e.Date === dateISO) once.push(e);
+    }
+  });
+
+  weekly.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+  once.sort((a, b) => String(a.Time || '').localeCompare(String(b.Time || '')));
+
+  return { weekly, once };
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Render Event Item
+// ═══════════════════════════════════════════════════════
+
+function renderManualEventItem(event) {
+  const endTime = getEventEndTime(event);
+  const isSelected = manualSelectedEventId === event.id;
+
+  return `
+    <div class="manual-event-item ${isSelected ? 'selected' : ''}"
+         data-event-id="${event.id}"
+         onclick="selectManualEvent('${event.id}')">
+      <div class="manual-event-radio"></div>
+      <div class="manual-event-info">
+        <div class="manual-event-title">${escapeHtml(event.Title || '')}</div>
+        <div class="manual-event-time">🕐 ${event.Time || '-'} - ${endTime}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Select Manual Event
+// ═══════════════════════════════════════════════════════
+
+window.selectManualEvent = function(eventId) {
+  manualSelectedEventId = eventId;
+
+  document.querySelectorAll('.manual-event-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.eventId === eventId);
+  });
+
+  const event = attEvents[eventId];
+  if (!event) return;
+
+  showManualTimeField(event);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Show Time Field with Limits
+// ═══════════════════════════════════════════════════════
+
+function showManualTimeField(event) {
+  const timeWrap = document.getElementById('manualTimeWrap');
+  const timeInput = document.getElementById('manual_Time');
+  const timeHint = document.getElementById('manual_TimeHint');
+
+  if (!timeWrap || !timeInput || !timeHint) return;
+
+  const eventStartTime = event.Time || '00:00';
+  const eventEndTime = getEventEndTime(event);
+
+  const openBefore = Number(attSettings.OpenBeforeMinutes || 30);
+  const closeAfter = Number(attSettings.CloseAfterMinutes || 15);
+
+  const openTime = addMinutes(eventStartTime, -openBefore);
+  const closeTime = addMinutes(eventEndTime, closeAfter);
+
+  timeWrap.style.display = 'block';
+  timeInput.min = openTime;
+  timeInput.max = closeTime;
+  timeInput.value = eventStartTime;
+
+  timeHint.innerHTML = `
+    💡 الوقت المسموح: <strong>${openTime}</strong> → <strong>${closeTime}</strong>
+    <br><small>(فتح التسجيل قبل ${openBefore} دقيقة + إغلاق بعد ${closeAfter} دقيقة)</small>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Time Helpers
+// ═══════════════════════════════════════════════════════
+
+function addMinutes(timeStr, minutes) {
+  const [h, m] = String(timeStr || '00:00').split(':').map(Number);
+  let total = (h || 0) * 60 + (m || 0) + minutes;
+
+  if (total < 0) total = 0;
+  if (total > 1439) total = 1439;
+
+  const newH = Math.floor(total / 60);
+  const newM = total % 60;
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+}
+
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = String(timeStr).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Render Person Item
+// ═══════════════════════════════════════════════════════
+
 function renderManualPersonItem(person) {
   const name = [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ');
   const initial = (person.FirstName || '?').charAt(0);
   const isSelected = manualSelectedPeople.includes(person.id);
+  const isInactive = String(person.Status || 'active').toLowerCase() !== 'active';
 
   const avatar = person.PhotoURL
     ? `<img src="${person.PhotoURL}" class="manual-person-avatar" alt="" />`
     : `<div class="manual-person-avatar-placeholder">${escapeHtml(initial)}</div>`;
 
   return `
-    <div class="manual-person-item ${isSelected ? 'selected' : ''}"
+    <div class="manual-person-item ${isSelected ? 'selected' : ''} ${isInactive ? 'inactive' : ''}"
          data-person-id="${person.id}"
          onclick="toggleManualPerson('${person.id}')">
       ${avatar}
       <div class="manual-person-info">
-        <div class="manual-person-name">${escapeHtml(name)}</div>
+        <div class="manual-person-name">
+          ${escapeHtml(name)}
+          ${isInactive ? '<span class="manual-person-inactive-badge">معطل</span>' : ''}
+        </div>
         <div class="manual-person-sub">${escapeHtml(person.Mobile || '')}</div>
       </div>
       <div class="manual-person-check">${isSelected ? '✅' : ''}</div>
@@ -742,18 +934,15 @@ window.toggleManualPerson = function(personId) {
     manualSelectedPeople.splice(idx, 1);
   }
 
-  // ⚡ Re-render
   const searchInput = document.getElementById('manual_PersonSearch');
   const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
-  const peopleList = Object.values(attPeople)
-    .filter(p => String(p.Status || 'active').toLowerCase() === 'active')
-    .sort((a, b) => {
-      const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
-      const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
-      return aN.localeCompare(bN, 'ar');
-    });
+  const allPeople = Object.values(attPeople).sort((a, b) => {
+    const aN = [a.FirstName, a.SecondName].filter(Boolean).join(' ');
+    const bN = [b.FirstName, b.SecondName].filter(Boolean).join(' ');
+    return aN.localeCompare(bN, 'ar');
+  });
 
-  renderManualPeopleList(peopleList, term);
+  renderManualPeopleList(allPeople, term);
   renderManualSelected();
 };
 
@@ -791,6 +980,7 @@ window.closeManualAttModal = function() {
   const modal = document.getElementById('manualAttModal');
   if (modal) modal.style.display = 'none';
   manualSelectedPeople = [];
+  manualSelectedEventId = null;
 };
 
 // ═══════════════════════════════════════════════════════
@@ -798,12 +988,14 @@ window.closeManualAttModal = function() {
 // ═══════════════════════════════════════════════════════
 
 window.saveManualAttendance = async function() {
-  const eventId = document.getElementById('manual_EventID')?.value;
+  const eventId = manualSelectedEventId;
   const dateISO = document.getElementById('manual_Date')?.value;
+  const timeStr = document.getElementById('manual_Time')?.value;
   const note = document.getElementById('manual_Note')?.value.trim() || '';
 
-  if (!eventId) { alert('⚠️ اختر الحدث'); return; }
   if (!dateISO) { alert('⚠️ اختر التاريخ'); return; }
+  if (!eventId) { alert('⚠️ اختر الحدث'); return; }
+  if (!timeStr) { alert('⚠️ اختر الساعة'); return; }
   if (manualSelectedPeople.length === 0) { alert('⚠️ اختر شخص واحد على الأقل'); return; }
 
   // ⚡ تحقق من التاريخ
@@ -828,6 +1020,29 @@ window.saveManualAttendance = async function() {
     return;
   }
 
+  // ⚡ التحقق من الوقت
+  const eventStartTime = event.Time || '00:00';
+  const eventEndTime = getEventEndTime(event);
+
+  const openBefore = Number(attSettings.OpenBeforeMinutes || 30);
+  const closeAfter = Number(attSettings.CloseAfterMinutes || 15);
+
+  const openTime = addMinutes(eventStartTime, -openBefore);
+  const closeTime = addMinutes(eventEndTime, closeAfter);
+
+  const timeMinutes = timeToMinutes(timeStr);
+  const openMinutes = timeToMinutes(openTime);
+  const closeMinutes = timeToMinutes(closeTime);
+
+  if (timeMinutes < openMinutes || timeMinutes > closeMinutes) {
+    alert(
+      `⚠️ الساعة خارج نطاق التسجيل المسموح\n\n` +
+      `🕐 الوقت المسموح: ${openTime} → ${closeTime}\n` +
+      `🕐 الوقت المختار: ${timeStr}`
+    );
+    return;
+  }
+
   const saveBtn = document.getElementById('manualSaveBtn');
   if (saveBtn) {
     saveBtn.disabled = true;
@@ -842,7 +1057,6 @@ window.saveManualAttendance = async function() {
 
   for (const personId of manualSelectedPeople) {
     try {
-      // ⚡ تحقق من عدم التكرار
       const dupQ = query(
         collection(db, COLLECTIONS.ATTENDANCE),
         where('PersonID', '==', personId),
@@ -861,7 +1075,7 @@ window.saveManualAttendance = async function() {
         ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ')
         : 'غير معروف';
 
-      const scanTime = new Date(dateISO + 'T12:00:00').toISOString();
+      const scanTime = new Date(dateISO + 'T' + timeStr + ':00').toISOString();
 
       await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
         PersonID: personId,
@@ -888,14 +1102,13 @@ window.saveManualAttendance = async function() {
 
       successCount++;
 
-      // ⚡ Log
       if (typeof window.logAction === 'function') {
         try {
           await window.logAction({
             action: 'manual_attendance_added',
             type: 'attendance',
             title: `تسجيل حضور يدوي: ${personName}`,
-            description: `الحدث: ${event.Title || ''} — التاريخ: ${dateISO}`,
+            description: `الحدث: ${event.Title || ''} — التاريخ: ${dateISO} ${timeStr}`,
             relatedID: eventId,
             relatedTitle: event.Title || ''
           });
@@ -908,7 +1121,6 @@ window.saveManualAttendance = async function() {
     }
   }
 
-  // ⚡ النتيجة
   let msg = `✅ تم التسجيل بنجاح\n\n`;
   msg += `✔️ مسجّلين: ${successCount}\n`;
   if (duplicateCount > 0) msg += `⚠️ مسجّلين مسبقًا: ${duplicateCount}\n`;
@@ -918,7 +1130,6 @@ window.saveManualAttendance = async function() {
 
   closeManualAttModal();
 
-  // ⚡ أعد تحميل الصفحة
   await loadAttendancePage(document.getElementById('contentArea'));
 };
 
@@ -947,10 +1158,8 @@ window.deleteManualAttendance = async function(recordId) {
   }
 
   try {
-    const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js');
     await deleteDoc(doc(db, COLLECTIONS.ATTENDANCE, recordId));
 
-    // ⚡ Log
     if (typeof window.logAction === 'function') {
       try {
         await window.logAction({
@@ -1023,7 +1232,7 @@ window.exportAttendanceCSV = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Export PDF (Print Dialog)
+//   Export PDF
 // ═══════════════════════════════════════════════════════
 
 window.exportAttendancePDF = function() {
@@ -1066,9 +1275,7 @@ window.exportAttendancePDF = function() {
   const now = new Date();
   const nowText = `${formatDateShort(now)} ${formatTimeShort(now)}`;
 
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" class="pdf-logo" alt="" />`
-    : '';
+  const logoHtml = logoUrl ? `<img src="${logoUrl}" class="pdf-logo" alt="" />` : '';
 
   const rowsHtml = attFiltered.map((record, idx) => {
     const person = attPeople[record.PersonID];
@@ -1315,6 +1522,18 @@ function formatRelativeTime(date) {
   if (diff < 86400) return `${Math.floor(diff / 3600)} ساعة`;
   if (diff < 604800) return `${Math.floor(diff / 86400)} يوم`;
   return formatDateShort(date);
+}
+
+function getEventEndTime(event) {
+  if (!event) return '';
+  if (event.EndTime) return String(event.EndTime);
+
+  const time = String(event.Time || '00:00');
+  const [h, m] = time.split(':').map(Number);
+  const total = (h || 0) * 60 + (m || 0) + 120;
+  const newH = Math.floor(total / 60) % 24;
+  const newM = total % 60;
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
 function escapeHtml(str) {
