@@ -19,6 +19,10 @@ import {
   COLLECTIONS
 } from './firebase-config.js';
 
+import {
+  checkEventConflict
+} from './conflict-checker.js';
+
 // ═══ State ═══
 let rsvpUser = null;
 let rsvpPerson = null;
@@ -114,6 +118,31 @@ async function confirmRsvp(eventId) {
     return false;
   }
 
+    // ⚡ فحص التعارض
+  const conflictCheck = await checkEventConflict(
+    rsvpPerson.id,
+    eventId,
+    event.Date || formatDateISO(new Date()),
+    event
+  );
+
+  if (conflictCheck.hasConflict) {
+    let msg = `⚠️ تعارض في المواعيد!\n\n`;
+    msg += `الحدث الجديد: ${event.Title}\n\n`;
+    msg += `📅 عندك تسجيل في:\n`;
+    conflictCheck.conflicts.forEach((c, idx) => {
+      msg += `\n${idx + 1}. 🎯 ${c.eventTitle}\n`;
+      msg += `   🕐 ${c.time} - ${c.endTime}\n`;
+    });
+    msg += `\n⚠️ لا يمكن التسجيل في حدثين متعارضين في نفس اليوم.`;
+    msg += `\n\n💡 لو عايز تسجل، لازم تلغي التسجيل القديم أولاً.`;
+    alert(msg);
+    return false;
+  }
+
+  const existing = await getRegistration(eventId);
+
+  if (existing && existing.Status === 'cancel_requested') {
   const existing = await getRegistration(eventId);
 
   if (existing && existing.Status === 'cancel_requested') {
