@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Attendance Viewer + Manual Attendance + Conflict Check
 //   ⚡ محدّث: منع تسجيل حدثين متعارضين في نفس اليوم
+//   ⚡ محدّث: فلتر بانر مع عدّاد ديناميكي
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -158,11 +159,14 @@ function renderAttendancePage(area) {
           <span class="att-stat-value">${countThisWeek()}</span>
           <span class="att-stat-label">هذا الأسبوع</span>
         </div>
-        <div class="att-stat">
-          <span class="att-stat-value">${attFiltered.length}</span>
-          <span class="att-stat-label">بعد الفلترة</span>
+        <div class="att-stat highlight">
+          <span class="att-stat-value" id="attFilteredCount">${attFiltered.length}</span>
+          <span class="att-stat-label">عدد النتائج</span>
         </div>
       </div>
+
+      <!-- ═══ ⚡ فلتر بانر ═══ -->
+      <div id="attFilterBanner" class="att-filter-banner"></div>
 
       <div class="att-filters">
         <div class="att-filter-group">
@@ -229,6 +233,7 @@ function renderAttendancePage(area) {
 
   renderAttendanceTable();
   setupAttendanceEvents();
+  updateFilterBanner();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -572,7 +577,138 @@ function applyAttFilters() {
 
   attCurrentPage = 1;
   renderAttendanceTable();
+  updateFilterBanner();
 }
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Filter Banner — عرض الفلتر الحالي + العدّاد
+// ═══════════════════════════════════════════════════════
+
+function updateFilterBanner() {
+  const banner = document.getElementById('attFilterBanner');
+  const countEl = document.getElementById('attFilteredCount');
+
+  if (!banner) return;
+
+  // ⚡ حدّث العدّاد
+  if (countEl) {
+    countEl.textContent = attFiltered.length;
+  }
+
+  // ⚡ هل فيه فلتر مطبق؟
+  const hasFilter =
+    attFilters.search ||
+    attFilters.meetingId ||
+    attFilters.method ||
+    attFilters.dateFrom ||
+    attFilters.dateTo;
+
+  if (!hasFilter) {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+
+  // ⚡ اجمع تفاصيل الفلتر
+  const chips = [];
+
+  if (attFilters.search) {
+    chips.push({
+      icon: '🔍',
+      label: `بحث: "${attFilters.search}"`,
+      key: 'search'
+    });
+  }
+
+  if (attFilters.meetingId) {
+    const eventTitle = attEvents[attFilters.meetingId]?.Title || 'حدث';
+    chips.push({
+      icon: '🎯',
+      label: `الحدث: ${eventTitle}`,
+      key: 'meetingId'
+    });
+  }
+
+  if (attFilters.method) {
+    const methodLabels = {
+      self: '📱 تسجيل ذاتي',
+      scanner: '📷 ماسح',
+      manual: '✍️ يدوي'
+    };
+    chips.push({
+      icon: '⚙️',
+      label: `النوع: ${methodLabels[attFilters.method] || attFilters.method}`,
+      key: 'method'
+    });
+  }
+
+  if (attFilters.dateFrom) {
+    chips.push({
+      icon: '📅',
+      label: `من: ${formatDateShort(parseDate(attFilters.dateFrom + 'T00:00:00'))}`,
+      key: 'dateFrom'
+    });
+  }
+
+  if (attFilters.dateTo) {
+    chips.push({
+      icon: '📅',
+      label: `إلى: ${formatDateShort(parseDate(attFilters.dateTo + 'T00:00:00'))}`,
+      key: 'dateTo'
+    });
+  }
+
+  banner.style.display = 'flex';
+  banner.innerHTML = `
+    <div class="att-filter-banner-info">
+      <span class="att-filter-banner-icon">🔎</span>
+      <span class="att-filter-banner-text">الفلتر المطبق:</span>
+      <div class="att-filter-chips">
+        ${chips.map(c => `
+          <span class="att-filter-chip">
+            <span>${c.icon}</span>
+            <span>${escapeHtml(c.label)}</span>
+            <button type="button" onclick="removeAttFilter('${c.key}')" title="مسح الفلتر">✕</button>
+          </span>
+        `).join('')}
+      </div>
+    </div>
+    <div class="att-filter-banner-count">
+      <span class="att-filter-count-value">${attFiltered.length}</span>
+      <span class="att-filter-count-label">سجل</span>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Remove Individual Filter
+// ═══════════════════════════════════════════════════════
+
+window.removeAttFilter = function(key) {
+  if (!key) return;
+
+  attFilters[key] = '';
+
+  // ⚡ أعد ضبط الحقول في الـUI
+  if (key === 'search') {
+    const input = document.getElementById('attSearchInput');
+    if (input) input.value = '';
+  } else if (key === 'meetingId') {
+    const select = document.getElementById('attFilterMeeting');
+    if (select) select.value = '';
+  } else if (key === 'method') {
+    const select = document.getElementById('attFilterMethod');
+    if (select) select.value = '';
+  } else if (key === 'dateFrom') {
+    const input = document.getElementById('attFilterFrom');
+    if (input) input.value = '';
+  } else if (key === 'dateTo') {
+    const input = document.getElementById('attFilterTo');
+    if (input) input.value = '';
+  }
+
+  applyAttFilters();
+};
 
 window.clearAttendanceFilters = function() {
   attFilters = {
