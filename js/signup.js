@@ -176,8 +176,8 @@ if (googleSignUpBtn) {
         signupConfirmedEmail.textContent = `📧 ${email}`;
       }
 
-      // ⚡ سجّل خروج مؤقت (لأنه مش عايز يدخل، عايز يسجل)
-      await signOut(auth);
+      // ⚡ ملاحظة: نسيب الـAuth State زي ما هو
+// (auth.js هيتعامل معاه — مش هنخرج)
 
       showSignupStep(2);
       showSignupMessage(signupMessage1, '✅ تم تأكيد البريد', 'success');
