@@ -28,6 +28,10 @@ let unsubscribeListener = null;
 let unreadCount = 0;
 let previousNotifIds = [];
 
+// ═══ ⚡ Dedup — منع الإشعارات المكررة ═══
+const notifiedIds = new Set();
+const MAX_NOTIFIED_IDS = 200;
+
 // ═══════════════════════════════════════════════════════
 //   Initialize
 // ═══════════════════════════════════════════════════════
@@ -577,11 +581,15 @@ async function showBrowserNotification(options) {
   try {
     const registration = await navigator.serviceWorker.ready;
 
+    // ⚡ استخدم نفس الـTag لمنع التكرار
+    const notifTag = options.tag || `notif_${Date.now()}`;
+
     await registration.showNotification(options.title || '🔔 إشعار جديد', {
       body: options.body || '',
       icon: options.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
       badge: options.badge || 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
-      tag: options.tag || 'default',
+      tag: notifTag,         // ⚡ منع التكرار
+      renotify: false,       // ⚡ ما يعيدش التنبيه
       dir: 'rtl',
       lang: 'ar',
       vibrate: [200, 100, 200],
@@ -589,7 +597,7 @@ async function showBrowserNotification(options) {
       data: options.data || { url: '/attendance-system/pages/dashboard.html' }
     });
 
-    console.log('✅ Browser notification shown');
+    console.log('✅ Browser notification shown:', notifTag);
     return true;
   } catch (err) {
     console.error('❌ showBrowserNotification error:', err);
@@ -660,12 +668,30 @@ function renderEnableNotifButton() {
 }
 
 function notifyNewNotification(notif) {
-  if (!notif) return;
+  if (!notif || !notif.id) return;
+
+  // ⚡ منع التكرار — لو اتشوف قبل كده → تخطى
+  if (notifiedIds.has(notif.id)) {
+    console.log('⏭️ Skipped duplicate notification:', notif.id);
+    return;
+  }
 
   // ⚡ ما تعرضش إشعارات قديمة (أكتر من 30 ثانية)
   const created = notif.CreatedAt ? new Date(notif.CreatedAt).getTime() : 0;
   const now = Date.now();
-  if (now - created > 30000) return;
+  if (now - created > 30000) {
+    console.log('⏭️ Skipped old notification:', notif.id);
+    return;
+  }
+
+  notifiedIds.add(notif.id);
+
+  // ⚡ نظّف الـSet لو كبر أوي
+  if (notifiedIds.size > MAX_NOTIFIED_IDS) {
+    const arr = Array.from(notifiedIds).slice(-Math.floor(MAX_NOTIFIED_IDS / 2));
+    notifiedIds.clear();
+    arr.forEach(id => notifiedIds.add(id));
+  }
 
   const typeIcon = getTypeIcon(notif.Type);
   const bodyText = (notif.Body || '').substring(0, 120);
@@ -674,7 +700,7 @@ function notifyNewNotification(notif) {
   showBrowserNotification({
     title: `${typeIcon} ${notif.Title || 'إشعار جديد'}`,
     body: bodyText,
-    tag: `notif_${notif.id}`,
+    tag: `notif_${notif.id}`,   // ⚡ نفس الـTag
     data: notifData
   });
 }
