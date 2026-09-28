@@ -24,27 +24,32 @@ try {
 
   // ⚡ Background message handler
   messaging.onBackgroundMessage((payload) => {
-    console.log('🔔 FCM Background message:', payload);
+  console.log('🔔 FCM Background message:', payload);
 
-    const notification = payload.notification || {};
-    const data = payload.data || {};
+  const notification = payload.notification || {};
+  const data = payload.data || {};
 
-    const notificationOptions = {
-      body: notification.body || data.body || '',
-      icon: notification.icon || data.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
-      badge: 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
-      tag: data.tag || 'default',
-      dir: 'rtl',
-      lang: 'ar',
-      vibrate: [200, 100, 200],
-      data: data
-    };
+  // ⚡ نفس الـTag من Apps Script — يمنع التكرار
+  const notifTag = data.notifId || `notif_${Date.now()}`;
 
-    self.registration.showNotification(
-      notification.title || data.title || '🔔 إشعار جديد',
-      notificationOptions
-    );
-  });
+  const notificationOptions = {
+    body: notification.body || data.body || '',
+    icon: notification.icon || data.icon || 'https://placehold.co/192x192/2563eb/ffffff?text=ح',
+    badge: 'https://placehold.co/96x96/2563eb/ffffff?text=ح',
+    tag: notifTag,           // ⚡ نفس الـTag → يستبدل
+    renotify: false,         // ⚡ ما يعيدش التنبيه
+    dir: 'rtl',
+    lang: 'ar',
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    data: data
+  };
+
+  self.registration.showNotification(
+    notification.title || data.title || '🔔 إشعار جديد',
+    notificationOptions
+  );
+});
 
   console.log('✅ Firebase Messaging initialized in SW');
 } catch (err) {
@@ -188,15 +193,21 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 
   if (event.data?.type === 'SHOW_NOTIFICATION') {
-    const { title, body, data, icon } = event.data;
-    self.registration.showNotification(title, {
-      body,
-      icon: icon || DEFAULT_ICON,
-      badge: icon || DEFAULT_ICON,
-      dir: 'rtl',
-      lang: 'ar',
-      data: data || {},
-      vibrate: [200, 100, 200]
-    });
-  }
+  const { title, body, data, icon } = event.data;
+
+  const notifTag = (data && data.notifId) ? data.notifId : `notif_${Date.now()}`;
+
+  self.registration.showNotification(title, {
+    body,
+    icon: icon || DEFAULT_ICON,
+    badge: icon || DEFAULT_ICON,
+    dir: 'rtl',
+    lang: 'ar',
+    tag: notifTag,        // ⚡ منع التكرار
+    renotify: false,
+    data: data || {},
+    vibrate: [200, 100, 200],
+    requireInteraction: false
+  });
+}
 });
