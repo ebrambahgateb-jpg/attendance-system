@@ -13,8 +13,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="الحضور" />
   <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="https://i.ibb.co/icon-192.png" />
-  
+
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -23,14 +22,13 @@
   <div class="bg-image" id="bgImage"></div>
   <div class="bg-overlay"></div>
 
-  <!-- ═══ شاشة تسجيل الدخول ═══ -->
+  <!-- ═══ شاشة تسجيل الدخول / التسجيل ═══ -->
   <div id="loginScreen" class="screen active">
     <div class="login-wrapper">
 
       <!-- ═══ اللوجو + اسم المؤسسة ═══ -->
       <div class="brand-area">
         <div class="brand-logo" id="brandLogo">
-          <!-- اللوجو الافتراضي (SVG) — يتشال لو في لوجو من الإعدادات -->
           <svg width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="default-logo">
             <rect x="3" y="3" width="7" height="7" rx="1"/>
             <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -42,14 +40,128 @@
         <p class="brand-subtitle" id="brandSubtitle">سجّل دخولك لتتبع حضورك</p>
       </div>
 
-      <!-- ═══ كارت تسجيل الدخول ═══ -->
-      <div class="login-card">
+      <!-- ═══ التابات: تسجيل دخول / حساب جديد ═══ -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login" id="tabLoginBtn">🔑 تسجيل الدخول</button>
+        <button class="auth-tab" data-tab="signup" id="tabSignupBtn">✨ حساب جديد</button>
+      </div>
+
+      <!-- ═══ تاب تسجيل الدخول ═══ -->
+      <div class="login-card auth-panel" id="loginPanel">
         <button id="googleSignInBtn" class="google-btn">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" height="20">
           <span>تسجيل الدخول بـ Google</span>
         </button>
 
         <div id="loginMessage" class="message"></div>
+      </div>
+
+      <!-- ═══ تاب التسجيل (Sign Up) ═══ -->
+      <div class="login-card auth-panel" id="signupPanel" style="display:none;">
+
+        <!-- ═══ خطوة 1: تأكيد الإيميل عبر Google ═══ -->
+        <div id="signupStep1" class="signup-step active">
+          <div class="signup-step-header">
+            <span class="signup-step-num">1</span>
+            <div>
+              <h3 class="signup-step-title">تأكيد البريد الإلكتروني</h3>
+              <p class="signup-step-desc">سجّل دخولك بـ Google أولاً للتأكد من إيميلك</p>
+            </div>
+          </div>
+
+          <button id="googleSignUpBtn" class="google-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width="20" height="20">
+            <span>تأكيد البريد بـ Google</span>
+          </button>
+
+          <div id="signupMessage1" class="message"></div>
+        </div>
+
+        <!-- ═══ خطوة 2: تعبئة البيانات ═══ -->
+        <div id="signupStep2" class="signup-step">
+          <div class="signup-step-header">
+            <span class="signup-step-num">2</span>
+            <div>
+              <h3 class="signup-step-title">بيانات التسجيل</h3>
+              <p class="signup-step-desc" id="signupConfirmedEmail">-</p>
+            </div>
+          </div>
+
+          <form id="signupForm" onsubmit="return false;">
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label>الاسم الأول *</label>
+                <input type="text" id="su_FirstName" placeholder="محمد" required />
+              </div>
+              <div class="form-row">
+                <label>الاسم الثاني *</label>
+                <input type="text" id="su_SecondName" placeholder="أحمد" required />
+              </div>
+              <div class="form-row">
+                <label>الاسم الثالث</label>
+                <input type="text" id="su_ThirdName" placeholder="إبراهيم" />
+              </div>
+              <div class="form-row">
+                <label>الاسم الرابع</label>
+                <input type="text" id="su_FourthName" placeholder="عبد الله" />
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label>تاريخ الميلاد *</label>
+                <input type="date" id="su_BirthDate" required />
+              </div>
+              <div class="form-row">
+                <label>النوع *</label>
+                <select id="su_Gender" required>
+                  <option value="">-- اختر --</option>
+                  <option value="male">ذكر</option>
+                  <option value="female">أنثى</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label>العنوان</label>
+              <input type="text" id="su_Address" placeholder="أسيوط - شارع الجمهورية" />
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label>رقم الموبايل *</label>
+                <input type="tel" id="su_Mobile" placeholder="01xxxxxxxxx" dir="ltr" required />
+              </div>
+              <div class="form-row">
+                <label>رقم واتساب</label>
+                <input type="tel" id="su_WhatsApp" placeholder="01xxxxxxxxx" dir="ltr" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label>Facebook</label>
+              <input type="text" id="su_Facebook" placeholder="username أو facebook.com/username" dir="ltr" />
+            </div>
+
+            <div id="signupMessage2" class="message"></div>
+
+            <div class="signup-actions">
+              <button type="button" class="btn-secondary" id="signupBackBtn">← رجوع</button>
+              <button type="button" class="btn-primary" id="signupSubmitBtn">📩 إرسال الطلب</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- ═══ خطوة 3: نجاح ═══ -->
+        <div id="signupStep3" class="signup-step">
+          <div class="signup-success">
+            <div class="signup-success-icon">🎉</div>
+            <h3>تم إرسال طلبك</h3>
+            <p>طلبك الآن قيد المراجعة من المسؤول. سيتم إشعارك عند الموافقة أو الرفض.</p>
+            <button class="btn-primary" onclick="location.reload()">تم</button>
+          </div>
+        </div>
+
       </div>
 
       <!-- ═══ Footer ═══ -->
@@ -96,7 +208,6 @@
     import { db, COLLECTIONS, SETTINGS_DOC } from './js/firebase-config.js';
     import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
 
-    // ⚡ القيم الافتراضية
     const DEFAULTS = {
       SystemName: 'QR Punch',
       OrganizationName: '',
@@ -113,7 +224,7 @@
         const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
         const snap = await getDoc(settingsRef);
 
-               if (snap.exists()) {
+        if (snap.exists()) {
           const data = snap.data();
           settings = {
             SystemName: data.SystemName || DEFAULTS.SystemName,
@@ -122,8 +233,6 @@
             LogoUrl: data.ThemeLogoUrl || '',
             BgImageUrl: data.ThemeBgImageUrl || '',
             FooterText: data.FooterText || '',
-
-            // ⚡ إعدادات عرض اللوجو
             LogoSizeLogin: Number(data.LogoSizeLogin) || 90,
             LogoShape: data.LogoShape || 'square'
           };
@@ -136,17 +245,15 @@
     }
 
     function applySettings(s) {
-      // ═══ Title ═══
       document.title = s.SystemName || DEFAULTS.SystemName;
 
-            // ═══ Logo ═══
+      // ═══ Logo ═══
       const brandLogo = document.getElementById('brandLogo');
       if (brandLogo) {
         if (s.LogoUrl) {
           const logoSize = Number(s.LogoSizeLogin) || 90;
           const shape = s.LogoShape || 'square';
 
-          // ⚡ للـLogin بنستخدم قيم أكبر شوية من الـSidebar
           const borderRadius = {
             square: '20px',
             circle: '50%',
@@ -157,7 +264,6 @@
           brandLogo.innerHTML = `<img src="${s.LogoUrl}" alt="Logo" class="logo-image" style="width:${logoSize}px;height:${logoSize}px;border-radius:${borderRadius};object-fit:contain;" />`;
           brandLogo.classList.add('has-image');
 
-          // ⚡ عدّل حجم الـWrapper
           brandLogo.style.width = (logoSize + 20) + 'px';
           brandLogo.style.height = (logoSize + 20) + 'px';
           brandLogo.style.borderRadius = borderRadius;
@@ -169,7 +275,6 @@
       // ═══ Name ═══
       const brandName = document.getElementById('brandName');
       if (brandName) {
-        // ⚡ اسم المؤسسة لو موجود، وإلا اسم النظام
         brandName.textContent = s.OrganizationName || s.SystemName || DEFAULTS.SystemName;
       }
 
@@ -199,11 +304,13 @@
       }
     }
 
-    // ⚡ نفّذ بمجرد ما الصفحة تفتح
     loadPublicSettings();
   </script>
 
   <!-- ═══ Auth Logic ═══ -->
   <script type="module" src="js/auth.js"></script>
+
+  <!-- ═══ Signup Logic ═══ -->
+  <script type="module" src="js/signup.js"></script>
 </body>
 </html>
