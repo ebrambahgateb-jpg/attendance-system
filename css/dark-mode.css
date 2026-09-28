@@ -3020,3 +3020,79 @@ html:not([data-theme="dark"]) .sidebar-header .app-logo {
   box-shadow: none !important;
   padding: 0 !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Signup Requests Section — Dark Mode
+   ═══════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] .sr-section {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.06) 100%);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+html[data-theme="dark"] .sr-section-header {
+  border-bottom-color: rgba(59, 130, 246, 0.3);
+}
+
+html[data-theme="dark"] .sr-section-title {
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .sr-count {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .sr-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .sr-card:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
+}
+
+html[data-theme="dark"] .sr-header {
+  border-bottom-color: #334155;
+}
+
+html[data-theme="dark"] .sr-name {
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .sr-email {
+  color: #60a5fa;
+}
+
+html[data-theme="dark"] .sr-google-name {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .sr-time {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .sr-detail-label {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .sr-detail-value {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .sr-actions {
+  border-top-color: #334155;
+}
+
+html[data-theme="dark"] .sr-btn.reject {
+  color: #f87171;
+  border-color: rgba(220, 38, 38, 0.5);
+  background: rgba(220, 38, 38, 0.1);
+}
+
+html[data-theme="dark"] .sr-btn.reject:hover:not(:disabled) {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+}
