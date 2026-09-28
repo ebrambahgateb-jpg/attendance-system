@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Sign Up Module
 //   ⚡ تسجيل حساب جديد → إرسال طلب للأدمن للمراجعة
+//   ⚡ محدّث: منع التعارض مع auth.js
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -26,7 +27,10 @@ import {
 } from './firebase-config.js';
 
 // ═══ State ═══
-let signupVerifiedUser = null; // ⚡ المستخدم اللي أكد إيميله بـGoogle
+let signupVerifiedUser = null;
+
+// ═══ ⚡ Flag لمنع التعارض مع auth.js ═══
+window._signupFlowActive = false;
 
 // ═══ DOM Elements ═══
 const tabLoginBtn = document.getElementById('tabLoginBtn');
@@ -63,18 +67,23 @@ function switchTab(tab) {
   document.querySelectorAll('.auth-panel').forEach(p => p.style.display = 'none');
 
   if (tab === 'login') {
+    // ⚡ إلغاء علامة Sign Up
+    window._signupFlowActive = false;
+
     if (tabLoginBtn) tabLoginBtn.classList.add('active');
     if (loginPanel) {
       loginPanel.style.display = 'block';
       loginPanel.classList.add('active');
     }
   } else {
+    // ⚡ تفعيل علامة Sign Up
+    window._signupFlowActive = true;
+
     if (tabSignupBtn) tabSignupBtn.classList.add('active');
     if (signupPanel) {
       signupPanel.style.display = 'block';
       signupPanel.classList.add('active');
     }
-    // ⚡ Reset Sign Up Steps
     resetSignupSteps();
   }
 }
@@ -110,6 +119,9 @@ function showSignupStep(stepNum) {
 
 if (googleSignUpBtn) {
   googleSignUpBtn.onclick = async () => {
+    // ⚡ علامة إننا في Sign Up flow
+    window._signupFlowActive = true;
+
     googleSignUpBtn.disabled = true;
     showSignupMessage(signupMessage1, '⏳ جاري تأكيد البريد...', '');
 
@@ -133,7 +145,8 @@ if (googleSignUpBtn) {
           '⚠️ هذا البريد مسجل بالفعل في النظام. يمكنك تسجيل الدخول.',
           'error'
         );
-        await signOut(auth);
+        try { await signOut(auth); } catch (e) {}
+        window._signupFlowActive = false;
         googleSignUpBtn.disabled = false;
         return;
       }
@@ -146,7 +159,8 @@ if (googleSignUpBtn) {
           '⚠️ هذا البريد مسجل بالفعل في النظام. يمكنك تسجيل الدخول.',
           'error'
         );
-        await signOut(auth);
+        try { await signOut(auth); } catch (e) {}
+        window._signupFlowActive = false;
         googleSignUpBtn.disabled = false;
         return;
       }
@@ -159,7 +173,8 @@ if (googleSignUpBtn) {
           '⏳ عندك طلب تسجيل قيد المراجعة بالفعل. تواصل مع المسؤول.',
           'error'
         );
-        await signOut(auth);
+        try { await signOut(auth); } catch (e) {}
+        window._signupFlowActive = false;
         googleSignUpBtn.disabled = false;
         return;
       }
@@ -176,8 +191,8 @@ if (googleSignUpBtn) {
         signupConfirmedEmail.textContent = `📧 ${email}`;
       }
 
-      // ⚡ ملاحظة: نسيب الـAuth State زي ما هو
-// (auth.js هيتعامل معاه — مش هنخرج)
+      // ⚡ سجّل خروج مؤقت
+      try { await signOut(auth); } catch (e) {}
 
       showSignupStep(2);
       showSignupMessage(signupMessage1, '✅ تم تأكيد البريد', 'success');
@@ -200,6 +215,7 @@ if (googleSignUpBtn) {
       }
 
       showSignupMessage(signupMessage1, msg, 'error');
+      window._signupFlowActive = false;
       googleSignUpBtn.disabled = false;
     }
   };
@@ -216,7 +232,6 @@ async function checkEmailExistsInPeople(email) {
       where('Email', '==', email)
     );
     const snap = await getDocs(q);
-
     if (!snap.empty) return true;
 
     // ⚡ محاولة بالإيميل الأصلي (case)
@@ -225,7 +240,6 @@ async function checkEmailExistsInPeople(email) {
       where('Email', '==', email.toLowerCase())
     );
     const snap2 = await getDocs(q2);
-
     return !snap2.empty;
   } catch (e) {
     console.warn('checkPeople error:', e.message);
@@ -335,7 +349,7 @@ if (signupSubmitBtn) {
         GoogleUID: signupVerifiedUser.uid,
         GoogleName: signupVerifiedUser.name,
 
-        Status: 'pending',       // pending | approved | rejected
+        Status: 'pending',
         CreatedAt: new Date().toISOString(),
         ReviewedAt: null,
         ReviewedBy: null,
