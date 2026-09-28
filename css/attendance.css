@@ -65,6 +65,128 @@
   color: var(--text-muted);
 }
 
+/* ═══ Stat Highlight ═══ */
+.att-stat.highlight {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.att-stat.highlight .att-stat-value {
+  color: #3b82f6;
+}
+
+/* ═══ Filter Banner ═══ */
+.att-filter-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.05) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.att-filter-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.att-filter-banner-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.att-filter-banner-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.att-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.att-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  transition: all 0.15s;
+}
+
+.att-filter-chip:hover {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.att-filter-chip button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.att-filter-chip button:hover {
+  color: #dc2626;
+}
+
+.att-filter-banner-count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.att-filter-count-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.att-filter-count-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
 /* Filters */
 .att-filters {
   display: grid;
@@ -343,6 +465,31 @@
     padding: 7px 10px;
     font-size: 12px;
     min-width: 34px;
+  }
+
+  /* ═══ Filter Banner Responsive ═══ */
+  .att-filter-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .att-filter-banner-info {
+    gap: 8px;
+  }
+
+  .att-filter-banner-count {
+    justify-content: center;
+    padding: 6px 12px;
+  }
+
+  .att-filter-count-value {
+    font-size: 18px;
+  }
+
+  .att-filter-chip {
+    font-size: 11px;
+    padding: 3px 8px;
   }
 }
 
