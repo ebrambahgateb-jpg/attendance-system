@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Attendance Viewer + Manual Attendance + Conflict Check
-//   ⚡ محدّث: منع تسجيل حدثين متعارضين في نفس اليوم
-//   ⚡ محدّث: فلتر بانر مع عدّاد ديناميكي
+//   ⚡ محدّث: تعديل + حذف أي سجل + Audit Log
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -165,7 +164,6 @@ function renderAttendancePage(area) {
         </div>
       </div>
 
-      <!-- ═══ ⚡ فلتر بانر ═══ -->
       <div id="attFilterBanner" class="att-filter-banner"></div>
 
       <div class="att-filters">
@@ -410,15 +408,24 @@ function renderAttendanceTable() {
     const timeStr = scanDate ? formatTimeShort(scanDate) : '-';
     const locationName = record.Location?.name || '-';
 
-    const canDelete = isAdmin && record.Method === 'manual';
+    // ⚡ Check if edited
+    const editedBadge = record.Edited
+      ? '<span class="att-edited-badge" title="تم التعديل">✏️ معدّل</span>'
+      : '';
+
+    const canEdit = isAdmin;
+    const canDelete = isAdmin;
 
     return `
-      <tr>
+      <tr class="${record.Edited ? 'edited-row' : ''}">
         <td>
           <div class="att-person-cell">
             ${personPhoto}
             <div>
-              <div class="att-person-name">${escapeHtml(personName)}</div>
+              <div class="att-person-name">
+                ${escapeHtml(personName)}
+                ${editedBadge}
+              </div>
               <div class="att-person-id">${escapeHtml(person?.Mobile || '')}</div>
             </div>
           </div>
@@ -434,9 +441,12 @@ function renderAttendanceTable() {
         <td>${escapeHtml(locationName)}</td>
         <td>${escapeHtml(record.ManualByName || record.ScannerName || record.ScannerEmail || '-')}</td>
         <td class="actions-cell">
+          ${canEdit ? `
+            <button class="btn-icon-att edit" onclick="openEditAttendanceModal('${record.id}')" title="تعديل السجل">✏️</button>
+          ` : ''}
           ${canDelete ? `
-            <button class="btn-icon danger" onclick="deleteManualAttendance('${record.id}')" title="حذف السجل اليدوي">🗑️</button>
-          ` : '-'}
+            <button class="btn-icon-att danger" onclick="deleteAttendanceRecord('${record.id}')" title="حذف السجل">🗑️</button>
+          ` : ''}
         </td>
       </tr>
     `;
@@ -581,7 +591,7 @@ function applyAttFilters() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Filter Banner — عرض الفلتر الحالي + العدّاد
+//   ⚡ Filter Banner
 // ═══════════════════════════════════════════════════════
 
 function updateFilterBanner() {
@@ -590,12 +600,10 @@ function updateFilterBanner() {
 
   if (!banner) return;
 
-  // ⚡ حدّث العدّاد
   if (countEl) {
     countEl.textContent = attFiltered.length;
   }
 
-  // ⚡ هل فيه فلتر مطبق؟
   const hasFilter =
     attFilters.search ||
     attFilters.meetingId ||
@@ -609,24 +617,15 @@ function updateFilterBanner() {
     return;
   }
 
-  // ⚡ اجمع تفاصيل الفلتر
   const chips = [];
 
   if (attFilters.search) {
-    chips.push({
-      icon: '🔍',
-      label: `بحث: "${attFilters.search}"`,
-      key: 'search'
-    });
+    chips.push({ icon: '🔍', label: `بحث: "${attFilters.search}"`, key: 'search' });
   }
 
   if (attFilters.meetingId) {
     const eventTitle = attEvents[attFilters.meetingId]?.Title || 'حدث';
-    chips.push({
-      icon: '🎯',
-      label: `الحدث: ${eventTitle}`,
-      key: 'meetingId'
-    });
+    chips.push({ icon: '🎯', label: `الحدث: ${eventTitle}`, key: 'meetingId' });
   }
 
   if (attFilters.method) {
@@ -635,27 +634,15 @@ function updateFilterBanner() {
       scanner: '📷 ماسح',
       manual: '✍️ يدوي'
     };
-    chips.push({
-      icon: '⚙️',
-      label: `النوع: ${methodLabels[attFilters.method] || attFilters.method}`,
-      key: 'method'
-    });
+    chips.push({ icon: '⚙️', label: `النوع: ${methodLabels[attFilters.method] || attFilters.method}`, key: 'method' });
   }
 
   if (attFilters.dateFrom) {
-    chips.push({
-      icon: '📅',
-      label: `من: ${formatDateShort(parseDate(attFilters.dateFrom + 'T00:00:00'))}`,
-      key: 'dateFrom'
-    });
+    chips.push({ icon: '📅', label: `من: ${formatDateShort(parseDate(attFilters.dateFrom + 'T00:00:00'))}`, key: 'dateFrom' });
   }
 
   if (attFilters.dateTo) {
-    chips.push({
-      icon: '📅',
-      label: `إلى: ${formatDateShort(parseDate(attFilters.dateTo + 'T00:00:00'))}`,
-      key: 'dateTo'
-    });
+    chips.push({ icon: '📅', label: `إلى: ${formatDateShort(parseDate(attFilters.dateTo + 'T00:00:00'))}`, key: 'dateTo' });
   }
 
   banner.style.display = 'flex';
@@ -680,16 +667,11 @@ function updateFilterBanner() {
   `;
 }
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Remove Individual Filter
-// ═══════════════════════════════════════════════════════
-
 window.removeAttFilter = function(key) {
   if (!key) return;
 
   attFilters[key] = '';
 
-  // ⚡ أعد ضبط الحقول في الـUI
   if (key === 'search') {
     const input = document.getElementById('attSearchInput');
     if (input) input.value = '';
@@ -725,6 +707,387 @@ window.clearAttendanceFilters = function() {
 
   const area = document.getElementById('contentArea');
   renderAttendancePage(area);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ EDIT ATTENDANCE — Open Modal
+// ═══════════════════════════════════════════════════════
+
+window.openEditAttendanceModal = function(recordId) {
+  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
+    alert('⚠️ غير مصرح لك');
+    return;
+  }
+
+  const record = attData.find(r => r.id === recordId);
+  if (!record) {
+    alert('❌ السجل غير موجود');
+    return;
+  }
+
+  const person = attPeople[record.PersonID];
+  const personName = record.PersonName
+    || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
+
+  const scanDate = parseDate(record.ScanTime);
+
+  // ⚡ القيم الحالية
+  const currentDate = scanDate ? formatDateISO(scanDate) : '';
+  const currentTime = scanDate ? formatTimeShort(scanDate) : '00:00';
+  const currentEventId = record.EventID || '';
+  const currentStatus = record.Status || 'present';
+
+  let modal = document.getElementById('editAttModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'editAttModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const eventsList = Object.values(attEvents)
+    .filter(e => {
+      // ⚡ نعرض الأحداث النشطة + الحدث الحالي
+      const isActive = String(e.Status || 'active').toLowerCase() === 'active';
+      return isActive || e.id === currentEventId;
+    })
+    .sort((a, b) => String(a.Title || '').localeCompare(String(b.Title || ''), 'ar'));
+
+  modal.innerHTML = `
+    <div class="modal-content modal-large" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>✏️ تعديل سجل الحضور</h2>
+        <button class="modal-close" onclick="closeEditAttModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;flex:1;">
+
+        <!-- ═══ معلومات الشخص (للقراءة فقط) ═══ -->
+        <div class="edit-att-person-box">
+          ${person?.PhotoURL 
+            ? `<img src="${person.PhotoURL}" class="edit-att-person-avatar" alt="" />`
+            : `<div class="edit-att-person-avatar-placeholder">${personName.charAt(0)}</div>`
+          }
+          <div class="edit-att-person-info">
+            <div class="edit-att-person-name">${escapeHtml(personName)}</div>
+            <div class="edit-att-person-sub">${escapeHtml(person?.Mobile || '')}</div>
+          </div>
+        </div>
+
+        <!-- ═══ الحقول القابلة للتعديل ═══ -->
+        <div class="form-row">
+          <label>🎯 الحدث *</label>
+          <select id="editAtt_EventID">
+            <option value="">-- اختر الحدث --</option>
+            ${eventsList.map(e => `
+              <option value="${e.id}" ${currentEventId === e.id ? 'selected' : ''}>${escapeHtml(e.Title || '')}</option>
+            `).join('')}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>📅 التاريخ *</label>
+          <input type="date" id="editAtt_Date" value="${currentDate}" max="${formatDateISO(new Date())}" />
+        </div>
+
+        <div class="form-row">
+          <label>🕐 الوقت *</label>
+          <input type="time" id="editAtt_Time" value="${currentTime}" />
+        </div>
+
+        <div class="form-row">
+          <label>📊 الحالة</label>
+          <select id="editAtt_Status">
+            <option value="present" ${currentStatus === 'present' ? 'selected' : ''}>✅ حاضر</option>
+            <option value="late" ${currentStatus === 'late' ? 'selected' : ''}>⏰ متأخر</option>
+            <option value="excused" ${currentStatus === 'excused' ? 'selected' : ''}>📝 معذور</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>📝 سبب التعديل *</label>
+          <textarea id="editAtt_EditNote" rows="3" placeholder="مثال: خطأ في اختيار الحدث، أو تصحيح وقت التسجيل..."></textarea>
+          <p class="hint">⚠️ السبب مهم عشان يتسجل في السجلات</p>
+        </div>
+
+        <!-- ═══ معلومات إضافية (للقراءة فقط) ═══ -->
+        <div class="edit-att-info-box">
+          <div class="edit-att-info-row">
+            <span class="edit-att-info-label">الطريقة:</span>
+            <span class="edit-att-info-value">
+              ${record.Method === 'self' ? '📱 تسجيل ذاتي' : record.Method === 'manual' ? '✍️ يدوي' : '📷 ماسح'}
+            </span>
+          </div>
+          ${record.ManualByName || record.ScannerName ? `
+            <div class="edit-att-info-row">
+              <span class="edit-att-info-label">بواسطة:</span>
+              <span class="edit-att-info-value">${escapeHtml(record.ManualByName || record.ScannerName || '')}</span>
+            </div>
+          ` : ''}
+          ${record.Edited ? `
+            <div class="edit-att-info-row">
+              <span class="edit-att-info-label">آخر تعديل:</span>
+              <span class="edit-att-info-value">
+                بواسطة ${escapeHtml(record.EditedByName || '')} — ${formatRelativeTime(parseDate(record.EditedAt))}
+              </span>
+            </div>
+          ` : ''}
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeEditAttModal()">إلغاء</button>
+        <button class="btn-primary" id="editAttSaveBtn" onclick="saveAttendanceEdit('${recordId}')">
+          💾 حفظ التعديلات
+        </button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+};
+
+window.closeEditAttModal = function() {
+  const modal = document.getElementById('editAttModal');
+  if (modal) modal.style.display = 'none';
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ EDIT ATTENDANCE — Save
+// ═══════════════════════════════════════════════════════
+
+window.saveAttendanceEdit = async function(recordId) {
+  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
+    alert('⚠️ غير مصرح لك');
+    return;
+  }
+
+  const record = attData.find(r => r.id === recordId);
+  if (!record) {
+    alert('❌ السجل غير موجود');
+    return;
+  }
+
+  const newEventId = document.getElementById('editAtt_EventID')?.value;
+  const newDate = document.getElementById('editAtt_Date')?.value;
+  const newTime = document.getElementById('editAtt_Time')?.value;
+  const newStatus = document.getElementById('editAtt_Status')?.value || 'present';
+  const editNote = document.getElementById('editAtt_EditNote')?.value.trim() || '';
+
+  // ╡ Validations
+  if (!newEventId) { alert('⚠️ اختر الحدث'); return; }
+  if (!newDate) { alert('⚠️ اختر التاريخ'); return; }
+  if (!newTime) { alert('⚠️ اختر الوقت'); return; }
+  if (!editNote) { alert('⚠️ سبب التعديل مطلوب'); return; }
+
+  const saveBtn = document.getElementById('editAttSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '⏳ جاري الحفظ...';
+  }
+
+  try {
+    // ⚡ Snapshot قبل التعديل
+    const beforeData = {
+      EventID: record.EventID,
+      EventTitle: record.EventTitle || '',
+      OccurrenceDate: record.OccurrenceDate,
+      ScanTime: record.ScanTime,
+      Status: record.Status || 'present'
+    };
+
+    // ⚡ البيانات الجديدة
+    const newScanTime = new Date(newDate + 'T' + newTime + ':00').toISOString();
+    const newEvent = attEvents[newEventId];
+
+    const afterData = {
+      EventID: newEventId,
+      EventTitle: newEvent?.Title || '',
+      OccurrenceDate: newDate,
+      ScanTime: newScanTime,
+      Status: newStatus
+    };
+
+    // ⚡ التحقق من التكرار (لو الحدث أو التاريخ اتغير)
+    const eventChanged = record.EventID !== newEventId;
+    const dateChanged = record.OccurrenceDate !== newDate;
+
+    if (eventChanged || dateChanged) {
+      const dupQ = query(
+        collection(db, COLLECTIONS.ATTENDANCE),
+        where('PersonID', '==', record.PersonID),
+        where('EventID', '==', newEventId),
+        where('OccurrenceDate', '==', newDate)
+      );
+      const dupSnap = await getDocs(dupQ);
+
+      // ⚡ نستثني نفس السجل
+      const others = dupSnap.docs.filter(d => d.id !== recordId);
+
+      if (others.length > 0) {
+        alert('⚠️ يوجد سجل آخر لنفس الشخص في نفس الحدث والتاريخ\n\nلا يمكن التعديل — احذف الآخر أولاً.');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '💾 حفظ التعديلات'; }
+        return;
+      }
+
+      // ⚡ فحص التعارض
+      const conflictCheck = await checkEventConflict(
+        record.PersonID,
+        newEventId,
+        newDate,
+        newEvent,
+        { excludeRegistrationId: recordId }
+      );
+
+      if (conflictCheck.hasConflict) {
+        const conflict = conflictCheck.conflicts[0];
+        const confirmMsg = `⚠️ تحذير: يوجد تعارض في المواعيد!\n\n` +
+          `الشخص عنده تسجيل في "${conflict.eventTitle}" (${conflict.time} - ${conflict.endTime})\n\n` +
+          `هل تريد المتابعة بالرغم من التعارض؟`;
+
+        if (!confirm(confirmMsg)) {
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '💾 حفظ التعديلات'; }
+          return;
+        }
+      }
+    }
+
+    // ⚡ التحديث
+    await updateDoc(doc(db, COLLECTIONS.ATTENDANCE, recordId), {
+      EventID: newEventId,
+      EventTitle: newEvent?.Title || '',
+      EventTypeID: newEvent?.EventTypeID || '',
+      OccurrenceDate: newDate,
+      ScanTime: newScanTime,
+      Status: newStatus,
+
+      // ⚡ معلومات التعديل
+      Edited: true,
+      EditedAt: new Date().toISOString(),
+      EditedBy: attCurrentUser?.email || '',
+      EditedByName: attCurrentUser?.name || attCurrentUser?.email || '',
+      EditNote: editNote,
+
+      // ⚡ Snapshot قبل/بعد
+      PreviousData: beforeData,
+      NewData: afterData
+    });
+
+    // ⚡ Audit Log
+    if (typeof window.logAction === 'function') {
+      try {
+        await window.logAction({
+          action: 'attendance_edited',
+          type: 'attendance',
+          title: `تعديل سجل حضور: ${record.PersonName || ''}`,
+          description: `السبب: ${editNote}\n` +
+            `قبل: ${beforeData.EventTitle} @ ${beforeData.ScanTime}\n` +
+            `بعد: ${afterData.EventTitle} @ ${afterData.ScanTime}`,
+          relatedID: recordId,
+          relatedTitle: record.PersonName || ''
+        });
+      } catch (e) {
+        console.warn('Log error:', e);
+      }
+    }
+
+    alert('✅ تم التعديل بنجاح');
+    closeEditAttModal();
+
+    // ⚡ إعادة تحميل الصفحة
+    await loadAttendancePage(document.getElementById('contentArea'));
+
+  } catch (err) {
+    console.error('❌ saveAttendanceEdit error:', err);
+    alert('خطأ: ' + err.message);
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '💾 حفظ التعديلات';
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ DELETE ATTENDANCE
+// ═══════════════════════════════════════════════════════
+
+window.deleteAttendanceRecord = async function(recordId) {
+  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
+    alert('⚠️ غير مصرح لك');
+    return;
+  }
+
+  const record = attData.find(r => r.id === recordId);
+  if (!record) {
+    alert('❌ السجل غير موجود');
+    return;
+  }
+
+  const person = attPeople[record.PersonID];
+  const personName = record.PersonName
+    || (person ? [person.FirstName, person.SecondName, person.ThirdName, person.FourthName].filter(Boolean).join(' ') : 'غير معروف');
+
+  const eventTitle = record.EventTitle || attEvents[record.EventID]?.Title || '-';
+  const dateStr = record.OccurrenceDate || '-';
+
+  // ⚡ اطلب سبب الحذف
+  const reason = prompt(
+    `⚠️ حذف سجل الحضور؟\n\n` +
+    `👤 ${personName}\n` +
+    `🎯 ${eventTitle}\n` +
+    `📅 ${dateStr}\n\n` +
+    `اكتب سبب الحذف (مطلوب):`
+  );
+
+  if (!reason || !reason.trim()) {
+    alert('❌ سبب الحذف مطلوب');
+    return;
+  }
+
+  try {
+    // ⚡ Snapshot قبل الحذف
+    const deletedSnapshot = {
+      PersonID: record.PersonID,
+      PersonName: record.PersonName || personName,
+      EventID: record.EventID,
+      EventTitle: eventTitle,
+      OccurrenceDate: record.OccurrenceDate,
+      ScanTime: record.ScanTime,
+      Status: record.Status || 'present',
+      Method: record.Method || 'scanner',
+      Location: record.Location || null,
+      ScannerName: record.ScannerName || '',
+      ManualByName: record.ManualByName || ''
+    };
+
+    await deleteDoc(doc(db, COLLECTIONS.ATTENDANCE, recordId));
+
+    // ⚡ Audit Log
+    if (typeof window.logAction === 'function') {
+      try {
+        await window.logAction({
+          action: 'attendance_deleted',
+          type: 'attendance',
+          title: `حذف سجل حضور: ${personName}`,
+          description: `السبب: ${reason.trim()}\n` +
+            `الحدث: ${eventTitle} — ${dateStr}`,
+          relatedID: recordId,
+          relatedTitle: personName,
+          metadata: { deletedSnapshot }
+        });
+      } catch (e) {
+        console.warn('Log error:', e);
+      }
+    }
+
+    alert('✅ تم الحذف بنجاح');
+    await loadAttendancePage(document.getElementById('contentArea'));
+
+  } catch (err) {
+    console.error('❌ deleteAttendanceRecord error:', err);
+    alert('خطأ: ' + err.message);
+  }
 };
 
 // ═══════════════════════════════════════════════════════
@@ -912,10 +1275,6 @@ function getEventsForDate(dateISO) {
   return { weekly, once };
 }
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Render Event Item
-// ═══════════════════════════════════════════════════════
-
 function renderManualEventItem(event) {
   const endTime = getEventEndTime(event);
   const isSelected = manualSelectedEventId === event.id;
@@ -937,10 +1296,6 @@ function renderManualEventItem(event) {
   `;
 }
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Select Manual Event
-// ═══════════════════════════════════════════════════════
-
 window.selectManualEvent = function(eventId) {
   manualSelectedEventId = eventId;
 
@@ -953,10 +1308,6 @@ window.selectManualEvent = function(eventId) {
 
   showManualTimeField(event);
 };
-
-// ═══════════════════════════════════════════════════════
-//   ⚡ Show Time Field with Limits
-// ═══════════════════════════════════════════════════════
 
 function showManualTimeField(event) {
   const timeWrap = document.getElementById('manualTimeWrap');
@@ -1119,7 +1470,7 @@ window.closeManualAttModal = function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Manual Attendance — Save (with Conflict Check)
+//   ⚡ Manual Attendance — Save
 // ═══════════════════════════════════════════════════════
 
 window.saveManualAttendance = async function() {
@@ -1291,51 +1642,12 @@ window.saveManualAttendance = async function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Delete Manual Attendance
+//   ⚡ Delete Manual Attendance (بس للسجلات اليدوية — قديمة)
 // ═══════════════════════════════════════════════════════
 
 window.deleteManualAttendance = async function(recordId) {
-  if (!['Owner', 'Admin'].includes(attCurrentWorkspace)) {
-    alert('⚠️ غير مصرح لك');
-    return;
-  }
-
-  const record = attData.find(r => r.id === recordId);
-  if (!record) {
-    alert('❌ السجل غير موجود');
-    return;
-  }
-
-  const person = attPeople[record.PersonID];
-  const personName = record.PersonName
-    || (person ? [person.FirstName, person.SecondName].filter(Boolean).join(' ') : 'غير معروف');
-
-  if (!confirm(`⚠️ حذف سجل الحضور اليدوي؟\n\n👤 ${personName}\n🎯 ${record.EventTitle || ''}\n📅 ${record.OccurrenceDate || ''}`)) {
-    return;
-  }
-
-  try {
-    await deleteDoc(doc(db, COLLECTIONS.ATTENDANCE, recordId));
-
-    if (typeof window.logAction === 'function') {
-      try {
-        await window.logAction({
-          action: 'manual_attendance_deleted',
-          type: 'attendance',
-          title: `حذف سجل حضور يدوي: ${personName}`,
-          description: `الحدث: ${record.EventTitle || ''}`,
-          relatedID: recordId,
-          relatedTitle: personName
-        });
-      } catch (e) {}
-    }
-
-    alert('✅ تم الحذف بنجاح');
-    await loadAttendancePage(document.getElementById('contentArea'));
-  } catch (err) {
-    console.error('❌ Delete manual attendance error:', err);
-    alert('خطأ: ' + err.message);
-  }
+  // ⚡ نستدعي الدالة العامة
+  return window.deleteAttendanceRecord(recordId);
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1348,7 +1660,7 @@ window.exportAttendanceCSV = function() {
     return;
   }
 
-  const headers = ['الاسم', 'الموبايل', 'الحدث', 'التاريخ', 'الوقت', 'الطريقة', 'الموقع', 'بواسطة'];
+  const headers = ['الاسم', 'الموبايل', 'الحدث', 'التاريخ', 'الوقت', 'الحالة', 'الطريقة', 'الموقع', 'بواسطة', 'معدّل'];
 
   const rows = attFiltered.map(record => {
     const person = attPeople[record.PersonID];
@@ -1362,15 +1674,23 @@ window.exportAttendanceCSV = function() {
     if (record.Method === 'self') method = 'تسجيل ذاتي';
     else if (record.Method === 'manual') method = 'يدوي';
 
+    const statusLabels = {
+      present: 'حاضر',
+      late: 'متأخر',
+      excused: 'معذور'
+    };
+
     return [
       personName,
       person?.Mobile || '',
       event?.Title || record.EventTitle || '',
       scanDate ? formatDateShort(scanDate) : '',
       scanDate ? formatTimeShort(scanDate) : '',
+      statusLabels[record.Status] || 'حاضر',
       method,
       record.Location?.name || '',
-      record.ManualByName || record.ScannerName || record.ScannerEmail || ''
+      record.ManualByName || record.ScannerName || record.ScannerEmail || '',
+      record.Edited ? 'نعم' : 'لا'
     ];
   });
 
