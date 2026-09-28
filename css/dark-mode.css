@@ -2966,3 +2966,57 @@ html[data-theme="dark"] #editAtt_EditNote {
 html[data-theme="dark"] #editAtt_EditNote:focus {
   border-color: #60a5fa;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Logo — بدون خلفية (Force Override)
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Sidebar Logo ═══ */
+html[data-theme="dark"] .sidebar-logo,
+html[data-theme="dark"] .sidebar-header {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+html[data-theme="dark"] .sidebar-logo .app-logo,
+html[data-theme="dark"] .sidebar-header .app-logo,
+html[data-theme="dark"] .app-logo {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* ═══ Light Mode — تأكيد إضافي ═══ */
+html:not([data-theme="dark"]) .app-logo,
+html:not([data-theme="dark"]) .sidebar-logo .app-logo,
+html:not([data-theme="dark"]) .sidebar-header .app-logo {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ═══ Login Page Logo ═══ */
+.app-logo,
+.brand-logo img,
+.brand-logo .logo-image {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* ═══ Login Page — Brand Logo Container ═══ */
+.brand-logo.has-image {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
