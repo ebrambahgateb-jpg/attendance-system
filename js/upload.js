@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Upload Utility — ImgBB + Duplicate Prevention + Cropper
-//   ⚡ ضغط + رفع + كشف تكرار + قص الصور
+//   ⚡ محدّث: الحفاظ على شفافية PNG + WebP
 // ═══════════════════════════════════════════════════════
 
 // ═══ Constants ═══
@@ -45,6 +45,7 @@ function fallbackHash(file) {
 
 // ═══════════════════════════════════════════════════════
 //   ⚡ Compress Image
+//   ⚡ محدّث: يحافظ على نوع الصورة الأصلي (PNG/WebP يفضل شفاف)
 // ═══════════════════════════════════════════════════════
 
 async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEFAULT_MAX_HEIGHT, quality = DEFAULT_QUALITY) {
@@ -68,9 +69,41 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
         canvas.height = height;
 
         const ctx = canvas.getContext('2d');
+
+        // ⚡ ⚡ ⚡ مهم: نفّذ الخلفية الشفافة للـPNG/WebP
+        const isPNG = file.type === 'image/png';
+        const isWebP = file.type === 'image/webp';
+        const isJPG = file.type === 'image/jpeg' || file.type === 'image/jpg';
+
+        // ⚡ للـPNG/WebP → نضمن خلفية شفافة
+        if (isPNG || isWebP) {
+          ctx.clearRect(0, 0, width, height);
+        } else if (isJPG) {
+          // ⚡ للـJPG → نرسم خلفية بيضاء (لأن JPG مفيهاش شفافية)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+        }
+
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
+
+        // ⚡ ⚡ ⚡ احافظ على نوع الصورة الأصلي
+        let outputType = 'image/jpeg';
+        let outputQuality = quality;
+
+        if (isPNG) {
+          outputType = 'image/png';
+          outputQuality = undefined;  // PNG مفيهاش quality
+        } else if (isWebP) {
+          outputType = 'image/webp';
+          outputQuality = quality;
+        } else {
+          outputType = 'image/jpeg';
+          outputQuality = quality;
+        }
+
+        console.log(`📸 [compressImage] نوع الأصل: ${file.type}, نوع الإخراج: ${outputType}`);
 
         canvas.toBlob(
           (blob) => {
@@ -80,8 +113,8 @@ async function compressImage(file, maxWidth = DEFAULT_MAX_WIDTH, maxHeight = DEF
               reject(new Error('فشل ضغط الصورة'));
             }
           },
-          'image/jpeg',
-          quality
+          outputType,
+          outputQuality
         );
       };
 
@@ -110,10 +143,21 @@ async function uploadToImgBB(blob, name = '') {
   }
 
   const formData = new FormData();
-  formData.append('image', blob);
+
+  // ⚡ حافظ على اسم الملف مع الامتداد الصحيح
+  let fileName = name || `upload_${Date.now()}`;
+  if (blob.type === 'image/png') {
+    fileName += '.png';
+  } else if (blob.type === 'image/webp') {
+    fileName += '.webp';
+  } else if (blob.type === 'image/jpeg' || blob.type === 'image/jpg') {
+    fileName += '.jpg';
+  }
+
+  formData.append('image', blob, fileName);
   if (name) formData.append('name', name);
 
-  console.log('📤 [uploadToImgBB] جاري الإرسال...');
+  console.log('📤 [uploadToImgBB] جاري الإرسال...', { fileName, type: blob.type });
 
   const response = await fetch(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, {
     method: 'POST',
@@ -222,13 +266,12 @@ async function uploadPersonPhoto(file, previousHash = '', previousURL = '', orig
     throw new Error(`حجم الصورة أكبر من ${MAX_FILE_SIZE / 1024 / 1024} MB`);
   }
 
-    // ⚡ 3. احسب الـhash
-  // ⚡ لو فيه originalFile (بعد Cropper) → نحسب الـHash من الأصلية
-  //    عشان نمنع الرفع المكرر لنفس الصورة
+  // ⚡ 3. احسب الـhash
   console.log('📤 [uploadPersonPhoto] حساب الـhash...');
   const hashSource = originalFile || file;
   const hash = await getFileHash(hashSource);
   console.log('📤 [uploadPersonPhoto] Hash:', hash.substring(0, 12) + '...', originalFile ? '(from original)' : '(from file)');
+
   // ⚡ 4. تحقق من التكرار
   if (previousHash && previousURL && hash === previousHash) {
     console.log('📤 [uploadPersonPhoto] نفس الصورة — فحص لو موجودة على ImgBB...');
@@ -252,7 +295,7 @@ async function uploadPersonPhoto(file, previousHash = '', previousURL = '', orig
   // ⚡ 5. اضغط الصورة
   console.log('📤 [uploadPersonPhoto] ضغط الصورة...');
   const compressed = await compressImage(file);
-  console.log('📤 [uploadPersonPhoto] بعد الضغط:', compressed.size, 'bytes');
+  console.log('📤 [uploadPersonPhoto] بعد الضغط:', compressed.size, 'bytes', 'نوع:', compressed.type);
 
   // ⚡ 6. ارفع
   console.log('📤 [uploadPersonPhoto] بدء الرفع لـImgBB...');
@@ -367,7 +410,7 @@ function renderUploadWidget(containerId, currentUrl = '', onUpload = null, onRem
 
       console.log('📤 [renderUploadWidget] تم اختيار ملف:', file.name, file.size, 'bytes');
 
-            if (enableCropper && typeof window.openImageCropper === 'function') {
+      if (enableCropper && typeof window.openImageCropper === 'function') {
         window.openImageCropper(file, (croppedFile, originalFile) => {
           console.log('📤 [renderUploadWidget] تم قص الصورة:', croppedFile.size, 'bytes');
           doUpload(containerId, croppedFile, onUpload, originalFile);
@@ -408,7 +451,7 @@ async function doUpload(containerId, file, onUpload, originalFile = null) {
   if (removeBtn) removeBtn.disabled = true;
 
   try {
-        const prevHash = container.dataset.currentHash || '';
+    const prevHash = container.dataset.currentHash || '';
     const prevURL = container.dataset.currentURL || '';
 
     console.log('📤 [doUpload] بدء رفع الصورة...');
@@ -516,6 +559,7 @@ function handleRemove(containerId, onRemove) {
 
 // ═══════════════════════════════════════════════════════
 //   ⚡ Theme Upload (Logo & Background)
+//   ⚡ محدّث: يحافظ على شفافية الـPNG
 // ═══════════════════════════════════════════════════════
 
 async function uploadLogoImage(file) {
@@ -529,8 +573,21 @@ async function uploadLogoImage(file) {
     throw new Error(`حجم الصورة أكبر من ${MAX_FILE_SIZE / 1024 / 1024} MB`);
   }
 
+  // ⚡ ⚡ ⚡ مهم: نحافظ على النوع الأصلي
+  //   - لو PNG → يفضل PNG (شفاف)
+  //   - لو JPG/WebP → يفضلوا بأحجام صغيرة
   const compressed = await compressImage(file, 500, 500, 0.9);
+
+  console.log('📸 [uploadLogoImage] النوع الأصلي:', file.type, '→', compressed.type);
+
+  // ⚡ امتداد مناسب للـname
+  let ext = 'jpg';
+  if (compressed.type === 'image/png') ext = 'png';
+  else if (compressed.type === 'image/webp') ext = 'webp';
+
   const result = await uploadToImgBB(compressed, `logo_${Date.now()}`);
+
+  console.log('✅ [uploadLogoImage] تم الرفع:', result.url);
 
   return result.url;
 }
