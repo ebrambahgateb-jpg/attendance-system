@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
-//   People Management (Firestore) + Auto Accounts
-//   ⚡ محدّث: Upload Widget + PhotoHash + Ignore List + Filters
+//   People Management + Signup Requests Approval
+//   ⚡ محدّث: قسم طلبات التسجيل في الأعلى
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -10,6 +10,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   query,
   where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -26,11 +27,14 @@ let currentEditId = null;
 let currentPhotoURL = '';
 let currentPhotoHash = '';
 
+// ═══ ⚡ Signup Requests State ═══
+let signupRequestsData = [];
+
 // ═══ Filters State ═══
 let peopleFilters = {
   search: '',
-  status: 'all',      // all | active | inactive
-  gender: 'all',      // all | male | female
+  status: 'all',
+  gender: 'all',
   ageFrom: '',
   ageTo: ''
 };
@@ -98,37 +102,40 @@ function formatDateTime(date) {
   }
 }
 
-// ═══ ⚡ Age Calculator ═══
+function formatRelativeTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const diff = (now - date) / 1000;
+  if (diff < 60) return 'الآن';
+  if (diff < 3600) return `منذ ${Math.floor(diff / 60)} دقيقة`;
+  if (diff < 86400) return `منذ ${Math.floor(diff / 3600)} ساعة`;
+  if (diff < 604800) return `منذ ${Math.floor(diff / 86400)} يوم`;
+  return formatDate(date);
+}
+
 function getAge(birthDate) {
   if (!birthDate) return null;
-
   try {
     const birth = new Date(birthDate + 'T00:00:00');
     if (isNaN(birth.getTime())) return null;
-
     const today = new Date();
     let age = today.getFullYear() - birth.getFullYear();
-
     const monthDiff = today.getMonth() - birth.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
       age--;
     }
-
     return age >= 0 ? age : null;
   } catch (e) {
     return null;
   }
 }
 
-// ═══ Facebook URL Helpers ═══
 function formatFacebookUrl(value) {
   if (!value) return '';
   let url = String(value).trim();
-
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-
   if (url.startsWith('facebook.com') ||
       url.startsWith('www.facebook.com') ||
       url.startsWith('m.facebook.com') ||
@@ -136,20 +143,8 @@ function formatFacebookUrl(value) {
       url.startsWith('fb.me')) {
     return 'https://' + url;
   }
-
   url = url.replace(/^@/, '');
   return 'https://facebook.com/' + url;
-}
-
-function getFacebookDisplay(value) {
-  if (!value) return '-';
-  let url = String(value).trim();
-
-  url = url.replace(/^https?:\/\//, '');
-  url = url.replace(/^www\./, '');
-  url = url.replace(/^m\./, '');
-
-  return url;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -158,29 +153,18 @@ function getFacebookDisplay(value) {
 
 async function addEmailToIgnoreList(email, reason = '') {
   if (!email) return { ok: false, message: 'Email required' };
-
   const emailLower = String(email).toLowerCase().trim();
-
   try {
     const response = await fetch(SYNC_WEBAPP_URL, {
       method: 'POST',
       mode: 'cors',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'addToIgnoreList',
-        email: emailLower,
-        reason: reason
-      })
+      body: JSON.stringify({ action: 'addToIgnoreList', email: emailLower, reason: reason })
     });
-
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status);
-    }
-
+    if (!response.ok) throw new Error('HTTP ' + response.status);
     const text = await response.text();
     const data = JSON.parse(text);
-
     console.log(`✅ Added to ignore list: ${emailLower}`, data);
     return data;
   } catch (err) {
@@ -195,10 +179,7 @@ async function addEmailToIgnoreList(email, reason = '') {
 
 async function ensureAccountForPerson(personId, personData) {
   const email = String(personData.Email || '').toLowerCase().trim();
-
-  if (!email) {
-    return { action: 'skipped', reason: 'no_email' };
-  }
+  if (!email) return { action: 'skipped', reason: 'no_email' };
 
   try {
     const q = query(
@@ -208,30 +189,19 @@ async function ensureAccountForPerson(personId, personData) {
     const snap = await getDocs(q);
 
     const accountStatus = String(personData.Status || 'active').toLowerCase() === 'active'
-      ? 'active'
-      : 'disabled';
+      ? 'active' : 'disabled';
 
     if (!snap.empty) {
       const existingDoc = snap.docs[0];
       const existingData = existingDoc.data();
-
       const updateData = {
         PersonID: personId,
         Status: accountStatus,
         UpdatedAt: new Date().toISOString()
       };
-
-      if (!existingData.Role) {
-        updateData.Role = DEFAULT_ROLE;
-      }
-
+      if (!existingData.Role) updateData.Role = DEFAULT_ROLE;
       await updateDoc(doc(db, COLLECTIONS.ACCOUNTS, existingDoc.id), updateData);
-
-      return {
-        action: 'updated',
-        accountId: existingDoc.id,
-        message: `تم ربط الحساب الموجود (${email}) بالشخص`
-      };
+      return { action: 'updated', accountId: existingDoc.id, message: `تم ربط الحساب الموجود (${email}) بالشخص` };
     } else {
       const newAccount = {
         Email: email,
@@ -241,21 +211,12 @@ async function ensureAccountForPerson(personId, personData) {
         CreatedAt: new Date().toISOString(),
         Source: 'auto_from_person'
       };
-
       const docRef = await addDoc(collection(db, COLLECTIONS.ACCOUNTS), newAccount);
-
-      return {
-        action: 'created',
-        accountId: docRef.id,
-        message: `تم إنشاء حساب جديد (${email}) كـ User`
-      };
+      return { action: 'created', accountId: docRef.id, message: `تم إنشاء حساب جديد (${email}) كـ User` };
     }
   } catch (err) {
     console.error('❌ ensureAccountForPerson error:', err);
-    return {
-      action: 'error',
-      message: err.message
-    };
+    return { action: 'error', message: err.message };
   }
 }
 
@@ -267,14 +228,25 @@ async function loadPeoplePage(area) {
   area.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>';
 
   try {
-    const snap = await getDocs(collection(db, COLLECTIONS.PEOPLE));
-    peopleData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const [peopleSnap, requestsSnap] = await Promise.all([
+      getDocs(collection(db, COLLECTIONS.PEOPLE)),
+      getDocs(query(
+        collection(db, 'signupRequests'),
+        where('Status', '==', 'pending')
+      )).catch(() => ({ docs: [] }))
+    ]);
 
-    peopleData.sort((a, b) =>
-      getFullName(a).localeCompare(getFullName(b), 'ar')
-    );
-
+    peopleData = peopleSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    peopleData.sort((a, b) => getFullName(a).localeCompare(getFullName(b), 'ar'));
     filteredPeople = [...peopleData];
+
+    signupRequestsData = requestsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    signupRequestsData.sort((a, b) => {
+      const da = parseDate(a.CreatedAt) || new Date(0);
+      const db2 = parseDate(b.CreatedAt) || new Date(0);
+      return db2 - da;
+    });
+
     renderPeoplePage(area);
   } catch (err) {
     console.error('❌ Load people error:', err);
@@ -294,6 +266,8 @@ function renderPeoplePage(area) {
   area.innerHTML = `
     <div class="people-container">
 
+      ${renderSignupRequestsSection()}
+
       <div class="people-header">
         <div class="people-search">
           <input type="text" id="peopleSearchInput" placeholder="🔍 ابحث بالاسم، الموبايل، أو البريد..." value="${escapeHtml(peopleFilters.search)}" />
@@ -303,7 +277,6 @@ function renderPeoplePage(area) {
         </button>
       </div>
 
-      <!-- ═══ فلاتر ═══ -->
       <div class="people-filters">
         <div class="people-filter-group">
           <label>الحالة</label>
@@ -336,7 +309,6 @@ function renderPeoplePage(area) {
         <button class="btn-secondary" onclick="clearPeopleFilters()">مسح الفلاتر</button>
       </div>
 
-      <!-- ═══ نتائج الفلترة ═══ -->
       <div class="people-results-info" id="peopleResultsInfo" style="display:none;">
         <span id="peopleResultsCount"></span>
       </div>
@@ -389,6 +361,328 @@ function renderPeoplePage(area) {
   setupPeopleEvents();
   applyPeopleFilters();
 }
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Render Signup Requests Section
+// ═══════════════════════════════════════════════════════
+
+function renderSignupRequestsSection() {
+  if (!signupRequestsData || signupRequestsData.length === 0) {
+    return '';
+  }
+
+  const itemsHtml = signupRequestsData.map(req => {
+    const fullName = [
+      req.FirstName,
+      req.SecondName,
+      req.ThirdName,
+      req.FourthName
+    ].filter(Boolean).join(' ');
+
+    const initial = (req.FirstName || '?').charAt(0);
+    const createdAt = parseDate(req.CreatedAt);
+    const createdAgo = createdAt ? formatRelativeTime(createdAt) : '';
+
+    const age = getAge(req.BirthDate);
+    const ageStr = age !== null ? `${age} سنة` : '';
+
+    const genderLabel = req.Gender === 'male' ? '🧑 ذكر'
+      : req.Gender === 'female' ? '👩 أنثى' : '';
+
+    const photoHtml = req.PhotoURL
+      ? `<img src="${req.PhotoURL}" class="sr-avatar" alt="" />`
+      : `<div class="sr-avatar-placeholder">${escapeHtml(initial)}</div>`;
+
+    return `
+      <div class="sr-card" data-request-id="${req.id}">
+        <div class="sr-header">
+          ${photoHtml}
+          <div class="sr-info">
+            <div class="sr-name">${escapeHtml(fullName)}</div>
+            <div class="sr-email">📧 ${escapeHtml(req.Email || '')}</div>
+            ${req.GoogleName && req.GoogleName !== fullName 
+              ? `<div class="sr-google-name">🔗 Google: ${escapeHtml(req.GoogleName)}</div>`
+              : ''}
+          </div>
+          ${createdAgo ? `<div class="sr-time">🕐 ${createdAgo}</div>` : ''}
+        </div>
+
+        <div class="sr-details">
+          <div class="sr-detail-item">
+            <span class="sr-detail-label">📱 موبايل:</span>
+            <span class="sr-detail-value ltr">${escapeHtml(req.Mobile || '-')}</span>
+          </div>
+          ${req.WhatsApp ? `
+            <div class="sr-detail-item">
+              <span class="sr-detail-label">💬 واتساب:</span>
+              <span class="sr-detail-value ltr">${escapeHtml(req.WhatsApp)}</span>
+            </div>
+          ` : ''}
+          <div class="sr-detail-item">
+            <span class="sr-detail-label">🎂 الميلاد:</span>
+            <span class="sr-detail-value">${formatDate(req.BirthDate)}${ageStr ? ` (${ageStr})` : ''}</span>
+          </div>
+          ${genderLabel ? `
+            <div class="sr-detail-item">
+              <span class="sr-detail-label">👤 النوع:</span>
+              <span class="sr-detail-value">${genderLabel}</span>
+            </div>
+          ` : ''}
+          ${req.Address ? `
+            <div class="sr-detail-item">
+              <span class="sr-detail-label">📍 العنوان:</span>
+              <span class="sr-detail-value">${escapeHtml(req.Address)}</span>
+            </div>
+          ` : ''}
+          ${req.Facebook ? `
+            <div class="sr-detail-item">
+              <span class="sr-detail-label">📘 Facebook:</span>
+              <span class="sr-detail-value ltr">${escapeHtml(req.Facebook)}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="sr-actions">
+          <button class="sr-btn approve" onclick="approveSignupRequest('${req.id}')">
+            ✅ موافقة + إضافة
+          </button>
+          <button class="sr-btn reject" onclick="rejectSignupRequest('${req.id}')">
+            ❌ رفض
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="sr-section">
+      <div class="sr-section-header">
+        <h3 class="sr-section-title">
+          🆕 طلبات التسجيل
+          <span class="sr-count">${signupRequestsData.length}</span>
+        </h3>
+      </div>
+      <div class="sr-list">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Approve Signup Request
+// ═══════════════════════════════════════════════════════
+
+window.approveSignupRequest = async function(requestId) {
+  const req = signupRequestsData.find(r => r.id === requestId);
+  if (!req) {
+    alert('❌ الطلب غير موجود');
+    return;
+  }
+
+  const fullName = [
+    req.FirstName,
+    req.SecondName,
+    req.ThirdName,
+    req.FourthName
+  ].filter(Boolean).join(' ');
+
+  if (!confirm(
+    `✅ الموافقة على تسجيل "${fullName}"؟\n\n` +
+    `سيتم:\n` +
+    `• إضافة الشخص إلى قائمة الأشخاص\n` +
+    `• إنشاء حساب User تلقائيًا\n` +
+    `• إشعار الشخص بذلك`
+  )) return;
+
+  const card = document.querySelector(`[data-request-id="${requestId}"]`);
+  const buttons = card ? card.querySelectorAll('.sr-btn') : [];
+  buttons.forEach(b => b.disabled = true);
+
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+    // ═══ 1. فحص إن الإيميل مش موجود ═══
+    const emailLower = String(req.Email || '').toLowerCase().trim();
+
+    const dupQ = query(
+      collection(db, COLLECTIONS.PEOPLE),
+      where('Email', '==', emailLower)
+    );
+    const dupSnap = await getDocs(dupQ);
+
+    if (!dupSnap.empty) {
+      alert('⚠️ هذا الإيميل مسجل بالفعل في الأشخاص');
+      buttons.forEach(b => b.disabled = false);
+      return;
+    }
+
+    // ═══ 2. أضف الشخص ═══
+    const personData = {
+      FirstName: req.FirstName || '',
+      SecondName: req.SecondName || '',
+      ThirdName: req.ThirdName || '',
+      FourthName: req.FourthName || '',
+      BirthDate: req.BirthDate || '',
+      Gender: req.Gender || '',
+      Address: req.Address || '',
+      Mobile: req.Mobile || '',
+      WhatsApp: req.WhatsApp || '',
+      Email: emailLower,
+      Facebook: req.Facebook || '',
+      PhotoURL: req.PhotoURL || '',
+      PhotoSource: req.PhotoURL ? 'google' : '',
+      Status: 'active',
+      QRCode: '',
+      CreatedAt: new Date().toISOString(),
+      Source: 'signup_request',
+      ApprovedBy: currentUser?.email || '',
+      ApprovedAt: new Date().toISOString()
+    };
+
+    const personRef = await addDoc(collection(db, COLLECTIONS.PEOPLE), personData);
+    const personId = personRef.id;
+
+    // ═══ 3. أنشئ Account ═══
+    const accountData = {
+      Email: emailLower,
+      Role: DEFAULT_ROLE,
+      PersonID: personId,
+      Status: 'active',
+      CreatedAt: new Date().toISOString(),
+      Source: 'signup_approved',
+      GoogleUID: req.GoogleUID || ''
+    };
+
+    await addDoc(collection(db, COLLECTIONS.ACCOUNTS), accountData);
+
+    // ═══ 4. حدّث الطلب ═══
+    await updateDoc(doc(db, 'signupRequests', requestId), {
+      Status: 'approved',
+      ReviewedAt: new Date().toISOString(),
+      ReviewedBy: currentUser?.email || '',
+      ApprovedPersonID: personId
+    });
+
+    // ═══ 5. إشعار للمستخدم ═══
+    await addDoc(collection(db, 'notifications'), {
+      Type: 'signup_approved',
+      Title: '✅ تمت الموافقة على تسجيلك',
+      Body: `مرحبًا ${fullName}!\n\nتمت الموافقة على طلب تسجيلك. يمكنك الآن تسجيل الدخول بـ Google.`,
+      RelatedPersonID: personId,
+      TargetType: 'person',
+      TargetPersonID: personId,
+      TargetEmail: emailLower,
+      SentBy: 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    });
+
+    // ═══ 6. Log ═══
+    if (typeof window.logAction === 'function') {
+      try {
+        await window.logAction({
+          action: 'signup_approved',
+          type: 'person',
+          title: `موافقة على تسجيل: ${fullName}`,
+          description: `البريد: ${emailLower}`,
+          relatedID: personId,
+          relatedTitle: fullName
+        });
+      } catch (e) {}
+    }
+
+    alert(`✅ تمت الموافقة\n\n👤 تمت إضافة "${fullName}" بنجاح\n🔑 تم إنشاء حساب User\n\nسيتم إشعاره.`);
+
+    await loadPeoplePage(document.getElementById('contentArea'));
+
+  } catch (err) {
+    console.error('❌ approveSignupRequest error:', err);
+    alert('خطأ: ' + err.message);
+    buttons.forEach(b => b.disabled = false);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Reject Signup Request
+// ═══════════════════════════════════════════════════════
+
+window.rejectSignupRequest = async function(requestId) {
+  const req = signupRequestsData.find(r => r.id === requestId);
+  if (!req) {
+    alert('❌ الطلب غير موجود');
+    return;
+  }
+
+  const fullName = [
+    req.FirstName,
+    req.SecondName,
+    req.ThirdName,
+    req.FourthName
+  ].filter(Boolean).join(' ');
+
+  const reason = prompt(
+    `❌ رفض طلب تسجيل "${fullName}"؟\n\n` +
+    `اكتب سبب الرفض (اختياري):`,
+    ''
+  );
+
+  if (reason === null) return;
+
+  const card = document.querySelector(`[data-request-id="${requestId}"]`);
+  const buttons = card ? card.querySelectorAll('.sr-btn') : [];
+  buttons.forEach(b => b.disabled = true);
+
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    const emailLower = String(req.Email || '').toLowerCase().trim();
+
+    // ═══ 1. حدّث الطلب ═══
+    await updateDoc(doc(db, 'signupRequests', requestId), {
+      Status: 'rejected',
+      ReviewedAt: new Date().toISOString(),
+      ReviewedBy: currentUser?.email || '',
+      RejectReason: reason.trim() || ''
+    });
+
+    // ═══ 2. إشعار للمستخدم ═══
+    await addDoc(collection(db, 'notifications'), {
+      Type: 'signup_rejected',
+      Title: '❌ تم رفض طلب التسجيل',
+      Body: `مرحبًا ${fullName}\n\nنأسف، تم رفض طلب تسجيلك.${reason.trim() ? `\n\nالسبب: ${reason.trim()}` : ''}\n\nيمكنك التواصل مع المسؤول لمزيد من التفاصيل.`,
+      TargetType: 'person_email',
+      TargetEmail: emailLower,
+      SentBy: 'system',
+      SentAt: new Date().toISOString(),
+      ReadBy: [],
+      CreatedAt: new Date().toISOString()
+    });
+
+    // ═══ 3. Log ═══
+    if (typeof window.logAction === 'function') {
+      try {
+        await window.logAction({
+          action: 'signup_rejected',
+          type: 'person',
+          title: `رفض تسجيل: ${fullName}`,
+          description: `البريد: ${emailLower}${reason.trim() ? ` — السبب: ${reason.trim()}` : ''}`,
+          relatedID: requestId,
+          relatedTitle: fullName
+        });
+      } catch (e) {}
+    }
+
+    alert(`❌ تم رفض الطلب\n\nسيتم إشعار "${fullName}" بالبريد.`);
+
+    await loadPeoplePage(document.getElementById('contentArea'));
+
+  } catch (err) {
+    console.error('❌ rejectSignupRequest error:', err);
+    alert('خطأ: ' + err.message);
+    buttons.forEach(b => b.disabled = false);
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   Render Table
@@ -457,11 +751,10 @@ function renderPeopleTable() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Filters
+//   Filters
 // ═══════════════════════════════════════════════════════
 
 function setupPeopleEvents() {
-  // ═══ Search ═══
   const searchInput = document.getElementById('peopleSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
@@ -470,7 +763,6 @@ function setupPeopleEvents() {
     });
   }
 
-  // ═══ Status ═══
   const statusFilter = document.getElementById('peopleFilterStatus');
   if (statusFilter) {
     statusFilter.onchange = (e) => {
@@ -479,7 +771,6 @@ function setupPeopleEvents() {
     };
   }
 
-  // ═══ Gender ═══
   const genderFilter = document.getElementById('peopleFilterGender');
   if (genderFilter) {
     genderFilter.onchange = (e) => {
@@ -488,7 +779,6 @@ function setupPeopleEvents() {
     };
   }
 
-  // ═══ Age From ═══
   const ageFromFilter = document.getElementById('peopleFilterAgeFrom');
   if (ageFromFilter) {
     ageFromFilter.addEventListener('input', (e) => {
@@ -497,7 +787,6 @@ function setupPeopleEvents() {
     });
   }
 
-  // ═══ Age To ═══
   const ageToFilter = document.getElementById('peopleFilterAgeTo');
   if (ageToFilter) {
     ageToFilter.addEventListener('input', (e) => {
@@ -515,7 +804,6 @@ function applyPeopleFilters() {
   const ageTo = peopleFilters.ageTo ? Number(peopleFilters.ageTo) : null;
 
   filteredPeople = peopleData.filter(p => {
-    // ═══ Search ═══
     if (term) {
       const fullName = getFullName(p).toLowerCase();
       const matchesSearch =
@@ -523,28 +811,21 @@ function applyPeopleFilters() {
         String(p.Mobile || '').includes(term) ||
         String(p.WhatsApp || '').includes(term) ||
         String(p.Email || '').toLowerCase().includes(term);
-
       if (!matchesSearch) return false;
     }
 
-    // ═══ Status ═══
     if (statusFilter !== 'all') {
       const personStatus = String(p.Status || 'active').toLowerCase();
       if (personStatus !== statusFilter) return false;
     }
 
-    // ═══ Gender ═══
     if (genderFilter !== 'all') {
       if (String(p.Gender || '').toLowerCase() !== genderFilter) return false;
     }
 
-    // ═══ Age ═══
     if (ageFrom !== null || ageTo !== null) {
       const age = getAge(p.BirthDate);
-
-      // ⚡ اللي ملهوش تاريخ ميلاد → يظهر بس في "الكل"
       if (age === null) return false;
-
       if (ageFrom !== null && age < ageFrom) return false;
       if (ageTo !== null && age > ageTo) return false;
     }
@@ -559,7 +840,6 @@ function applyPeopleFilters() {
 function updateResultsInfo() {
   const infoEl = document.getElementById('peopleResultsInfo');
   const countEl = document.getElementById('peopleResultsCount');
-
   if (!infoEl || !countEl) return;
 
   const hasFilter =
@@ -585,7 +865,6 @@ window.clearPeopleFilters = function() {
     ageFrom: '',
     ageTo: ''
   };
-
   filteredPeople = [...peopleData];
   renderPeoplePage(document.getElementById('contentArea'));
 };
@@ -714,17 +993,15 @@ function openPersonModal(personId) {
 
   setTimeout(() => {
     if (typeof window.renderUploadWidget === 'function') {
-            window.renderUploadWidget(
+      window.renderUploadWidget(
         'photoUploadContainer',
         currentPhotoURL,
         (result) => {
           currentPhotoURL = result.url;
           currentPhotoHash = result.hash || '';
-          console.log('✅ Photo uploaded:', result.url, result.isDuplicate ? '(duplicate)' : '');
         },
         () => {
           currentPhotoURL = '';
-          console.log('🗑️ Photo removed (hash kept for matching)');
         },
         {
           currentHash: currentPhotoHash || '',
@@ -732,8 +1009,6 @@ function openPersonModal(personId) {
           enableCropper: true
         }
       );
-    } else {
-      console.warn('⚠️ renderUploadWidget not available');
     }
   }, 50);
 
@@ -752,7 +1027,7 @@ function closePersonModal() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Save Person (with auto Account)
+//   Save Person
 // ═══════════════════════════════════════════════════════
 
 async function savePerson() {
@@ -774,7 +1049,6 @@ async function savePerson() {
   if (!mobile) { alert('رقم الموبايل مطلوب'); return; }
 
   const status = isActive ? 'active' : 'inactive';
-
   const photoURL = currentPhotoURL || '';
   const photoHash = currentPhotoHash || '';
 
@@ -829,7 +1103,6 @@ async function savePerson() {
       accountMessage = '\n\n⚠️ لا يوجد بريد — لم يتم إنشاء حساب.';
     }
 
-    // ⚡ لو كان الشخص موجود في Ignore List، شيله
     if (email && !isNew) {
       try {
         await fetch(SYNC_WEBAPP_URL, {
@@ -842,7 +1115,6 @@ async function savePerson() {
             email: email.toLowerCase().trim()
           })
         });
-        console.log('✅ Removed from ignore list (if existed):', email);
       } catch (e) {
         console.warn('⚠️ removeFromIgnoreList error:', e.message);
       }
@@ -924,13 +1196,11 @@ async function confirmDeletePerson(personId) {
   if (!confirm(`⚠️ هل أنت متأكد من حذف "${fullName}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) return;
 
   try {
-    // ⚡ 1. أضف للـIgnore List قبل الحذف
     if (person.Email) {
       console.log(`📝 Adding to ignore list: ${person.Email}`);
       await addEmailToIgnoreList(person.Email, 'deleted_by_admin');
     }
 
-    // ⚡ 2. احذف الشخص
     await deleteDoc(doc(db, COLLECTIONS.PEOPLE, personId));
 
     alert('✅ تم الحذف بنجاح\n\n📌 لن يعود الشخص من المزامنة التلقائية.\n📌 الحساب المرتبط لم يُحذف.');
@@ -943,7 +1213,7 @@ async function confirmDeletePerson(personId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   QR Code - Generate
+//   QR Code - Generate / View / Download / Regenerate
 // ═══════════════════════════════════════════════════════
 
 async function generateQR(personId) {
@@ -966,10 +1236,6 @@ async function generateQR(personId) {
     alert('خطأ: ' + err.message);
   }
 }
-
-// ═══════════════════════════════════════════════════════
-//   QR Code - View
-// ═══════════════════════════════════════════════════════
 
 function viewQR(personId) {
   const person = peopleData.find(p => p.id === personId);
@@ -1029,10 +1295,6 @@ function closeQRModal() {
   if (modal) modal.style.display = 'none';
 }
 
-// ═══════════════════════════════════════════════════════
-//   QR Code - Regenerate
-// ═══════════════════════════════════════════════════════
-
 async function confirmRegenerateQR(personId) {
   const person = peopleData.find(p => p.id === personId);
   if (!person) return;
@@ -1044,9 +1306,7 @@ async function confirmRegenerateQR(personId) {
     `سيتم إلغاء الـ QR القديم نهائيًا، ولن يعمل.\n\n` +
     `يجب عليك طباعة/إرسال الـ QR الجديد للشخص.\n\n` +
     `هل أنت متأكد؟`
-  )) {
-    return;
-  }
+  )) return;
 
   try {
     const timestamp = Date.now().toString(36);
@@ -1067,16 +1327,11 @@ async function confirmRegenerateQR(personId) {
 
     closeQRModal();
     setTimeout(() => viewQR(personId), 200);
-
   } catch (err) {
     console.error('❌ Regenerate QR error:', err);
     alert('خطأ: ' + err.message);
   }
 }
-
-// ═══════════════════════════════════════════════════════
-//   QR Code - Download
-// ═══════════════════════════════════════════════════════
 
 function downloadQR(personId) {
   const person = peopleData.find(p => p.id === personId);
@@ -1135,7 +1390,7 @@ async function viewPersonDetails(personId) {
 
   try {
     const [meetingsSnap, attendanceSnap] = await Promise.all([
-      getDocs(collection(db, COLLECTIONS.MEETINGS)),
+      getDocs(collection(db, COLLECTIONS.MEETINGS)).catch(() => ({ docs: [] })),
       getDocs(collection(db, COLLECTIONS.ATTENDANCE))
     ]);
 
@@ -1150,8 +1405,7 @@ async function viewPersonDetails(personId) {
     const totalMeetings = meetings.length;
     const attended = allAttendance.length;
     const attendanceRate = totalMeetings > 0
-      ? Math.round((attended / totalMeetings) * 100)
-      : 0;
+      ? Math.round((attended / totalMeetings) * 100) : 0;
 
     const recentAttendance = allAttendance
       .sort((a, b) => {
@@ -1211,7 +1465,6 @@ function renderPersonDetailsModal(modal, person, stats) {
   const body = modal.querySelector('.modal-body');
   body.innerHTML = `
     <div class="pd-container">
-
       <div class="pd-header">
         <div class="pd-photo-wrapper">${photoHtml}</div>
         <div class="pd-header-info">
@@ -1291,7 +1544,6 @@ function renderPersonDetailsModal(modal, person, stats) {
         <h3 class="pd-section-title">📅 آخر الحضور</h3>
         <div class="pd-attendance-list">${attendanceHtml}</div>
       </div>
-
     </div>
   `;
 
@@ -1329,9 +1581,7 @@ async function confirmRegenerateQRDetails(personId) {
     `سيتم إلغاء الـ QR القديم نهائيًا، ولن يعمل.\n\n` +
     `يجب عليك طباعة/إرسال الـ QR الجديد للشخص.\n\n` +
     `هل أنت متأكد؟`
-  )) {
-    return;
-  }
+  )) return;
 
   try {
     const timestamp = Date.now().toString(36);
@@ -1352,7 +1602,6 @@ async function confirmRegenerateQRDetails(personId) {
 
     closePersonDetails();
     setTimeout(() => viewPersonDetails(personId), 200);
-
   } catch (err) {
     console.error('❌ Regenerate QR error:', err);
     alert('خطأ: ' + err.message);
