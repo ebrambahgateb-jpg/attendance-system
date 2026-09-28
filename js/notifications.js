@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Notifications Center + Browser Notifications
-//   ⚡ محدّث: حذف فوري + Toast + FCM Push Support
+//   ⚡ محدّث: حذف فوري + Toast + FCM Push + Routing كامل
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -306,6 +306,10 @@ function isClickable(notif) {
     'event_cancelled',
     'rsvp_request',
     'person_confirmed',
+    'person_reconfirmed',
+    'cancel_request',
+    'cancel_approved',
+    'cancel_rejected',
     'person_cancelled_admin',
     'person_cancelled_member',
     'person_cancelled_public'
@@ -325,38 +329,65 @@ async function handleNotificationClick(notifId) {
 
   closeNotificationsModal();
 
+  // ═══ 💬 الشات ═══
   if (type === 'chat_message') {
     navigateToChat(notif);
     return;
   }
 
+  // ═══ 🔄 طلبات النقل (للأدمن) ═══
   if (type === 'transfer_request') {
     navigateToScheduleTab('requests');
     return;
   }
 
+  // ═══ 🔄 نتائج طلب النقل (للـUser) ═══
   if (type === 'transfer_approved' || type === 'transfer_rejected') {
     navigateToScheduleTab('my-requests');
     return;
   }
 
+  // ═══ 📅 الأحداث ═══
   if (type === 'event_added' || type === 'event_updated' || type === 'event_cancelled') {
     navigateToTab('events');
     return;
   }
 
+  // ═══ 🎯 للـUser — أحداثي وحضوري ═══
   if (type === 'rsvp_request') {
     navigateToTab('my-events');
     return;
   }
 
-  if (type === 'person_confirmed' || type.startsWith('person_cancelled')) {
+  // ═══ 🎟️ شخص ألغى (Public/Member) → my-events (للـUser) ═══
+  if (type === 'person_cancelled_public' || type === 'person_cancelled_member') {
+    navigateToTab('my-events');
+    return;
+  }
+
+  // ═══ ✅ نتائج طلب الإلغاء (للـUser) ═══
+  if (type === 'cancel_approved' || type === 'cancel_rejected') {
+    navigateToTab('my-events');
+    return;
+  }
+
+  // ═══ ✅ للأدمن — الحضور (طلبات + تأكيدات) ═══
+  if (
+    type === 'person_confirmed' ||
+    type === 'person_reconfirmed' ||
+    type === 'cancel_request' ||
+    type === 'person_cancelled_admin'
+  ) {
     navigateToTab('attendance');
     return;
   }
 
   console.log('⚠️ Unknown notification type:', type);
 }
+
+// ═══════════════════════════════════════════════════════
+//   Navigation Helpers
+// ═══════════════════════════════════════════════════════
 
 function navigateToTab(tabId) {
   const navItem = document.querySelector(`.nav-item[data-page="${tabId}"]`);
@@ -385,6 +416,8 @@ function navigateToScheduleTab(subTab) {
     if (subTabBtn) {
       subTabBtn.click();
       console.log(`✅ Navigated to schedule sub-tab: ${subTab}`);
+    } else {
+      console.warn(`⚠️ Schedule sub-tab not found: ${subTab}`);
     }
   }, 800);
 }
@@ -399,16 +432,46 @@ function navigateToChat(notif) {
 
   chatNav.click();
 
-  const chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
+  // ⚡ جرب كل الاحتمالات للـChatID
+  const chatId = notif.ChatID
+    || notif.RelatedChatID
+    || notif.RelatedID
+    || notif.chatId;
 
-  if (chatId) {
-    setTimeout(() => {
-      if (typeof window.openChat === 'function') {
+  console.log('💬 Chat ID:', chatId);
+
+  if (!chatId) {
+    console.warn('⚠️ No ChatID in notification');
+    return;
+  }
+
+  // ⚡ retry mechanism — لحد ما الشات يحمّل
+  let attempts = 0;
+  const maxAttempts = 20;  // 20 × 500ms = 10 ثواني
+
+  const tryOpenChat = () => {
+    attempts++;
+
+    if (typeof window.openChat === 'function') {
+      try {
         window.openChat(chatId);
         console.log(`✅ Opened chat: ${chatId}`);
+        return;
+      } catch (err) {
+        console.warn('openChat error:', err.message);
       }
-    }, 1000);
-  }
+    } else {
+      console.log(`⏳ Waiting for openChat... (${attempts}/${maxAttempts})`);
+    }
+
+    if (attempts < maxAttempts) {
+      setTimeout(tryOpenChat, 500);
+    } else {
+      console.warn('⚠️ openChat not available after 10s');
+    }
+  };
+
+  setTimeout(tryOpenChat, 500);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -715,15 +778,13 @@ function buildNotifData(notif) {
   if (type === 'chat_message') {
     data.tab = 'chat';
     data.chatId = notif.ChatID || notif.RelatedChatID || notif.RelatedID;
-  } else if (type === 'transfer_request') {
-    data.tab = 'schedule';
-  } else if (type === 'transfer_approved' || type === 'transfer_rejected') {
+  } else if (type === 'transfer_request' || type === 'transfer_approved' || type === 'transfer_rejected') {
     data.tab = 'schedule';
   } else if (type.startsWith('event_')) {
     data.tab = 'events';
-  } else if (type === 'rsvp_request') {
+  } else if (type === 'rsvp_request' || type === 'cancel_approved' || type === 'cancel_rejected' || type === 'person_cancelled_public' || type === 'person_cancelled_member') {
     data.tab = 'my-events';
-  } else if (type.startsWith('person_')) {
+  } else if (type === 'person_confirmed' || type === 'person_reconfirmed' || type === 'cancel_request' || type === 'person_cancelled_admin') {
     data.tab = 'attendance';
   }
 
@@ -769,6 +830,10 @@ function getTypeIcon(type) {
     event_updated: '✏️',
     event_cancelled: '❌',
     person_confirmed: '✅',
+    person_reconfirmed: '🔄',
+    cancel_request: '📢',
+    cancel_approved: '✅',
+    cancel_rejected: '❌',
     person_cancelled_admin: '📢',
     person_cancelled_member: '⚠️',
     person_cancelled_public: '🎟️',
