@@ -155,13 +155,19 @@
       });
     }
 
-    // ⚡ PWA Dynamic Icon
+    // ⚡ ⚡ ⚡ PWA Dynamic Icon — with versioned URL for auto-update
     window.updatePWAIcon = function(iconUrl) {
       if (!iconUrl) return;
 
       // ⚡ URL كامل عشان Blob يشتغل
       const baseUrl = window.location.origin + '/attendance-system';
       const currentUrl = window.location.href;
+
+      // ⚡ ⚡ ⚡ نضيف ?v=timestamp للـURL
+      //   عشان المتصفح يشوفه كـ URL جديد → يحدّث الأيقونة تلقائيًا
+      const versionedIconUrl = iconUrl.includes('?')
+        ? `${iconUrl}&v=${Date.now()}`
+        : `${iconUrl}?v=${Date.now()}`;
 
       const manifest = {
         name: "نظام الحضور - Attendance System",
@@ -176,8 +182,8 @@
         lang: "ar",
         dir: "rtl",
         icons: [
-          { src: iconUrl, sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: iconUrl, sizes: "512x512", type: "image/png", purpose: "any" }
+          { src: versionedIconUrl, sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: versionedIconUrl, sizes: "512x512", type: "image/png", purpose: "any" }
         ]
       };
 
@@ -188,9 +194,14 @@
       if (manifestLink) manifestLink.href = url;
 
       const appleIcon = document.getElementById('pwaAppleIcon');
-      if (appleIcon) appleIcon.href = iconUrl;
+      if (appleIcon) appleIcon.href = versionedIconUrl;
 
-      console.log('✅ PWA Manifest updated with icon:', iconUrl);
+      // ⚡ احفظه في localStorage للاستمرار
+      try {
+        localStorage.setItem('pwa_icon_url', versionedIconUrl);
+      } catch (e) {}
+
+      console.log('✅ PWA Manifest updated with icon:', versionedIconUrl);
     };
   </script>
 
@@ -217,6 +228,7 @@
   <script type="module" src="../js/fcm.js"></script>
   <script type="module" src="../js/chat.js"></script>
   <script type="module" src="../js/dark-mode.js"></script>
+  <script type="module" src="../js/app-update-watcher.js"></script>
   <script type="module" src="../js/dashboard.js"></script>
 </body>
 </html>
