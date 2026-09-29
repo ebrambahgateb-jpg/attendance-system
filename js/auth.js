@@ -184,7 +184,46 @@ async function checkUserInFirestore(firebaseUser) {
       currentWorkspace: null
     };
 
-    // ═══ الحالة 5: workspace محفوظ ═══
+        // ═══════════════════════════════════════════════════
+    //   ⚡ الحالة 5: فحص PWA Update قبل أي إجراء
+    //   (قبل Dashboard وكمان قبل Workspace Selection)
+    // ═══════════════════════════════════════════════════
+
+    let needsUpdate = null;
+    try {
+      needsUpdate = await checkPWAUpdate();
+    } catch (err) {
+      console.warn('⚠️ checkPWAUpdate error:', err.message);
+    }
+
+    if (needsUpdate) {
+      const { from, to } = needsUpdate;
+      console.log(`🔄 PWA update needed: v${from} → v${to}`);
+
+      // ⚡ خزّن الـrole المختار (أو أول role) — للرجوع بعد التحديث
+      //    لو المستخدم عنده role واحد بس → نحفظه
+      //    لو عنده كذا role → نحفظ إننا محتاجين نختار workspace بعد التحديث
+
+      if (roles.length === 1) {
+        // ⚡ احفظ الـworkspace عشان بعد التحديث يدخل على طول
+        localStorage.setItem('currentWorkspace', roles[0]);
+      } else {
+        // ⚡ امسح أي workspace محفوظ عشان بعد التحديث يروح لصفحة الاختيار
+        localStorage.removeItem('currentWorkspace');
+
+        // ⚡ خزّن الأدوار عشان بعد التحديث نعرض الصفحة تاني
+        localStorage.setItem('_pendingRoles', JSON.stringify(roles));
+      }
+
+      // ⚡ احفظ بيانات المستخدم
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+      // ⚡ روح لصفحة التحديث
+      window.location.href = `pages/update.html?from=${from}&to=${to}`;
+      return;
+    }
+
+    // ═══ ⚡ مفيش Update — كمّل عادي ═══
     if (roles.length === 1) {
       await goToDashboard(roles[0]);
       return;
