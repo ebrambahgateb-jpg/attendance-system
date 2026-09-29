@@ -126,10 +126,43 @@ async function handleUpdate() {
     updateBtn.querySelector('.update-btn-icon').textContent = '✅';
     updateBtn.querySelector('.update-btn-text').textContent = 'جاري الفتح...';
 
-    await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 800));
 
-    // ═══ Redirect إلى Dashboard ═══
-    window.location.href = 'dashboard.html';
+    // ═══════════════════════════════════════════════════
+    //   ⚡ Redirect بعد التحديث
+    //   - لو المستخدم عنده كذا role → صفحة اختيار الواجهة
+    //   - لو عنده role واحد → الداشبورد
+    // ═══════════════════════════════════════════════════
+
+    const pendingRoles = localStorage.getItem('_pendingRoles');
+    const savedWorkspace = localStorage.getItem('currentWorkspace');
+
+    if (pendingRoles) {
+      // ⚡ المستخدم عنده أدوار متعددة → روح لصفحة الدخول
+      //    عشان auth.js يعرض صفحة اختيار الواجهة
+      console.log('🎭 Multiple roles — redirecting to role selection');
+      localStorage.removeItem('_pendingRoles');
+
+      // ⚡ نظّف الـworkspace المؤقت
+      if (savedWorkspace) {
+        localStorage.removeItem('currentWorkspace');
+      }
+
+      // ⚡ اذهب للصفحة الرئيسية (auth.js هيتعامل مع العرض)
+      window.location.href = '../index.html';
+      return;
+    }
+
+    // ⚡ role واحد → الداشبورد مباشرة
+    if (savedWorkspace) {
+      console.log(`✅ Single role — redirecting to dashboard`);
+      window.location.href = 'dashboard.html';
+      return;
+    }
+
+    // ⚡ Fallback
+    console.log('⚠️ No saved workspace — redirecting to login');
+    window.location.href = '../index.html';
 
   } catch (err) {
     console.error('❌ Update error:', err);
