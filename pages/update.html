@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>تحديث التطبيق</title>
+  <link rel="icon" href="data:," />
+
+  <!-- ═══ PWA ═══ -->
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="../manifest.json" />
+
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/update.css" />
+</head>
+<body class="update-body">
+
+  <!-- ═══ Background ═══ -->
+  <div class="bg-image" id="bgImage"></div>
+  <div class="bg-overlay"></div>
+
+  <!-- ═══ Update Screen ═══ -->
+  <div class="update-screen">
+    <div class="update-card">
+
+      <!-- ═══ Icon ═══ -->
+      <div class="update-icon">🚀</div>
+
+      <!-- ═══ Title ═══ -->
+      <h1 class="update-title">تحديث مطلوب</h1>
+
+      <!-- ═══ Message ═══ -->
+      <p class="update-message">
+        تم إصدار نسخة جديدة من التطبيق.<br />
+        يرجى تحديث التطبيق للمتابعة.
+      </p>
+
+      <!-- ═══ Version Info ═══ -->
+      <div class="update-version-info">
+        <div class="update-version-row">
+          <span class="update-version-label">الإصدار الحالي</span>
+          <span class="update-version-value old" id="oldVersion">-</span>
+        </div>
+        <div class="update-version-arrow">↓</div>
+        <div class="update-version-row">
+          <span class="update-version-label">الإصدار الجديد</span>
+          <span class="update-version-value new" id="newVersion">-</span>
+        </div>
+      </div>
+
+      <!-- ═══ Progress Bar (مخفي في الأول) ═══ -->
+      <div class="update-progress" id="updateProgress" style="display: none;">
+        <div class="update-progress-bar">
+          <div class="update-progress-fill" id="updateProgressFill"></div>
+        </div>
+        <p class="update-progress-text" id="updateProgressText">جاري التحديث...</p>
+      </div>
+
+      <!-- ═══ Button ═══ -->
+      <button class="update-btn" id="updateBtn">
+        <span class="update-btn-icon">✨</span>
+        <span class="update-btn-text">تحديث الآن</span>
+      </button>
+
+      <!-- ═══ Note ═══ -->
+      <p class="update-note">
+        ⚡ التحديث سيكتمل خلال ثوانٍ
+      </p>
+
+    </div>
+  </div>
+
+  <!-- ═══ Firebase ═══ -->
+  <script type="module" src="../js/firebase-config.js"></script>
+
+  <!-- ═══ Pre-load Settings ═══ -->
+  <script type="module">
+    import { db, COLLECTIONS, SETTINGS_DOC } from '../js/firebase-config.js';
+    import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+
+    async function loadPublicSettings() {
+      try {
+        const settingsRef = doc(db, COLLECTIONS.SETTINGS, SETTINGS_DOC);
+        const snap = await getDoc(settingsRef);
+
+        if (snap.exists()) {
+          const data = snap.data();
+
+          // ═══ Background ═══
+          const bgImage = document.getElementById('bgImage');
+          if (bgImage && data.ThemeBgImageUrl) {
+            bgImage.style.backgroundImage = `url('${data.ThemeBgImageUrl}')`;
+            bgImage.classList.add('has-image');
+          }
+
+          // ═══ Title ═══
+          if (data.SystemName) {
+            document.title = `تحديث ${data.SystemName}`;
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not load settings:', err.message);
+      }
+    }
+
+    loadPublicSettings();
+  </script>
+
+  <!-- ═══ Update Logic ═══ -->
+  <script type="module" src="../js/update.js"></script>
+</body>
+</html>
