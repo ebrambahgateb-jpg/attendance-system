@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Settings (Firestore)
-//   ⚡ محدّث: زيادة PWAIconVersion عند تغيير أيقونة PWA
+//   ⚡ محدّث: اسم ملف PWA Icon مختلف + زيادة PWAIconVersion
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -604,7 +604,13 @@ function initThemeUploadWidgets() {
 
         // ⚡ ضغط مربع 512×512
         const compressed = await window.compressImage(file, 512, 512, 0.95);
-        const result = await window.uploadToImgBB(compressed, `pwa_icon_${Date.now()}`);
+
+        // ⚡ ⚡ ⚡ اسم ملف مختلف كل مرة (timestamp + random)
+        const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const fileName = `pwa_icon_v${uniqueId}`;
+        const result = await window.uploadToImgBB(compressed, fileName);
+
+        console.log('📸 PWA Icon uploaded:', result.url);
 
         settingsData.PWAIconUrl = result.url;
         const hiddenInput = document.getElementById('set_PWAIconUrl');
@@ -1057,7 +1063,7 @@ window.openGoogleForm = function() {
 
 // ═══════════════════════════════════════════════════════
 //   Save All Settings
-//   ⚡ محدّث: زيادة PWAIconVersion عند تغيير الأيقونة
+//   ⚡ محدّث: زيادة PWAIconVersion عند تغيير أيقونة PWA
 // ═══════════════════════════════════════════════════════
 
 window.saveAllSettings = async function(event) {
@@ -1104,7 +1110,7 @@ window.saveAllSettings = async function(event) {
     console.log(`  old: ${oldPWAIconUrl || '(none)'}`);
     console.log(`  new: ${newPWAIconUrl}`);
   } else if (!newPWAIconUrl && oldPWAIconUrl) {
-    // ⚡ الأيقونة اتمسحت → زود الإصدار (المستخدمين يشوفوا إنها اتشالت)
+    // ⚡ الأيقونة اتمسحت → زود الإصدار
     payload.PWAIconVersion = oldPWAIConVersion + 1;
     console.log(`🔄 [PWA Icon] Removed: v${oldPWAIConVersion} → v${oldPWAIConVersion + 1}`);
   } else {
