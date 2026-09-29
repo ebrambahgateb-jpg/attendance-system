@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Settings (Firestore)
+//   ⚡ محدّث: زيادة PWAIconVersion عند تغيير أيقونة PWA
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -1056,6 +1057,7 @@ window.openGoogleForm = function() {
 
 // ═══════════════════════════════════════════════════════
 //   Save All Settings
+//   ⚡ محدّث: زيادة PWAIconVersion عند تغيير الأيقونة
 // ═══════════════════════════════════════════════════════
 
 window.saveAllSettings = async function(event) {
@@ -1088,8 +1090,28 @@ window.saveAllSettings = async function(event) {
   payload.LogoSizeLogin = Number(settingsData.LogoSizeLogin) || 90;
   payload.LogoShape = settingsData.LogoShape || 'square';
 
-  // ⚡ أيقونة التطبيق (PWA)
-  payload.PWAIconUrl = settingsData.PWAIconUrl || '';
+  // ⚡ ⚡ ⚡ أيقونة التطبيق (PWA) + زيادة الإصدار
+  const oldPWAIconUrl = originalSettings.PWAIconUrl || '';
+  const newPWAIconUrl = settingsData.PWAIconUrl || '';
+  const oldPWAIConVersion = Number(originalSettings.PWAIconVersion) || 0;
+
+  payload.PWAIconUrl = newPWAIconUrl;
+
+  // ⚡ لو الأيقونة اتغيرت → زود الإصدار
+  if (newPWAIconUrl && newPWAIconUrl !== oldPWAIconUrl) {
+    payload.PWAIconVersion = oldPWAIConVersion + 1;
+    console.log(`🔄 [PWA Icon] Changed: v${oldPWAIConVersion} → v${oldPWAIConVersion + 1}`);
+    console.log(`  old: ${oldPWAIconUrl || '(none)'}`);
+    console.log(`  new: ${newPWAIconUrl}`);
+  } else if (!newPWAIconUrl && oldPWAIconUrl) {
+    // ⚡ الأيقونة اتمسحت → زود الإصدار (المستخدمين يشوفوا إنها اتشالت)
+    payload.PWAIconVersion = oldPWAIConVersion + 1;
+    console.log(`🔄 [PWA Icon] Removed: v${oldPWAIConVersion} → v${oldPWAIConVersion + 1}`);
+  } else {
+    // ⚡ ما اتغيرتش — احتفظ بالإصدار
+    payload.PWAIconVersion = oldPWAIConVersion;
+    console.log(`⏭️ [PWA Icon] Unchanged (v${oldPWAIConVersion})`);
+  }
 
   boolKeys.forEach(key => {
     const el = document.getElementById('set_' + key);
@@ -1125,7 +1147,12 @@ window.saveAllSettings = async function(event) {
       window.updatePWAIcon(pwaIcon);
     }
 
-    alert('تم الحفظ بنجاح');
+    // ⚡ رسالة النجاح
+    if (payload.PWAIconVersion > oldPWAIConVersion) {
+      alert(`تم الحفظ بنجاح\n\n📱 تم تحديث أيقونة التطبيق!\nسيتم إشعار جميع المستخدمين للتحديث.`);
+    } else {
+      alert('تم الحفظ بنجاح');
+    }
   } catch (err) {
     console.error('❌ Save settings error:', err);
     alert('خطأ: ' + err.message);
