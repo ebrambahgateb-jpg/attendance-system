@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Update Page Logic
-//   ⚡ المستخدم ضغط "تحديث الآن" → يمسح الكاش + Reload
+//   ⚡ يفرّق بين Android (auto-update) و iOS (manual)
 // ═══════════════════════════════════════════════════════
 
 // ═══ Constants ═══
@@ -15,7 +15,7 @@ const oldVersionEl = document.getElementById('oldVersion');
 const newVersionEl = document.getElementById('newVersion');
 
 // ═══════════════════════════════════════════════════════
-//   Load Versions from URL Params or Storage
+//   Load Versions
 // ═══════════════════════════════════════════════════════
 
 function loadVersionInfo() {
@@ -43,6 +43,18 @@ function updateProgress_(percent, text) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   Detect Platform
+// ═══════════════════════════════════════════════════════
+
+function detectPlatform() {
+  const ua = navigator.userAgent.toLowerCase();
+
+  if (/iphone|ipad|ipod/.test(ua)) return 'ios';
+  if (/android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
+// ═══════════════════════════════════════════════════════
 //   Update Handler
 // ═══════════════════════════════════════════════════════
 
@@ -61,7 +73,7 @@ async function handleUpdate() {
   }
 
   try {
-    // ═══ Step 1: مسح الـCaches (30%) ═══
+    // ═══ Step 1: مسح الـCaches (20%) ═══
     updateProgress_(10, '🗑️ جاري مسح الملفات القديمة...');
 
     if ('caches' in window) {
@@ -70,14 +82,14 @@ async function handleUpdate() {
 
       for (let i = 0; i < cacheNames.length; i++) {
         await caches.delete(cacheNames[i]);
-        const percent = 10 + Math.round((i + 1) / cacheNames.length * 20);
+        const percent = 10 + Math.round((i + 1) / cacheNames.length * 15);
         updateProgress_(percent, `🗑️ جاري مسح الملفات (${i + 1}/${cacheNames.length})...`);
       }
       console.log('✅ All caches cleared');
     }
 
-    // ═══ Step 2: Unregister Service Worker (60%) ═══
-    updateProgress_(40, '⚙️ جاري تحديث التكوين...');
+    // ═══ Step 2: Unregister Service Worker (40%) ═══
+    updateProgress_(35, '⚙️ جاري تحديث التكوين...');
 
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -85,14 +97,14 @@ async function handleUpdate() {
 
       for (let i = 0; i < registrations.length; i++) {
         await registrations[i].unregister();
-        const percent = 40 + Math.round((i + 1) / registrations.length * 20);
+        const percent = 35 + Math.round((i + 1) / registrations.length * 15);
         updateProgress_(percent, `⚙️ جاري تحديث التكوين (${i + 1}/${registrations.length})...`);
       }
       console.log('✅ All SWs unregistered');
     }
 
-    // ═══ Step 3: احفظ الإصدار (80%) ═══
-    updateProgress_(70, '💾 جاري حفظ الإصدار الجديد...');
+    // ═══ Step 3: احفظ الإصدار (60%) ═══
+    updateProgress_(55, '💾 جاري حفظ الإصدار الجديد...');
 
     const params = new URLSearchParams(window.location.search);
     const newVersion = params.get('to') || '1';
@@ -100,69 +112,20 @@ async function handleUpdate() {
     localStorage.setItem(VERSION_STORAGE_KEY, newVersion);
     console.log(`✅ Saved version: ${newVersion}`);
 
-    // ═══ Step 4: Reload (100%) ═══
-    updateProgress_(90, '✨ جاري إعادة التشغيل...');
-
-    await new Promise(r => setTimeout(r, 600));
-    updateProgress_(100, '✅ التحديث اكتمل!');
-
-    // ═══ Success Animation ═══
-    const card = document.querySelector('.update-card');
-    if (card) card.classList.add('success');
-
-    const icon = document.querySelector('.update-icon');
-    if (icon) icon.textContent = '✅';
-
-    const title = document.querySelector('.update-title');
-    if (title) title.textContent = 'تم التحديث بنجاح!';
-
-    const message = document.querySelector('.update-message');
-    if (message) message.innerHTML = 'جاري فتح التطبيق...';
-
-    if (updateProgress) {
-      updateProgress.style.display = 'none';
-    }
-
-    updateBtn.querySelector('.update-btn-icon').textContent = '✅';
-    updateBtn.querySelector('.update-btn-text').textContent = 'جاري الفتح...';
-
-        await new Promise(r => setTimeout(r, 800));
-
-    // ═══════════════════════════════════════════════════
-    //   ⚡ Redirect بعد التحديث
-    //   - لو المستخدم عنده كذا role → صفحة اختيار الواجهة
-    //   - لو عنده role واحد → الداشبورد
-    // ═══════════════════════════════════════════════════
+    // ═══ Step 4: تجهيز شاشة النتيجة (80%) ═══
+    updateProgress_(75, '✨ جاري إعادة التشغيل...');
 
     const pendingRoles = localStorage.getItem('_pendingRoles');
     const savedWorkspace = localStorage.getItem('currentWorkspace');
 
-    if (pendingRoles) {
-      // ⚡ المستخدم عنده أدوار متعددة → روح لصفحة الدخول
-      //    عشان auth.js يعرض صفحة اختيار الواجهة
-      console.log('🎭 Multiple roles — redirecting to role selection');
-      localStorage.removeItem('_pendingRoles');
+    await new Promise(r => setTimeout(r, 400));
 
-      // ⚡ نظّف الـworkspace المؤقت
-      if (savedWorkspace) {
-        localStorage.removeItem('currentWorkspace');
-      }
+    updateProgress_(100, '✅ التحديث اكتمل!');
 
-      // ⚡ اذهب للصفحة الرئيسية (auth.js هيتعامل مع العرض)
-      window.location.href = '../index.html';
-      return;
-    }
+    await new Promise(r => setTimeout(r, 300));
 
-    // ⚡ role واحد → الداشبورد مباشرة
-    if (savedWorkspace) {
-      console.log(`✅ Single role — redirecting to dashboard`);
-      window.location.href = 'dashboard.html';
-      return;
-    }
-
-    // ⚡ Fallback
-    console.log('⚠️ No saved workspace — redirecting to login');
-    window.location.href = '../index.html';
+    // ═══ Show Platform-Specific Result ═══
+    showResultScreen(pendingRoles, savedWorkspace);
 
   } catch (err) {
     console.error('❌ Update error:', err);
@@ -177,7 +140,160 @@ async function handleUpdate() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Check Auth — لو مش مسجل، ارجع لصفحة الدخول
+//   ⚡ Show Result Screen — Platform-Specific
+// ═══════════════════════════════════════════════════════
+
+function showResultScreen(pendingRoles, savedWorkspace) {
+  const platform = detectPlatform();
+  const card = document.querySelector('.update-card');
+  if (!card) return;
+
+  card.classList.add('success');
+
+  if (platform === 'android') {
+    // ⚡ Android: Auto-update — رسالة بسيطة
+    showAndroidSuccess(card);
+  } else if (platform === 'ios') {
+    // ⚡ iOS: Manual reinstall — خطوات
+    showIOSInstructions(card);
+  } else {
+    // ⚡ Desktop: Auto-update — رسالة بسيطة
+    showDesktopSuccess(card);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Android Success (Auto-update)
+// ═══════════════════════════════════════════════════════
+
+function showAndroidSuccess(card) {
+  card.innerHTML = `
+    <div class="update-icon">✅</div>
+    <h1 class="update-title">تم التحديث بنجاح</h1>
+    <p class="update-message">
+      ✅ تم تحديث التطبيق بنجاح.<br>
+      <strong>الأيقونة الجديدة ستظهر تلقائيًا خلال 24-72 ساعة.</strong>
+    </p>
+
+    <div class="auto-update-note">
+      <div class="auto-update-icon">🔄</div>
+      <div class="auto-update-text">
+        <strong>تحديث تلقائي</strong>
+        <span>لا تحتاج لعمل أي شيء — الأيقونة هتتحدث لوحدها</span>
+      </div>
+    </div>
+
+    <div class="reinstall-note" style="margin-top: 16px;">
+      💡 <strong>نصيحة:</strong> لو عايز الأيقونة الجديدة فورًا، يمكنك:
+      <ol style="margin-top: 8px; padding-right: 20px; line-height: 1.7;">
+        <li>اضغط مطوّلاً على الأيقونة</li>
+        <li>اختر <strong>"إلغاء التثبيت"</strong></li>
+        <li>افتح الموقع في Chrome</li>
+        <li>اختر <strong>"تثبيت التطبيق"</strong> من القائمة (⋮)</li>
+      </ol>
+    </div>
+
+    <button class="update-btn" id="proceedBtn" style="margin-top: 20px;">
+      <span class="update-btn-icon">🚀</span>
+      <span class="update-btn-text">فتح التطبيق</span>
+    </button>
+  `;
+
+  const proceedBtn = document.getElementById('proceedBtn');
+  if (proceedBtn) {
+    proceedBtn.onclick = () => {
+      console.log('🚀 Proceeding to dashboard');
+      window.location.href = 'dashboard.html';
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ iOS Instructions (Manual reinstall)
+// ═══════════════════════════════════════════════════════
+
+function showIOSInstructions(card) {
+  card.innerHTML = `
+    <div class="update-icon">✅</div>
+    <h1 class="update-title">تم التحديث بنجاح</h1>
+    <p class="update-message">
+      ✅ تم تحديث التطبيق للملفات الأخيرة.<br>
+      <strong>على iPhone، لازم تعيد تثبيت التطبيق عشان الأيقونة الجديدة تظهر.</strong>
+    </p>
+
+    <div class="reinstall-box">
+      <div class="reinstall-box-title">📱 خطوات إعادة التثبيت (iOS):</div>
+      <ol class="reinstall-steps">
+        <li>روح للشاشة الرئيسية</li>
+        <li>اضغط مطوّلاً على أيقونة التطبيق</li>
+        <li>اختر <strong>"إزالة الإشارة المرجعية"</strong> أو <strong>"حذف التطبيق"</strong></li>
+        <li>افتح الموقع في <strong>Safari</strong></li>
+        <li>اضغط زر <strong>المشاركة</strong> (⬆️)</li>
+        <li>اختر <strong>"إضافة إلى الشاشة الرئيسية"</strong></li>
+      </ol>
+    </div>
+
+    <div class="reinstall-note">
+      💡 <strong>ملاحظة:</strong> التطبيق اشتغل بالفعل بالكود الجديد. لكن <strong>الأيقونة</strong> اللي على الشاشة الرئيسية لازم تتغير يدويًا.
+    </div>
+
+    <button class="update-btn" id="proceedBtn" style="margin-top: 20px;">
+      <span class="update-btn-icon">🚀</span>
+      <span class="update-btn-text">فتح التطبيق</span>
+    </button>
+
+    <p class="update-note">
+      ⚡ يمكنك المتابعة بالبرنامج الآن
+    </p>
+  `;
+
+  const proceedBtn = document.getElementById('proceedBtn');
+  if (proceedBtn) {
+    proceedBtn.onclick = () => {
+      console.log('🚀 Proceeding to dashboard');
+      window.location.href = 'dashboard.html';
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Desktop Success (Auto-update)
+// ═══════════════════════════════════════════════════════
+
+function showDesktopSuccess(card) {
+  card.innerHTML = `
+    <div class="update-icon">✅</div>
+    <h1 class="update-title">تم التحديث بنجاح</h1>
+    <p class="update-message">
+      ✅ تم تحديث التطبيق بنجاح.<br>
+      <strong>الأيقونة الجديدة هتظهر تلقائيًا خلال 24 ساعة.</strong>
+    </p>
+
+    <div class="auto-update-note">
+      <div class="auto-update-icon">🔄</div>
+      <div class="auto-update-text">
+        <strong>تحديث تلقائي</strong>
+        <span>لا تحتاج لعمل أي شيء</span>
+      </div>
+    </div>
+
+    <button class="update-btn" id="proceedBtn" style="margin-top: 20px;">
+      <span class="update-btn-icon">🚀</span>
+      <span class="update-btn-text">فتح التطبيق</span>
+    </button>
+  `;
+
+  const proceedBtn = document.getElementById('proceedBtn');
+  if (proceedBtn) {
+    proceedBtn.onclick = () => {
+      console.log('🚀 Proceeding to dashboard');
+      window.location.href = 'dashboard.html';
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   Check Auth
 // ═══════════════════════════════════════════════════════
 
 function checkAuth() {
@@ -200,13 +316,9 @@ function checkAuth() {
 // ═══════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
-  // ⚡ تحقق من الصلاحية
   if (!checkAuth()) return;
-
-  // ⚡ حمّل معلومات الإصدار
   loadVersionInfo();
 
-  // ⚡ اربط الزر
   if (updateBtn) {
     updateBtn.onclick = handleUpdate;
   }
