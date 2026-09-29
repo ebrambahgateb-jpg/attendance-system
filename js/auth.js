@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Authentication (Firebase Auth)
 //   ⚡ محدّث: Auto-sync للصورة + Sign Up Flow Support
-//   ⚡ محدّث: PWA Update Check قبل Dashboard
+//   ⚡ محدّث: PWA Update Check قبل Dashboard + Workspace Selection
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -32,7 +32,10 @@ import {
 // ═══ Global State ═══
 let currentUser = null;
 
-// ═══ Screen Management ═══
+// ═══════════════════════════════════════════════════════
+//   Screen Management
+// ═══════════════════════════════════════════════════════
+
 function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const screen = document.getElementById(screenId);
@@ -46,7 +49,10 @@ function showMessage(msg, type) {
   loginMessage.className = 'message ' + (type || '');
 }
 
-// ═══ Sign In with Google ═══
+// ═══════════════════════════════════════════════════════
+//   Sign In with Google
+// ═══════════════════════════════════════════════════════
+
 async function signInWithGoogle() {
   const googleSignInBtn = document.getElementById('googleSignInBtn');
   if (googleSignInBtn) googleSignInBtn.disabled = true;
@@ -77,7 +83,10 @@ async function signInWithGoogle() {
   }
 }
 
-// ═══ Check User in Firestore ═══
+// ═══════════════════════════════════════════════════════
+//   Check User in Firestore
+// ═══════════════════════════════════════════════════════
+
 async function checkUserInFirestore(firebaseUser) {
   try {
     const accountRef = doc(db, COLLECTIONS.ACCOUNTS, firebaseUser.uid);
@@ -184,7 +193,7 @@ async function checkUserInFirestore(firebaseUser) {
       currentWorkspace: null
     };
 
-        // ═══════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
     //   ⚡ الحالة 5: فحص PWA Update قبل أي إجراء
     //   (قبل Dashboard وكمان قبل Workspace Selection)
     // ═══════════════════════════════════════════════════
@@ -200,18 +209,14 @@ async function checkUserInFirestore(firebaseUser) {
       const { from, to } = needsUpdate;
       console.log(`🔄 PWA update needed: v${from} → v${to}`);
 
-      // ⚡ خزّن الـrole المختار (أو أول role) — للرجوع بعد التحديث
-      //    لو المستخدم عنده role واحد بس → نحفظه
-      //    لو عنده كذا role → نحفظ إننا محتاجين نختار workspace بعد التحديث
-
+      // ⚡ خزّن حالة الأدوار
       if (roles.length === 1) {
-        // ⚡ احفظ الـworkspace عشان بعد التحديث يدخل على طول
+        // ⚡ role واحد → بعد التحديث يدخل مباشرة للداشبورد
         localStorage.setItem('currentWorkspace', roles[0]);
+        localStorage.removeItem('_pendingRoles');
       } else {
-        // ⚡ امسح أي workspace محفوظ عشان بعد التحديث يروح لصفحة الاختيار
+        // ⚡ أدوار متعددة → بعد التحديث يعرض صفحة اختيار الواجهة
         localStorage.removeItem('currentWorkspace');
-
-        // ⚡ خزّن الأدوار عشان بعد التحديث نعرض الصفحة تاني
         localStorage.setItem('_pendingRoles', JSON.stringify(roles));
       }
 
@@ -504,13 +509,20 @@ async function goToDashboard(workspaceId) {
   localStorage.setItem('currentUser', JSON.stringify(currentUser));
   localStorage.setItem('currentWorkspace', workspaceId);
 
-  // ⚡ ⚡ ⚡ فحص إصدار PWA قبل الدخول
+  // ⚡ فحص إصدار PWA قبل الدخول
   try {
     const needsUpdate = await checkPWAUpdate();
 
     if (needsUpdate) {
       const { from, to } = needsUpdate;
       console.log(`🔄 Redirecting to update page: v${from} → v${to}`);
+
+      // ⚡ لو المستخدم عنده roles متعددة → نتأكد إنها محفوظة
+      if (currentUser.roles && Array.isArray(currentUser.roles) && currentUser.roles.length > 1) {
+        localStorage.setItem('_pendingRoles', JSON.stringify(currentUser.roles));
+        localStorage.removeItem('currentWorkspace');
+      }
+
       window.location.href = `pages/update.html?from=${from}&to=${to}`;
       return;
     }
@@ -562,6 +574,7 @@ async function logout() {
   try {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentWorkspace');
+    localStorage.removeItem('_pendingRoles');
     try { sessionStorage.clear(); } catch (e) {}
     await signOut(auth);
   } catch (error) {
@@ -623,18 +636,38 @@ onAuthStateChanged(auth, async (firebaseUser) => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+
         if (parsed.uid === firebaseUser.uid && parsed.currentWorkspace) {
+
           // ⚡ فحص PWA Update قبل التحويل
           const needsUpdate = await checkPWAUpdate();
+
           if (needsUpdate) {
             const { from, to } = needsUpdate;
+            console.log(`🔄 PWA update needed before dashboard`);
+
+            // ⚡ لو المستخدم عنده roles متعددة → نتأكد إنها محفوظة
+            if (parsed.roles && Array.isArray(parsed.roles) && parsed.roles.length > 1) {
+              localStorage.setItem('_pendingRoles', JSON.stringify(parsed.roles));
+              localStorage.removeItem('currentWorkspace');
+            } else {
+              // ⚡ role واحد → احتفظ بالـworkspace
+              if (!localStorage.getItem('currentWorkspace')) {
+                localStorage.setItem('currentWorkspace', parsed.currentWorkspace);
+              }
+            }
+
             window.location.href = `pages/update.html?from=${from}&to=${to}`;
             return;
           }
+
+          // ⚡ محدّث → الداشبورد
           window.location.href = 'pages/dashboard.html';
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Parse saved user error:', e);
+      }
     }
 
     await checkUserInFirestore(firebaseUser);
