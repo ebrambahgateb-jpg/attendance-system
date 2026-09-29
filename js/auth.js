@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════
 //   Authentication (Firebase Auth)
 //   ⚡ محدّث: Auto-sync للصورة + Sign Up Flow Support
+//   ⚡ محدّث: PWA Update Check قبل Dashboard
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -185,7 +186,7 @@ async function checkUserInFirestore(firebaseUser) {
 
     // ═══ الحالة 5: workspace محفوظ ═══
     if (roles.length === 1) {
-      goToDashboard(roles[0]);
+      await goToDashboard(roles[0]);
       return;
     }
 
@@ -453,15 +454,68 @@ function showWorkspaceSelection(roles) {
   showScreen('roleScreen');
 }
 
-// ═══ Go to Dashboard ═══
-function goToDashboard(workspaceId) {
+// ═══════════════════════════════════════════════════════
+//   ⚡ Go to Dashboard — with PWA update check
+// ═══════════════════════════════════════════════════════
+
+async function goToDashboard(workspaceId) {
   if (!currentUser) return;
 
   currentUser.currentWorkspace = workspaceId;
   localStorage.setItem('currentUser', JSON.stringify(currentUser));
   localStorage.setItem('currentWorkspace', workspaceId);
 
+  // ⚡ ⚡ ⚡ فحص إصدار PWA قبل الدخول
+  try {
+    const needsUpdate = await checkPWAUpdate();
+
+    if (needsUpdate) {
+      const { from, to } = needsUpdate;
+      console.log(`🔄 Redirecting to update page: v${from} → v${to}`);
+      window.location.href = `pages/update.html?from=${from}&to=${to}`;
+      return;
+    }
+  } catch (err) {
+    console.warn('⚠️ checkPWAUpdate error:', err.message);
+  }
+
+  // ⚡ محدّث → الداشبورد
   window.location.href = 'pages/dashboard.html';
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Check PWA Update
+// ═══════════════════════════════════════════════════════
+
+async function checkPWAUpdate() {
+  try {
+    const settingsRef = doc(db, COLLECTIONS.SETTINGS, 'main');
+    const settingsSnap = await getDoc(settingsRef);
+
+    if (!settingsSnap.exists()) return null;
+
+    const settings = settingsSnap.data();
+    const currentVersion = Number(settings.PWAIconVersion) || 0;
+
+    if (currentVersion === 0) return null;
+
+    const seenVersion = Number(localStorage.getItem('pwa_icon_version_seen')) || 0;
+
+    console.log(`📱 PWA version: current=${currentVersion}, seen=${seenVersion}`);
+
+    // ⚡ محدّث
+    if (currentVersion <= seenVersion) {
+      return null;
+    }
+
+    // ⚡ محتاج تحديث
+    console.log(`🔄 PWA update needed: ${seenVersion} → ${currentVersion}`);
+    return { from: seenVersion, to: currentVersion };
+
+  } catch (err) {
+    console.warn('⚠️ checkPWAUpdate error:', err.message);
+    return null;
+  }
 }
 
 // ═══ Logout ═══
@@ -531,6 +585,13 @@ onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.uid === firebaseUser.uid && parsed.currentWorkspace) {
+          // ⚡ فحص PWA Update قبل التحويل
+          const needsUpdate = await checkPWAUpdate();
+          if (needsUpdate) {
+            const { from, to } = needsUpdate;
+            window.location.href = `pages/update.html?from=${from}&to=${to}`;
+            return;
+          }
           window.location.href = 'pages/dashboard.html';
           return;
         }
