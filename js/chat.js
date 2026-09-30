@@ -1118,10 +1118,9 @@ function renderChatMain() {
           <div class="chat-header-status ${statusClass}" id="chatHeaderStatus">${statusText}</div>
         </div>
       </div>
-      <div class="chat-header-actions">
+            <div class="chat-header-actions">
         <button class="chat-header-btn" id="chatSearchBtn" title="بحث">🔍</button>
-        <button class="chat-header-btn" id="chatMuteBtn" title="${isMuted ? 'إلغاء الكتم' : 'كتم'}">${isMuted ? '🔔' : '🔕'}</button>
-        ${canManage ? `<button class="chat-header-btn" id="chatGroupSettingsBtn" title="إعدادات المجموعة">⚙️</button>` : ''}
+        <button class="chat-menu-btn" id="chatMenuBtn" title="المزيد">⋮</button>
       </div>
     </div>
 
@@ -1163,11 +1162,14 @@ function renderChatMain() {
 
         <div class="chat-mention-dropdown" id="chatMentionDropdown" style="display:none;"></div>
 
-        <div class="chat-input-bar">
-          <button class="chat-input-btn" id="chatImageBtn" type="button" title="صورة">📎</button>
-          <button class="chat-input-btn" id="chatMentionBtn" type="button" title="إشارة @">@</button>
+                <div class="chat-input-bar">
+          <button class="chat-emoji-inline-btn" id="chatEmojiBtn" type="button" title="إيموجي">😀</button>
           <input type="text" id="chatInput" class="chat-input" placeholder="اكتب رسالة..." autocomplete="off" maxlength="${MAX_MESSAGE_LENGTH}" />
-          <button class="chat-input-btn chat-send-btn" id="chatSendBtn" type="button" title="إرسال">📤</button>
+          <div class="chat-input-actions">
+            <button class="chat-input-btn" id="chatImageBtn" type="button" title="إرفاق">📎</button>
+            <button class="chat-input-btn" id="chatCameraBtn" type="button" title="الكاميرا">📷</button>
+            <button class="chat-input-btn chat-send-btn" id="chatSendBtn" type="button" title="إرسال">✔️</button>
+          </div>
         </div>
       </div>
     `}
@@ -1186,25 +1188,23 @@ function renderChatMain() {
   const searchBtn = document.getElementById('chatSearchBtn');
   if (searchBtn) searchBtn.onclick = window.toggleSearchBar;
 
-  const muteBtn = document.getElementById('chatMuteBtn');
-  if (muteBtn) muteBtn.onclick = () => window.toggleMuteChat(chat.id);
-
-  const groupSettingsBtn = document.getElementById('chatGroupSettingsBtn');
-  if (groupSettingsBtn) groupSettingsBtn.onclick = () => window.openGroupSettings(chat.id);
+    const menuBtn = document.getElementById('chatMenuBtn');
+  if (menuBtn) {
+    menuBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showChatHeaderMenu(chat, isMuted, canManage);
+    };
+  }
 
   const imageBtn = document.getElementById('chatImageBtn');
   if (imageBtn) imageBtn.onclick = window.openChatImagePicker;
 
-  const mentionBtn = document.getElementById('chatMentionBtn');
-  if (mentionBtn) {
-    mentionBtn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.showMentionDropdown(null);
-      const input = document.getElementById('chatInput');
-      if (input) input.focus();
-    };
-  }
+  const cameraBtn = document.getElementById('chatCameraBtn');
+  if (cameraBtn) cameraBtn.onclick = window.openCamera;
+
+  const emojiBtn = document.getElementById('chatEmojiBtn');
+  if (emojiBtn) emojiBtn.onclick = window.toggleEmojiPicker;
 
   const sendBtn = document.getElementById('chatSendBtn');
   if (sendBtn) sendBtn.onclick = window.sendChatMessage;
@@ -4596,9 +4596,25 @@ function renderPollItem(msg) {
 const _originalRenderChatMain = renderChatMain;
 const _originalRenderMessageItem = renderMessageItem;
 
-// ⚡ Override renderChatMain — نضيف الأزرار الجديدة
+// ⚡ Override renderChatMain — نضيف الإيموجي picker فقط
 renderChatMain = function() {
   _originalRenderChatMain();
+
+  // ⚡ أضف الـEmoji Picker container
+  const inputWrapper = document.querySelector('.chat-input-wrapper');
+  if (inputWrapper && !document.getElementById('chatEmojiPicker')) {
+    const picker = document.createElement('div');
+    picker.id = 'chatEmojiPicker';
+    picker.className = 'chat-emoji-picker';
+    picker.style.display = 'none';
+    inputWrapper.appendChild(picker);
+  }
+
+  // ⚡ طبّق الـWallpaper
+  if (typeof applyWallpaper === 'function' && chatActiveChatId) {
+    applyWallpaper(chatActiveChatId);
+  }
+};
 
   // ⚡ أضف الأزرار الجديدة للـheader
   const headerActions = document.querySelector('.chat-header-actions');
@@ -4754,5 +4770,100 @@ document.addEventListener('keydown', (e) => {
     if (emojiPickerActive) closeEmojiPicker();
   }
 });
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Chat Header Menu (⋮)
+// ═══════════════════════════════════════════════════════
+
+function showChatHeaderMenu(chat, isMuted, canManage) {
+  // ⚡ اقفل أي menu مفتوح
+  closeChatHeaderMenu();
+
+  const menu = document.createElement('div');
+  menu.id = 'chatHeaderMenu';
+  menu.className = 'chat-header-menu';
+
+  menu.innerHTML = `
+    <button class="chat-header-menu-item" data-action="poll">
+      <span class="chat-header-menu-icon">📊</span>
+      <span>إنشاء تصويت</span>
+    </button>
+
+    <button class="chat-header-menu-item" data-action="wallpaper">
+      <span class="chat-header-menu-icon">🖼️</span>
+      <span>خلفية المحادثة</span>
+    </button>
+
+    <button class="chat-header-menu-item" data-action="mute">
+      <span class="chat-header-menu-icon">${isMuted ? '🔔' : '🔕'}</span>
+      <span>${isMuted ? 'إلغاء الكتم' : 'كتم المحادثة'}</span>
+    </button>
+
+    <button class="chat-header-menu-item" data-action="starred">
+      <span class="chat-header-menu-icon">⭐</span>
+      <span>المحفوظات</span>
+    </button>
+
+    ${canManage ? `
+      <button class="chat-header-menu-item" data-action="settings">
+        <span class="chat-header-menu-icon">⚙️</span>
+        <span>إعدادات المجموعة</span>
+      </button>
+    ` : ''}
+  `;
+
+  // ⚡ ضيف في الهيدر (position relative)
+  const headerActions = document.querySelector('.chat-header-actions');
+  if (headerActions) {
+    headerActions.style.position = 'relative';
+    headerActions.appendChild(menu);
+  }
+
+  // ⚡ ربط الأزرار
+  menu.querySelectorAll('.chat-header-menu-item').forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      closeChatHeaderMenu();
+
+      if (action === 'poll') {
+        if (typeof window.openPollModal === 'function') window.openPollModal();
+      } else if (action === 'wallpaper') {
+        if (typeof window.openWallpaperModal === 'function') window.openWallpaperModal();
+      } else if (action === 'mute') {
+        window.toggleMuteChat(chat.id);
+      } else if (action === 'starred') {
+        if (typeof window.openStarredModal === 'function') window.openStarredModal();
+      } else if (action === 'settings') {
+        if (typeof window.openGroupSettings === 'function') window.openGroupSettings(chat.id);
+      }
+    };
+  });
+
+  // ⚡ اقفل عند الضغط خارج
+  setTimeout(() => {
+    document.addEventListener('click', closeChatHeaderMenuOnOutsideClick, { once: true });
+  }, 100);
+}
+
+function closeChatHeaderMenu() {
+  const menu = document.getElementById('chatHeaderMenu');
+  if (menu) menu.remove();
+}
+
+function closeChatHeaderMenuOnOutsideClick(e) {
+  const menu = document.getElementById('chatHeaderMenu');
+  if (!menu) return;
+
+  if (!menu.contains(e.target) && !e.target.closest('#chatMenuBtn')) {
+    closeChatHeaderMenu();
+  } else {
+    // ⚡ لو الضغط جوه → نعيد التسجيل
+    setTimeout(() => {
+      document.addEventListener('click', closeChatHeaderMenuOnOutsideClick, { once: true });
+    }, 100);
+  }
+}
+
+window.closeChatHeaderMenu = closeChatHeaderMenu;
 
 console.log('✅ chat.js loaded (full — phase 1 + 2 + 3 + 3-3)');
