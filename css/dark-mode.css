@@ -6,10 +6,11 @@
 
 /* ═══════════════════════════════════════════════════════
    ⚡ Dark Mode Variables
-   ⚡ ملاحظة: أهم قسم — يخلي كل الملفات تتأثر تلقائيًا
    ═══════════════════════════════════════════════════════ */
 
-html[data-theme="dark"] {
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] body.dashboard-body {
   /* ═══ Brand ═══ */
   --primary: #3b82f6;
   --primary-hover: #2563eb;
@@ -73,6 +74,23 @@ html[data-theme="dark"] {
   --shadow-focus: 0 0 0 3px rgba(96, 165, 250, 0.25);
 }
 
+/* ═══ Force body background ═══ */
+html[data-theme="dark"] body {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] body.dashboard-body {
+  background: var(--bg) !important;
+  background-image: none !important;
+}
+
+/* ═══ Force bg-overlay off in dark ═══ */
+html[data-theme="dark"] .bg-overlay {
+  opacity: 0 !important;
+  display: none !important;
+}
+
 /* ═══════════════════════════════════════════════════════
    ⚡ Smooth Theme Transition
    ═══════════════════════════════════════════════════════ */
@@ -97,13 +115,13 @@ html.theme-transitioning *::after {
   border: 1px solid var(--border);
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 12px);
   cursor: pointer;
-  font-size: var(--font-xl);
+  font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-base);
+  transition: all 0.25s ease;
   color: var(--text);
   position: relative;
   overflow: hidden;
@@ -118,7 +136,7 @@ html.theme-transitioning *::after {
 
 .dark-mode-toggle .dm-icon {
   display: inline-block;
-  transition: transform var(--transition-slow);
+  transition: transform 0.4s ease;
   line-height: 1;
 }
 
@@ -141,7 +159,7 @@ html[data-theme="dark"] .dark-mode-toggle .dm-icon {
   .dark-mode-toggle {
     width: 38px;
     height: 38px;
-    font-size: var(--font-md);
+    font-size: 18px;
   }
 }
 
@@ -155,7 +173,7 @@ html[data-theme="dark"] .pd-qr-box,
 html[data-theme="dark"] #qrCodeContainer,
 html[data-theme="dark"] #pdQrCanvas {
   background: #ffffff !important;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
 }
 
 /* ═══ Chat Bubble — my message ═══ */
@@ -165,7 +183,7 @@ html[data-theme="dark"] .chat-message.mine .chat-message-bubble {
   border-color: transparent;
 }
 
-/* ═══ Read Receipts — ✓✓ (يحتاج ألوان مميزة) ═══ */
+/* ═══ Read Receipts ═══ */
 html[data-theme="dark"] .chat-read-receipt.sent {
   color: rgba(255, 255, 255, 0.55);
 }
@@ -178,7 +196,7 @@ html[data-theme="dark"] .chat-read-receipt.partial {
   color: #93c5fd;
 }
 
-/* ═══ Mention في رسالة (يحتاج خلفية شفافة) ═══ */
+/* ═══ Mention في رسالة ═══ */
 html[data-theme="dark"] .chat-mention {
   color: var(--mention);
   background: rgba(96, 165, 250, 0.25);
@@ -189,7 +207,7 @@ html[data-theme="dark"] .chat-message.mine .chat-mention {
   background: rgba(255, 255, 255, 0.25);
 }
 
-/* ═══ Search Highlight — يحتاج mark خاص ═══ */
+/* ═══ Search Highlight ═══ */
 html[data-theme="dark"] .chat-search-mark {
   background: #fbbf24;
   color: #000000;
@@ -209,21 +227,20 @@ html[data-theme="dark"] .chat-item.active .chat-online-dot {
   border-color: var(--primary-hover);
 }
 
-/* ═══ Camera Modal — خلفية سودة دايماً ═══ */
+/* ═══ Camera Modal ═══ */
 html[data-theme="dark"] .camera-modal-overlay {
   background: #000000;
 }
 
-/* ═══ Image Modal — خلفية سودة ═══ */
+/* ═══ Image Modal ═══ */
 html[data-theme="dark"] .chat-image-modal {
   background: rgba(0, 0, 0, 0.98);
 }
 
 /* ═══════════════════════════════════════════════════════
-   ⚡ Element-specific — للعناصر اللي محتاجة ألوان خاصة
+   ⚡ Status Badges
    ═══════════════════════════════════════════════════════ */
 
-/* ═══ Status Badges ═══ */
 html[data-theme="dark"] .status-badge.active,
 html[data-theme="dark"] .pd-status-badge.active {
   background: var(--success-bg);
