@@ -2,7 +2,8 @@
 //   Chat — Internal Messaging System
 //   ⚡ 1-to-1 + Groups + Channels + Realtime
 //   ⚡ Reply + Edit + Delete + Swipe
-//   ⚡ Typing Indicator + Read Receipts + Online Status
+//   ⚡ Typing + Read Receipts + Online Status
+//   ⚡ Group Management + Mute + Mentions (جديد)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -19,6 +20,7 @@ import {
   onSnapshot,
   setDoc,
   arrayUnion,
+  arrayRemove,
   deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -50,12 +52,19 @@ let chatOnlineInterval = null;
 let chatOnlineUnsubscribe = null;
 let chatOnlineStatuses = {};
 
+// ═══ ⚡ Mute State ═══
+let chatMutedIds = new Set();
+
+// ═══ ⚡ Mention State ═══
+let mentionDropdownActive = false;
+let mentionStartIndex = -1;
+
 // ═══ Constants ═══
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-const TYPING_TIMEOUT_MS = 3000;        // ⚡ 3 ثواني
-const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // ⚡ دقيقتين
-const ONLINE_HEARTBEAT_MS = 30000;      // ⚡ 30 ثانية
+const TYPING_TIMEOUT_MS = 3000;
+const ONLINE_TIMEOUT_MS = 2 * 60 * 1000;
+const ONLINE_HEARTBEAT_MS = 30000;
 
 // ═══ Default Channels ═══
 const DEFAULT_CHANNELS = [
@@ -119,6 +128,9 @@ async function loadChatPage(area) {
       }
     });
 
+    // ⚡ حمّل الـMuted Chats
+    loadMutedChats();
+
     // ⚡ هيّئ القنوات الافتراضية
     await ensureDefaultChannels();
 
@@ -127,8 +139,6 @@ async function loadChatPage(area) {
 
     // ⚡ ابدأ Listener
     startChatsListener();
-
-    // ⚡ ⚡ ⚡ ابدأ Online Heartbeat
     startOnlineHeartbeat();
     startOnlineListener();
 
@@ -143,19 +153,61 @@ async function loadChatPage(area) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Online Status — Heartbeat & Listener
+//   ⚡ Mute Chat — localStorage
+// ═══════════════════════════════════════════════════════
+
+function loadMutedChats() {
+  try {
+    const saved = localStorage.getItem('mutedChats');
+    if (saved) {
+      const arr = JSON.parse(saved);
+      chatMutedIds = new Set(Array.isArray(arr) ? arr : []);
+    }
+  } catch (e) {
+    chatMutedIds = new Set();
+  }
+}
+
+function saveMutedChats() {
+  try {
+    localStorage.setItem('mutedChats', JSON.stringify([...chatMutedIds]));
+  } catch (e) {}
+}
+
+function isChatMuted(chatId) {
+  return chatMutedIds.has(chatId);
+}
+
+window.toggleMuteChat = function(chatId) {
+  if (!chatId) return;
+
+  if (chatMutedIds.has(chatId)) {
+    chatMutedIds.delete(chatId);
+    showToast('🔔 تم إلغاء الكتم');
+  } else {
+    chatMutedIds.add(chatId);
+    showToast('🔕 تم كتم المحادثة');
+  }
+
+  saveMutedChats();
+  renderChatList();
+
+  // ⚡ حدّث الـheader لو مفتوح
+  if (chatActiveChatId === chatId) {
+    updateChatHeaderMuteButton();
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Online Status
 // ═══════════════════════════════════════════════════════
 
 function startOnlineHeartbeat() {
   if (chatOnlineInterval) clearInterval(chatOnlineInterval);
 
-  // ⚡ نبض فوري
   updateMyOnlineStatus();
-
-  // ⚡ نبض دوري كل 30 ثانية
   chatOnlineInterval = setInterval(updateMyOnlineStatus, ONLINE_HEARTBEAT_MS);
 
-  // ⚡ نبض عند إغلاق الصفحة
   window.addEventListener('beforeunload', markMeOffline);
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
@@ -185,7 +237,6 @@ function markMeOffline() {
 
   try {
     const personRef = doc(db, COLLECTIONS.PEOPLE, chatPerson.id);
-    // ⚡ fire & forget
     updateDoc(personRef, {
       LastSeen: new Date().toISOString()
     }).catch(() => {});
@@ -197,13 +248,11 @@ function startOnlineListener() {
     try { chatOnlineUnsubscribe(); } catch (e) {}
   }
 
-  // ⚡ استخدم الأشخاص اللي محملين
   chatOnlineStatuses = {};
   Object.keys(chatPeople).forEach(id => {
     chatOnlineStatuses[id] = chatPeople[id].LastSeen || null;
   });
 
-  // ⚡ listener على collection people
   try {
     chatOnlineUnsubscribe = onSnapshot(
       collection(db, COLLECTIONS.PEOPLE),
@@ -212,9 +261,7 @@ function startOnlineListener() {
           const p = d.data();
           chatOnlineStatuses[d.id] = p.LastSeen || null;
         });
-        // ⚡ حدّث الـUI
         updateOnlineStatusUI();
-        // ⚡ حدّث القائمة
         renderChatList();
       },
       (err) => {
@@ -249,7 +296,6 @@ function getOnlineStatusText(personId) {
 
   if (diff < ONLINE_TIMEOUT_MS) return '🟢 متاح الآن';
 
-  // ⚡ منذ X
   const diffMinutes = Math.floor(diff / 60000);
   if (diffMinutes < 60) return `منذ ${diffMinutes} دقيقة`;
 
@@ -263,7 +309,6 @@ function getOnlineStatusText(personId) {
 }
 
 function updateOnlineStatusUI() {
-  // ⚡ حدّث الـheader status
   const statusEl = document.getElementById('chatHeaderStatus');
   if (!statusEl || !chatActiveChat) return;
 
@@ -450,6 +495,9 @@ function renderChatList() {
 
   list.querySelectorAll('.chat-item').forEach(item => {
     item.onclick = () => window.openChat(item.dataset.chatId);
+
+    // ⚡ long press للـMute في القائمة
+    setupChatItemLongPress(item);
   });
 }
 
@@ -460,6 +508,7 @@ function renderChatListItem(chat) {
   const lastMsg = chat.LastMessage;
   const lastMsgText = lastMsg ? lastMsg.Text || (lastMsg.Type === 'image' ? '📷 صورة' : '') : 'لا يوجد رسائل';
   const lastMsgTime = lastMsg?.SentAt ? formatRelativeTime(parseDate(lastMsg.SentAt)) : '';
+  const isMuted = isChatMuted(chat.id);
 
   let typeBadge = '';
   if (chat.Type === 'channel' || chat.IsDefault) {
@@ -468,7 +517,6 @@ function renderChatListItem(chat) {
     typeBadge = '<span class="chat-item-badge">👥</span>';
   }
 
-  // ⚡ Online indicator للـdirect
   let onlineDot = '';
   if (chat.Type === 'direct') {
     const otherId = (chat.Members || []).find(id => id !== chatPerson.id);
@@ -477,15 +525,17 @@ function renderChatListItem(chat) {
     }
   }
 
+  const muteBadge = isMuted ? '<span class="chat-mute-badge" title="مكتوم">🔕</span>' : '';
+
   return `
-    <div class="chat-item ${isActive ? 'active' : ''}" data-chat-id="${chat.id}">
+    <div class="chat-item ${isActive ? 'active' : ''} ${isMuted ? 'muted' : ''}" data-chat-id="${chat.id}">
       <div class="chat-item-avatar">
         ${avatar}
         ${onlineDot}
       </div>
       <div class="chat-item-content">
         <div class="chat-item-header">
-          <div class="chat-item-name">${typeBadge} ${escapeHtml(displayName)}</div>
+          <div class="chat-item-name">${typeBadge} ${escapeHtml(displayName)} ${muteBadge}</div>
           ${lastMsgTime ? `<div class="chat-item-time">${lastMsgTime}</div>` : ''}
         </div>
         <div class="chat-item-preview">${escapeHtml(lastMsgText)}</div>
@@ -493,6 +543,95 @@ function renderChatListItem(chat) {
     </div>
   `;
 }
+
+function setupChatItemLongPress(item) {
+  let timer = null;
+
+  const openMenu = (x, y) => {
+    const chatId = item.dataset.chatId;
+    showChatActionsMenu(chatId, x, y);
+    if (navigator.vibrate) navigator.vibrate(30);
+  };
+
+  item.addEventListener('touchstart', (e) => {
+    timer = setTimeout(() => {
+      e.preventDefault();
+      openMenu(e.touches[0].clientX, e.touches[0].clientY);
+    }, 500);
+  }, { passive: true });
+
+  item.addEventListener('touchend', () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+
+  item.addEventListener('touchmove', () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+
+  item.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    openMenu(e.clientX, e.clientY);
+  });
+}
+
+function showChatActionsMenu(chatId, x, y) {
+  closeChatActionsMenu();
+
+  const chat = chatConversations.find(c => c.id === chatId);
+  if (!chat) return;
+
+  const isMuted = isChatMuted(chatId);
+  const canManage = canManageGroup(chat);
+
+  const menu = document.createElement('div');
+  menu.id = 'chatActionsMenu';
+  menu.className = 'message-actions-menu';
+
+  const left = Math.min(x, window.innerWidth - 200);
+  const top = Math.min(y, window.innerHeight - 300);
+
+  menu.innerHTML = `
+    <div class="msg-menu-backdrop"></div>
+    <div class="msg-menu-content" style="left: ${left}px; top: ${top}px;">
+      <button class="msg-menu-item" data-action="mute">
+        <span>${isMuted ? '🔔' : '🔕'}</span> <span>${isMuted ? 'إلغاء الكتم' : 'كتم المحادثة'}</span>
+      </button>
+      ${canManage ? `
+        <button class="msg-menu-item" data-action="manage">
+          <span>⚙️</span> <span>إعدادات المجموعة</span>
+        </button>
+      ` : ''}
+      <button class="msg-menu-item cancel" data-action="cancel">
+        <span>✕</span> <span>إلغاء</span>
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  menu.querySelector('.msg-menu-backdrop').onclick = closeChatActionsMenu;
+
+  menu.querySelectorAll('.msg-menu-item').forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      closeChatActionsMenu();
+
+      if (action === 'mute') window.toggleMuteChat(chatId);
+      else if (action === 'manage') window.openGroupSettings(chatId);
+    };
+  });
+}
+
+function closeChatActionsMenu() {
+  const menu = document.getElementById('chatActionsMenu');
+  if (menu) menu.remove();
+}
+
+window.closeChatActionsMenu = closeChatActionsMenu;
+
+// ═══════════════════════════════════════════════════════
+//   Helpers
+// ═══════════════════════════════════════════════════════
 
 function getChatDisplayName(chat) {
   if (chat.Name) return chat.Name;
@@ -523,6 +662,16 @@ function getChatAvatar(chat) {
   return '💬';
 }
 
+function canManageGroup(chat) {
+  if (!chat) return false;
+  if (!['group'].includes(chat.Type)) return false;
+
+  const isOwnerOrAdmin = ['Owner', 'Admin'].includes(chatWorkspace);
+  const isGroupAdmin = Array.isArray(chat.Admins) && chat.Admins.includes(chatPerson.id);
+
+  return isOwnerOrAdmin || isGroupAdmin;
+}
+
 // ═══════════════════════════════════════════════════════
 //   Mobile Helpers
 // ═══════════════════════════════════════════════════════
@@ -534,7 +683,6 @@ function isMobile() {
 function showChatMobile() {
   const sidebar = document.getElementById('chatSidebar');
   const main = document.getElementById('chatMain');
-
   if (sidebar) sidebar.classList.add('hidden-mobile');
   if (main) main.classList.add('active-mobile');
 }
@@ -542,7 +690,6 @@ function showChatMobile() {
 function showSidebarMobile() {
   const sidebar = document.getElementById('chatSidebar');
   const main = document.getElementById('chatMain');
-
   if (sidebar) sidebar.classList.remove('hidden-mobile');
   if (main) main.classList.remove('active-mobile');
 }
@@ -563,7 +710,6 @@ window.openChat = async function(chatId) {
     chatUnsubscribeMessages = null;
   }
 
-  // ⚡ ⚡ ⚡ اقفل typing listener القديم
   if (chatTypingUnsubscribe) {
     try { chatTypingUnsubscribe(); } catch (e) {}
     chatTypingUnsubscribe = null;
@@ -577,16 +723,12 @@ window.openChat = async function(chatId) {
     }
 
     chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
-
-    // ⚡ صفّر الـReply
     window.cancelReply();
-
-    // ⚡ ⚡ ⚡ صفّر typing users
     chatTypingUsers = {};
 
     renderChatMain();
     startMessagesListener(chatId);
-    startTypingListener(chatId); // ⚡ بدأ Typing Listener
+    startTypingListener(chatId);
 
     if (isMobile()) showChatMobile();
 
@@ -597,7 +739,7 @@ window.openChat = async function(chatId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Typing Indicator — Listener
+//   ⚡ Typing Indicator
 // ═══════════════════════════════════════════════════════
 
 function startTypingListener(chatId) {
@@ -610,9 +752,8 @@ function startTypingListener(chatId) {
 
       snap.docs.forEach(d => {
         const data = d.data();
-        if (d.id === chatPerson.id) return; // ⚡ تجاهل نفسي
+        if (d.id === chatPerson.id) return;
 
-        // ⚡ تحقق من الـtimeout
         const timestamp = data.timestamp ? new Date(data.timestamp).getTime() : 0;
         if (now - timestamp < TYPING_TIMEOUT_MS) {
           chatTypingUsers[d.id] = {
@@ -657,10 +798,6 @@ function updateTypingIndicator() {
   typingEl.style.display = 'block';
 }
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Typing Indicator — Send
-// ═══════════════════════════════════════════════════════
-
 async function sendTypingIndicator() {
   if (!chatActiveChatId || !chatPerson) return;
 
@@ -698,8 +835,9 @@ function renderChatMain() {
   const chat = chatActiveChat;
   const displayName = getChatDisplayName(chat);
   const isReadOnly = chat.ReadOnly && !['Owner', 'Admin'].includes(chatWorkspace);
+  const isMuted = isChatMuted(chat.id);
+  const canManage = canManageGroup(chat);
 
-  // ⚡ status text
   let statusText = '';
   let statusClass = '';
 
@@ -727,6 +865,10 @@ function renderChatMain() {
           <div class="chat-header-status ${statusClass}" id="chatHeaderStatus">${statusText}</div>
         </div>
       </div>
+      <div class="chat-header-actions">
+        <button class="chat-header-btn" id="chatMuteBtn" title="${isMuted ? 'إلغاء الكتم' : 'كتم'}">${isMuted ? '🔔' : '🔕'}</button>
+        ${canManage ? `<button class="chat-header-btn" id="chatGroupSettingsBtn" title="إعدادات المجموعة">⚙️</button>` : ''}
+      </div>
     </div>
 
     <div class="chat-messages" id="chatMessages">
@@ -747,8 +889,12 @@ function renderChatMain() {
           </div>
           <button class="chat-reply-preview-close" id="chatReplyPreviewClose" type="button" title="إلغاء">✕</button>
         </div>
+
+        <div class="chat-mention-dropdown" id="chatMentionDropdown" style="display:none;"></div>
+
         <div class="chat-input-bar">
           <button class="chat-input-btn" id="chatImageBtn" type="button" title="صورة">📎</button>
+          <button class="chat-input-btn" id="chatMentionBtn" type="button" title="إشارة @">@</button>
           <input type="text" id="chatInput" class="chat-input" placeholder="اكتب رسالة..." autocomplete="off" maxlength="${MAX_MESSAGE_LENGTH}" />
           <button class="chat-input-btn chat-send-btn" id="chatSendBtn" type="button" title="إرسال">📤</button>
         </div>
@@ -756,7 +902,7 @@ function renderChatMain() {
     `}
   `;
 
-  // ⚡ ربط زر الرجوع
+  // ⚡ ربط الأزرار
   const backBtn = document.getElementById('chatBackBtn');
   if (backBtn) {
     backBtn.addEventListener('click', (e) => {
@@ -766,31 +912,48 @@ function renderChatMain() {
     });
   }
 
-  // ⚡ ربط زر الصورة
+  const muteBtn = document.getElementById('chatMuteBtn');
+  if (muteBtn) muteBtn.onclick = () => window.toggleMuteChat(chat.id);
+
+  const groupSettingsBtn = document.getElementById('chatGroupSettingsBtn');
+  if (groupSettingsBtn) groupSettingsBtn.onclick = () => window.openGroupSettings(chat.id);
+
   const imageBtn = document.getElementById('chatImageBtn');
   if (imageBtn) imageBtn.onclick = window.openChatImagePicker;
 
-  // ⚡ ربط زر الإرسال
+  const mentionBtn = document.getElementById('chatMentionBtn');
+  if (mentionBtn) mentionBtn.onclick = () => window.showMentionDropdown(null);
+
   const sendBtn = document.getElementById('chatSendBtn');
   if (sendBtn) sendBtn.onclick = window.sendChatMessage;
 
-  // ⚡ ربط زر إغلاق الـReply
   const replyCloseBtn = document.getElementById('chatReplyPreviewClose');
   if (replyCloseBtn) replyCloseBtn.onclick = () => window.cancelReply();
 
-  // ⚡ input — ⚡ Typing Indicator
+  // ⚡ input handlers
   const input = document.getElementById('chatInput');
   if (input) {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
+        if (mentionDropdownActive) {
+          e.preventDefault();
+          selectMentionFromDropdown(0);
+          return;
+        }
         e.preventDefault();
         window.sendChatMessage();
       }
+
+      // ⚡ Escape يغلق الـdropdown
+      if (e.key === 'Escape' && mentionDropdownActive) {
+        e.preventDefault();
+        hideMentionDropdown();
+      }
     });
 
-    // ⚡ إرسال typing indicator مع debounce
     input.addEventListener('input', () => {
       sendTypingIndicator();
+      handleMentionTyping(input);
 
       if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
       chatTypingTimeout = setTimeout(() => {
@@ -801,8 +964,15 @@ function renderChatMain() {
     setTimeout(() => input.focus(), 100);
   }
 
-  // ⚡ حدّث typing indicator فورًا
   updateTypingIndicator();
+}
+
+function updateChatHeaderMuteButton() {
+  const btn = document.getElementById('chatMuteBtn');
+  if (!btn || !chatActiveChatId) return;
+  const isMuted = isChatMuted(chatActiveChatId);
+  btn.textContent = isMuted ? '🔔' : '🔕';
+  btn.title = isMuted ? 'إلغاء الكتم' : 'كتم';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -816,8 +986,6 @@ function startMessagesListener(chatId) {
   chatUnsubscribeMessages = onSnapshot(q, (snap) => {
     chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMessages();
-
-    // ⚡ ⚡ ⚡ علّم الرسائل كمقروءة
     markMessagesAsRead();
 
     setTimeout(() => {
@@ -829,23 +997,17 @@ function startMessagesListener(chatId) {
   });
 }
 
-// ═══════════════════════════════════════════════════════
-//   ⚡ Mark Messages as Read
-// ═══════════════════════════════════════════════════════
-
 async function markMessagesAsRead() {
   if (!chatActiveChatId || !chatPerson || !chatMessages.length) return;
 
   try {
     const unreadMessages = chatMessages.filter(msg => {
-      if (msg.SenderID === chatPerson.id) return false; // ⚡ رسائلي
+      if (msg.SenderID === chatPerson.id) return false;
       const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
       return !readBy.includes(chatPerson.id);
     });
 
     if (unreadMessages.length === 0) return;
-
-    console.log(`📖 Marking ${unreadMessages.length} messages as read`);
 
     for (const msg of unreadMessages) {
       const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msg.id);
@@ -925,7 +1087,7 @@ function renderMessageItem(msg) {
       </div>
     `;
   } else {
-    contentHtml = `<div class="chat-message-text">${escapeHtml(msg.Text || '')}</div>`;
+    contentHtml = `<div class="chat-message-text">${formatMessageText(msg.Text || '')}</div>`;
   }
 
   const editedBadge = msg.Edited ? '<span class="chat-edited-badge">✏️ تم التعديل</span>' : '';
@@ -950,11 +1112,10 @@ function renderMessageItem(msg) {
 
   const showSender = !isMine && chatActiveChat && (chatActiveChat.Type === 'group' || chatActiveChat.Type === 'channel');
 
-  // ⚡ ⚡ ⚡ Read Receipts (للرسائل بتاعتي بس)
+  // ⚡ Read Receipts
   let readReceiptHtml = '';
   if (isMine) {
     const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
-    // ⚡ عدد الأعضاء التانيين
     const totalMembers = chatActiveChat.Type === 'direct'
       ? 1
       : Math.max(1, (chatActiveChat.Members || []).length - 1);
@@ -962,19 +1123,19 @@ function renderMessageItem(msg) {
     const readCount = readBy.filter(id => id !== chatPerson.id).length;
 
     if (readCount === 0) {
-      // ⚡ Sent (✓)
       readReceiptHtml = '<span class="chat-read-receipt sent" title="تم الإرسال">✓</span>';
     } else if (readCount >= totalMembers) {
-      // ⚡ Read (✓✓)
       readReceiptHtml = '<span class="chat-read-receipt read" title="تم القراءة">✓✓</span>';
     } else {
-      // ⚡ Partially read
       readReceiptHtml = `<span class="chat-read-receipt partial" title="${readCount} من ${totalMembers} قرأوا">✓✓</span>`;
     }
   }
 
+  // ⚡ Mention check — لو فيه mention ليّ
+  const hasMention = checkMentionsForMe(msg);
+
   return `
-    <div class="chat-message ${isMine ? 'mine' : 'theirs'}"
+    <div class="chat-message ${isMine ? 'mine' : 'theirs'} ${hasMention ? 'mentioned' : ''}"
          data-msg-id="${msg.id}"
          data-msg-mine="${isMine ? '1' : '0'}"
          data-msg-type="${msg.Type || 'text'}">
@@ -999,6 +1160,189 @@ function getSenderAvatar(sender) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Format Message Text (with mentions highlight)
+// ═══════════════════════════════════════════════════════
+
+function formatMessageText(text) {
+  if (!text) return '';
+
+  let html = escapeHtml(text);
+
+  // ⚡ Highlight @mentions
+  html = html.replace(/@([^\s@]+)/g, (match, name) => {
+    return `<span class="chat-mention">${match}</span>`;
+  });
+
+  return html.replace(/\n/g, '<br>');
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Mentions — Logic
+// ═══════════════════════════════════════════════════════
+
+function checkMentionsForMe(msg) {
+  if (!msg || !msg.Text || !chatPerson) return false;
+  if (msg.SenderID === chatPerson.id) return false;
+
+  // ⚡ لو فيه Mentions array
+  if (Array.isArray(msg.Mentions) && msg.Mentions.includes(chatPerson.id)) {
+    return true;
+  }
+
+  // ⚡ fallback — ابحث عن الاسم
+  const myFirstName = chatPerson.FirstName || '';
+  if (myFirstName && msg.Text.includes(`@${myFirstName}`)) {
+    return true;
+  }
+
+  return false;
+}
+
+function handleMentionTyping(input) {
+  const value = input.value;
+  const cursorPos = input.selectionStart;
+
+  // ⚡ ابحث عن آخر @ قبل الـcursor
+  const beforeCursor = value.substring(0, cursorPos);
+  const lastAt = beforeCursor.lastIndexOf('@');
+
+  if (lastAt === -1) {
+    hideMentionDropdown();
+    return;
+  }
+
+  // ⚡ تحقق إن مفيش مسافة بين @ والـcursor
+  const afterAt = beforeCursor.substring(lastAt + 1);
+  if (afterAt.includes(' ') || afterAt.includes('\n')) {
+    hideMentionDropdown();
+    return;
+  }
+
+  mentionStartIndex = lastAt;
+  showMentionDropdown(afterAt);
+}
+
+function showMentionDropdown(searchTerm) {
+  const dropdown = document.getElementById('chatMentionDropdown');
+  if (!dropdown) return;
+
+  // ⚡ فلتر الأعضاء
+  let members = [];
+
+  if (chatActiveChat.Type === 'direct') {
+    // ⚡ في الـ1-to-1 — اذكر الطرف التاني بس
+    const otherId = (chatActiveChat.Members || []).find(id => id !== chatPerson.id);
+    if (otherId && chatPeople[otherId]) {
+      members = [chatPeople[otherId]];
+    }
+  } else {
+    // ⚡ في المجموعات — كل الأعضاء ما عداي
+    const memberIds = (chatActiveChat.Members || []).filter(id => id !== chatPerson.id);
+    members = memberIds.map(id => chatPeople[id]).filter(Boolean);
+  }
+
+  // ⚡ فلتر بالبحث
+  if (searchTerm) {
+    const term = searchTerm.toLowerCase();
+    members = members.filter(p => {
+      const fullName = getPersonFullName(p).toLowerCase();
+      const firstName = (p.FirstName || '').toLowerCase();
+      return fullName.includes(term) || firstName.includes(term);
+    });
+  }
+
+  if (members.length === 0) {
+    hideMentionDropdown();
+    return;
+  }
+
+  mentionDropdownActive = true;
+
+  dropdown.innerHTML = members.slice(0, 8).map((p, idx) => {
+    const name = getPersonFullName(p);
+    const avatar = p.PhotoURL
+      ? `<img src="${p.PhotoURL}" alt="" />`
+      : getInitial(p);
+
+    return `
+      <div class="chat-mention-item" data-person-id="${p.id}" data-person-name="${escapeHtml(p.FirstName || name)}" data-idx="${idx}">
+        <div class="chat-mention-avatar">${avatar}</div>
+        <div class="chat-mention-name">${escapeHtml(name)}</div>
+      </div>
+    `;
+  }).join('');
+
+  dropdown.style.display = 'block';
+
+  // ⚡ ربط الـclick
+  dropdown.querySelectorAll('.chat-mention-item').forEach(el => {
+    el.onclick = () => {
+      insertMention(el.dataset.personId, el.dataset.personName);
+    };
+  });
+}
+
+function hideMentionDropdown() {
+  const dropdown = document.getElementById('chatMentionDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  mentionDropdownActive = false;
+  mentionStartIndex = -1;
+}
+
+function selectMentionFromDropdown(idx) {
+  const dropdown = document.getElementById('chatMentionDropdown');
+  if (!dropdown) return;
+
+  const item = dropdown.querySelector(`.chat-mention-item[data-idx="${idx}"]`);
+  if (item) {
+    insertMention(item.dataset.personId, item.dataset.personName);
+  }
+}
+
+function insertMention(personId, personName) {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+
+  const value = input.value;
+  const beforeMention = value.substring(0, mentionStartIndex);
+  const afterCursor = value.substring(input.selectionStart);
+
+  const mentionText = `@${personName} `;
+  const newValue = beforeMention + mentionText + afterCursor;
+
+  input.value = newValue;
+  const newCursorPos = beforeMention.length + mentionText.length;
+  input.setSelectionRange(newCursorPos, newCursorPos);
+  input.focus();
+
+  hideMentionDropdown();
+}
+
+function extractMentionsFromText(text) {
+  if (!text) return [];
+
+  const mentions = [];
+  const regex = /@([^\s@]+)/g;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    // ⚡ ابحث عن الشخص بالاسم
+    const person = chatPeopleArray.find(p => {
+      const firstName = p.FirstName || '';
+      const fullName = getPersonFullName(p);
+      return firstName === name || fullName === name || fullName.startsWith(name + ' ');
+    });
+
+    if (person && !mentions.includes(person.id)) {
+      mentions.push(person.id);
+    }
+  }
+
+  return mentions;
+}
+
+// ═══════════════════════════════════════════════════════
 //   Send Message
 // ═══════════════════════════════════════════════════════
 
@@ -1014,12 +1358,17 @@ window.sendChatMessage = async function() {
     return;
   }
 
+  // ⚡ استخرج الـmentions
+  const mentions = extractMentionsFromText(text);
+
   input.value = '';
   input.focus();
 
-  // ⚡ امسح typing indicator
   if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
   clearTypingIndicator();
+
+  // ⚡ اخفي الـmention dropdown
+  hideMentionDropdown();
 
   try {
     const messageData = {
@@ -1031,6 +1380,11 @@ window.sendChatMessage = async function() {
       ReadBy: [chatPerson.id],
       Reactions: {}
     };
+
+    // ⚡ أضف الـmentions لو موجودة
+    if (mentions.length > 0) {
+      messageData.Mentions = mentions;
+    }
 
     if (chatReplyTo) {
       messageData.ReplyTo = {
@@ -1054,7 +1408,7 @@ window.sendChatMessage = async function() {
       LastMessageAt: messageData.SentAt
     });
 
-    await sendChatNotification(chatActiveChat, messageData);
+    await sendChatNotification(chatActiveChat, messageData, mentions);
 
     window.cancelReply();
 
@@ -1143,7 +1497,7 @@ async function sendChatImage(file) {
       LastMessageAt: messageData.SentAt
     });
 
-    await sendChatNotification(chatActiveChat, messageData);
+    await sendChatNotification(chatActiveChat, messageData, []);
 
     window.cancelReply();
 
@@ -1395,6 +1749,8 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 300);
   }, 2000);
 }
+
+window.showChatToast = showToast;
 
 // ═══════════════════════════════════════════════════════
 //   Edit Message
@@ -1810,6 +2166,497 @@ window.createGroup = async function() {
 };
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Group Settings Modal (المرحلة 2 جديد)
+// ═══════════════════════════════════════════════════════
+
+window.openGroupSettings = async function(chatId) {
+  const chat = chatConversations.find(c => c.id === chatId);
+  if (!chat) {
+    alert('❌ المجموعة غير موجودة');
+    return;
+  }
+
+  if (!canManageGroup(chat)) {
+    alert('⚠️ غير مصرح لك بإدارة هذه المجموعة');
+    return;
+  }
+
+  let modal = document.getElementById('groupSettingsModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'groupSettingsModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  renderGroupSettingsModal(modal, chat);
+  modal.style.display = 'flex';
+};
+
+function renderGroupSettingsModal(modal, chat) {
+  const members = (chat.Members || []).map(id => chatPeople[id]).filter(Boolean);
+  const admins = Array.isArray(chat.Admins) ? chat.Admins : [];
+  const isOwnerOrAdmin = ['Owner', 'Admin'].includes(chatWorkspace);
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>⚙️ إعدادات المجموعة</h2>
+        <button class="modal-close" id="closeGroupSettingsBtn">✕</button>
+      </div>
+
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
+
+        <!-- ═══ معلومات المجموعة ═══ -->
+        <div class="group-settings-section">
+          <h3 class="group-settings-title">📋 معلومات المجموعة</h3>
+
+          <div class="form-row">
+            <label>اسم المجموعة</label>
+            <input type="text" id="gsGroupName" value="${escapeHtml(chat.Name || '')}" />
+          </div>
+
+          <div class="form-row">
+            <label>الوصف</label>
+            <input type="text" id="gsGroupDesc" value="${escapeHtml(chat.Description || '')}" placeholder="وصف مختصر" />
+          </div>
+
+          <button class="btn-primary" id="gsSaveInfoBtn" style="margin-top:8px;">💾 حفظ المعلومات</button>
+        </div>
+
+        <!-- ═══ إضافة أعضاء ═══ -->
+        <div class="group-settings-section">
+          <h3 class="group-settings-title">➕ إضافة أعضاء</h3>
+
+          <div class="form-row">
+            <input type="text" id="gsAddSearch" placeholder="🔍 ابحث..." class="chat-new-search" />
+          </div>
+
+          <div class="group-settings-list" id="gsAddList"></div>
+        </div>
+
+        <!-- ═══ الأعضاء الحاليين ═══ -->
+        <div class="group-settings-section">
+          <h3 class="group-settings-title">👥 الأعضاء (${members.length})</h3>
+
+          <div class="group-settings-list">
+            ${members.map(m => {
+              const isAdmin = admins.includes(m.id);
+              const isMe = m.id === chatPerson.id;
+              const isCreator = m.id === chat.CreatedBy;
+
+              const name = getPersonFullName(m);
+              const avatar = m.PhotoURL
+                ? `<img src="${m.PhotoURL}" alt="" />`
+                : getInitial(m);
+
+              return `
+                <div class="group-member-item" data-member-id="${m.id}">
+                  <div class="group-member-avatar">${avatar}</div>
+                  <div class="group-member-info">
+                    <div class="group-member-name">
+                      ${escapeHtml(name)}
+                      ${isMe ? '<span class="group-member-badge me">أنت</span>' : ''}
+                      ${isCreator ? '<span class="group-member-badge creator">👑 منشئ</span>' : ''}
+                      ${isAdmin && !isCreator ? '<span class="group-member-badge admin">⭐ أدمن</span>' : ''}
+                    </div>
+                    <div class="group-member-email">${escapeHtml(m.Email || '')}</div>
+                  </div>
+                  <div class="group-member-actions">
+                    ${isOwnerOrAdmin && !isMe && !isCreator ? `
+                      ${!isAdmin ? `
+                        <button class="btn-icon" data-action="promote" data-member="${m.id}" title="ترقية لأدمن">⭐</button>
+                      ` : `
+                        <button class="btn-icon" data-action="demote" data-member="${m.id}" title="إزالة الأدمن">↓</button>
+                      `}
+                      <button class="btn-icon danger" data-action="remove" data-member="${m.id}" title="إزالة من المجموعة">🗑️</button>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- ═══ Danger Zone ═══ -->
+        ${isOwnerOrAdmin ? `
+          <div class="group-settings-section group-danger-section">
+            <h3 class="group-settings-title">⚠️ منطقة الخطر</h3>
+            <button class="btn-danger" id="gsLeaveBtn">🚪 ${isOwnerOrAdmin ? 'مغادرة المجموعة' : 'مغادرة'}</button>
+          </div>
+        ` : `
+          <div class="group-settings-section group-danger-section">
+            <h3 class="group-settings-title">⚠️ منطقة الخطر</h3>
+            <button class="btn-danger" id="gsLeaveBtn">🚪 مغادرة المجموعة</button>
+          </div>
+        `}
+
+      </div>
+    </div>
+  `;
+
+  // ═══ ربط الأحداث ═══
+
+  document.getElementById('closeGroupSettingsBtn').onclick = () => {
+    modal.style.display = 'none';
+  };
+
+  // ⚡ حفظ معلومات المجموعة
+  document.getElementById('gsSaveInfoBtn').onclick = () => saveGroupInfo(chat.id);
+
+  // ⚡ إضافة أعضاء — search
+  const addSearch = document.getElementById('gsAddSearch');
+  renderAddMembersList(chat);
+
+  addSearch.oninput = (e) => {
+    renderAddMembersList(chat, e.target.value);
+  };
+
+  // ⚡ إجراءات الأعضاء
+  modal.querySelectorAll('[data-action]').forEach(btn => {
+    btn.onclick = async () => {
+      const action = btn.dataset.action;
+      const memberId = btn.dataset.member;
+
+      if (action === 'promote') await promoteToAdmin(chat.id, memberId);
+      else if (action === 'demote') await demoteFromAdmin(chat.id, memberId);
+      else if (action === 'remove') await removeFromGroup(chat.id, memberId);
+    };
+  });
+
+  // ⚡ زر إضافة الأعضاء
+  modal.querySelectorAll('[data-add-member]').forEach(btn => {
+    btn.onclick = async () => {
+      const memberId = btn.dataset.addMember;
+      await addToGroup(chat.id, memberId);
+    };
+  });
+
+  // ⚡ زر المغادرة
+  const leaveBtn = document.getElementById('gsLeaveBtn');
+  if (leaveBtn) {
+    leaveBtn.onclick = () => leaveGroup(chat.id);
+  }
+}
+
+function renderAddMembersList(chat, searchTerm = '') {
+  const container = document.getElementById('gsAddList');
+  if (!container) return;
+
+  const currentMembers = Array.isArray(chat.Members) ? chat.Members : [];
+
+  // ⚡ فلتر الأشخاص اللي مش في المجموعة
+  let available = chatPeopleArray.filter(p => !currentMembers.includes(p.id));
+
+  if (searchTerm) {
+    const term = searchTerm.toLowerCase().trim();
+    available = available.filter(p => getPersonFullName(p).toLowerCase().includes(term));
+  }
+
+  if (available.length === 0) {
+    container.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:20px;font-size:13px;">لا يوجد أشخاص متاحين للإضافة</p>';
+    return;
+  }
+
+  container.innerHTML = available.slice(0, 20).map(p => {
+    const name = getPersonFullName(p);
+    const avatar = p.PhotoURL
+      ? `<img src="${p.PhotoURL}" alt="" />`
+      : getInitial(p);
+
+    return `
+      <div class="group-member-item">
+        <div class="group-member-avatar">${avatar}</div>
+        <div class="group-member-info">
+          <div class="group-member-name">${escapeHtml(name)}</div>
+          <div class="group-member-email">${escapeHtml(p.Email || '')}</div>
+        </div>
+        <div class="group-member-actions">
+          <button class="btn-primary btn-small" data-add-member="${p.id}">➕ إضافة</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // ⚡ ربط أزرار الإضافة
+  container.querySelectorAll('[data-add-member]').forEach(btn => {
+    btn.onclick = async () => {
+      await addToGroup(chat.id, btn.dataset.addMember);
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Group Actions
+// ═══════════════════════════════════════════════════════
+
+async function saveGroupInfo(chatId) {
+  const name = document.getElementById('gsGroupName')?.value.trim();
+  const description = document.getElementById('gsGroupDesc')?.value.trim() || '';
+
+  if (!name) {
+    alert('⚠️ اسم المجموعة مطلوب');
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, 'chats', chatId), {
+      Name: name,
+      Description: description,
+      UpdatedAt: new Date().toISOString()
+    });
+
+    showToast('✅ تم حفظ المعلومات');
+
+    // ⚡ حدّث الـheader
+    if (chatActiveChatId === chatId) {
+      const chatDoc = await getDoc(doc(db, 'chats', chatId));
+      if (chatDoc.exists()) {
+        chatActiveChat = { id: chatDoc.id, ...chatDoc.data() };
+        renderChatMain();
+        startMessagesListener(chatId);
+        startTypingListener(chatId);
+      }
+    }
+  } catch (err) {
+    console.error('❌ saveGroupInfo error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+async function addToGroup(chatId, memberId) {
+  if (!memberId) return;
+
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+    await updateDoc(chatRef, {
+      Members: arrayUnion(memberId),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ أضف رسالة نظام
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `➕ تم إضافة ${getPersonFullName(chatPeople[memberId])} للمجموعة`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    showToast('✅ تم الإضافة للمجموعة');
+
+    // ⚡ أعد فتح الإعدادات
+    const chatDoc = await getDoc(doc(db, 'chats', chatId));
+    if (chatDoc.exists()) {
+      const chat = { id: chatDoc.id, ...chatDoc.data() };
+      const modal = document.getElementById('groupSettingsModal');
+      if (modal && modal.style.display === 'flex') {
+        renderGroupSettingsModal(modal, chat);
+      }
+
+      // ⚡ حدّث الشات النشط
+      if (chatActiveChatId === chatId) {
+        chatActiveChat = chat;
+        renderChatMain();
+        startMessagesListener(chatId);
+        startTypingListener(chatId);
+      }
+    }
+  } catch (err) {
+    console.error('❌ addToGroup error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+async function removeFromGroup(chatId, memberId) {
+  const member = chatPeople[memberId];
+  const name = member ? getPersonFullName(member) : 'العضو';
+
+  if (!confirm(`⚠️ إزالة "${name}" من المجموعة؟`)) return;
+
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+    await updateDoc(chatRef, {
+      Members: arrayRemove(memberId),
+      Admins: arrayRemove(memberId),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ أضف رسالة نظام
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `➖ تم إزالة ${name} من المجموعة`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    showToast('✅ تم الإزالة');
+
+    // ⚡ أعد فتح الإعدادات
+    const chatDoc = await getDoc(doc(db, 'chats', chatId));
+    if (chatDoc.exists()) {
+      const chat = { id: chatDoc.id, ...chatDoc.data() };
+      const modal = document.getElementById('groupSettingsModal');
+      if (modal && modal.style.display === 'flex') {
+        renderGroupSettingsModal(modal, chat);
+      }
+
+      if (chatActiveChatId === chatId) {
+        chatActiveChat = chat;
+        renderChatMain();
+        startMessagesListener(chatId);
+        startTypingListener(chatId);
+      }
+    }
+  } catch (err) {
+    console.error('❌ removeFromGroup error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+async function promoteToAdmin(chatId, memberId) {
+  const member = chatPeople[memberId];
+  const name = member ? getPersonFullName(member) : 'العضو';
+
+  if (!confirm(`⭐ ترقية "${name}" لـ Admin؟`)) return;
+
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+    await updateDoc(chatRef, {
+      Admins: arrayUnion(memberId),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ رسالة نظام
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `⭐ تم ترقية ${name} لـ Admin`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    showToast('⭐ تمت الترقية');
+
+    // ⚡ أعد فتح الإعدادات
+    const chatDoc = await getDoc(doc(db, 'chats', chatId));
+    if (chatDoc.exists()) {
+      const chat = { id: chatDoc.id, ...chatDoc.data() };
+      const modal = document.getElementById('groupSettingsModal');
+      if (modal && modal.style.display === 'flex') {
+        renderGroupSettingsModal(modal, chat);
+      }
+    }
+  } catch (err) {
+    console.error('❌ promoteToAdmin error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+async function demoteFromAdmin(chatId, memberId) {
+  const member = chatPeople[memberId];
+  const name = member ? getPersonFullName(member) : 'العضو';
+
+  if (!confirm(`↓ إزالة "${name}" من Admins؟`)) return;
+
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+    await updateDoc(chatRef, {
+      Admins: arrayRemove(memberId),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ رسالة نظام
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `↓ تم إزالة ${name} من Admins`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    showToast('✅ تمت الإزالة');
+
+    const chatDoc = await getDoc(doc(db, 'chats', chatId));
+    if (chatDoc.exists()) {
+      const chat = { id: chatDoc.id, ...chatDoc.data() };
+      const modal = document.getElementById('groupSettingsModal');
+      if (modal && modal.style.display === 'flex') {
+        renderGroupSettingsModal(modal, chat);
+      }
+    }
+  } catch (err) {
+    console.error('❌ demoteFromAdmin error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+async function leaveGroup(chatId) {
+  if (!confirm('⚠️ هل أنت متأكد من مغادرة المجموعة؟\n(لن تستقبل رسائل منها بعد الآن)')) return;
+
+  try {
+    const chatRef = doc(db, 'chats', chatId);
+
+    await updateDoc(chatRef, {
+      Members: arrayRemove(chatPerson.id),
+      Admins: arrayRemove(chatPerson.id),
+      UpdatedAt: new Date().toISOString()
+    });
+
+    // ⚡ رسالة نظام
+    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `🚪 ${getPersonFullName(chatPerson)} غادر المجموعة`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    // ⚡ اقفل المودال والـchat
+    const modal = document.getElementById('groupSettingsModal');
+    if (modal) modal.style.display = 'none';
+
+    if (chatActiveChatId === chatId) {
+      chatActiveChatId = null;
+      chatActiveChat = null;
+      if (chatUnsubscribeMessages) {
+        try { chatUnsubscribeMessages(); } catch (e) {}
+      }
+      if (chatTypingUnsubscribe) {
+        try { chatTypingUnsubscribe(); } catch (e) {}
+      }
+
+      const main = document.getElementById('chatMain');
+      if (main) {
+        main.innerHTML = `
+          <div class="chat-empty-state">
+            <div class="chat-empty-icon">💬</div>
+            <h3>اختر محادثة للبدء</h3>
+          </div>
+        `;
+      }
+    }
+
+    showToast('🚪 تمت المغادرة');
+
+  } catch (err) {
+    console.error('❌ leaveGroup error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //   Helpers
 // ═══════════════════════════════════════════════════════
 
@@ -1860,36 +2707,41 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Send Chat Notification
+//   Send Chat Notification (مع Mentions)
 // ═══════════════════════════════════════════════════════
 
-async function sendChatNotification(chat, messageData) {
+async function sendChatNotification(chat, messageData, mentions = []) {
   const previewText = messageData.Type === 'image'
     ? '📷 صورة'
     : (messageData.Text || '').substring(0, 80);
 
   const chatName = getChatDisplayName(chat);
 
-  // ⚡ الأعضاء
   let recipients = [];
 
   if (chat.Type === 'channel' || chat.IsDefault) {
-    // ⚡ القنوات: كل الأشخاص
     recipients = chatPeopleArray
       .map(p => p.id)
       .filter(id => id !== chatPerson.id);
   } else {
-    // ⚡ 1-to-1 ومجموعات
     recipients = (chat.Members || []).filter(id => id !== chatPerson.id);
   }
 
   if (recipients.length === 0) return;
 
   for (const recipientId of recipients) {
+    // ⚡ لو الشخص كاتب الشات كـMute → ما نبعتش إشعار
+    if (isChatMuted(chat.id)) continue;
+
+    // ⚡ هل ده mention ليّ؟
+    const isMention = Array.isArray(mentions) && mentions.includes(recipientId);
+
     try {
       await addDoc(collection(db, 'notifications'), {
         Type: 'chat_message',
-        Title: `💬 رسالة في ${chatName}`,
+        Title: isMention
+          ? `🔔 ${chatPerson.FirstName || 'مستخدم'} ذكرك في ${chatName}`
+          : `💬 رسالة في ${chatName}`,
         Body: `${chatPerson.FirstName || 'مستخدم'}:\n${previewText}`,
         RelatedChatID: chat.id,
         ChatID: chat.id,
@@ -1899,6 +2751,7 @@ async function sendChatNotification(chat, messageData) {
         TargetPersonID: recipientId,
         SentBy: chatPerson.id,
         SenderName: getPersonFullName(chatPerson),
+        IsMention: isMention,
         SentAt: new Date().toISOString(),
         CreatedAt: new Date().toISOString(),
         ReadBy: []
@@ -1908,7 +2761,7 @@ async function sendChatNotification(chat, messageData) {
     }
   }
 
-  console.log(`✅ Sent ${recipients.length} chat notifications`);
+  console.log(`✅ Sent ${recipients.length} chat notifications (${mentions.length} mentions)`);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1916,10 +2769,8 @@ async function sendChatNotification(chat, messageData) {
 // ═══════════════════════════════════════════════════════
 
 window.addEventListener('beforeunload', () => {
-  // ⚡ اقفل typing indicator
   clearTypingIndicator();
 
-  // ═══ Cleanup ═══
   if (chatUnsubscribeMessages) {
     try { chatUnsubscribeMessages(); } catch (e) {}
   }
