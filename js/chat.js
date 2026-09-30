@@ -1222,7 +1222,7 @@ function handleMentionTyping(input) {
   showMentionDropdown(afterAt);
 }
 
-function showMentionDropdown(searchTerm) {
+window.showMentionDropdown = function(searchTerm) {
   const dropdown = document.getElementById('chatMentionDropdown');
   if (!dropdown) return;
 
@@ -1282,7 +1282,7 @@ function showMentionDropdown(searchTerm) {
   });
 }
 
-function hideMentionDropdown() {
+window.hideMentionDropdown = function() {
   const dropdown = document.getElementById('chatMentionDropdown');
   if (dropdown) dropdown.style.display = 'none';
   mentionDropdownActive = false;
@@ -1299,7 +1299,7 @@ function selectMentionFromDropdown(idx) {
   }
 }
 
-function insertMention(personId, personName) {
+window.insertMention = function(personId, personName) {
   const input = document.getElementById('chatInput');
   if (!input) return;
 
