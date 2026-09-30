@@ -2335,3 +2335,621 @@
     font-size: 12px;
   }
 }
+
+
+/* ═══════════════════════════════════════════
+   ⚡ PHASE 3-3: Emoji Picker + Camera + Poll + Wallpaper
+   ═══════════════════════════════════════════ */
+
+/* ═══ Emoji Picker ═══ */
+.chat-emoji-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 16px;
+  right: 16px;
+  max-height: 340px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  margin-bottom: 8px;
+  overflow: hidden;
+  animation: emojiPickerUp 0.25s ease-out;
+}
+
+@keyframes emojiPickerUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.emoji-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.emoji-picker-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.emoji-cat-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.emoji-cat-btn:hover {
+  background: var(--card-bg);
+}
+
+.emoji-cat-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
+.emoji-picker-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.emoji-picker-close:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.emoji-picker-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.emoji-cat-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  padding: 4px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-item {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+  font-family: inherit;
+  padding: 0;
+  line-height: 1;
+}
+
+.emoji-item:hover {
+  background: var(--bg);
+  transform: scale(1.15);
+}
+
+.emoji-item:active {
+  transform: scale(0.95);
+}
+
+.emoji-picker-empty {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ═══ Camera Modal ═══ */
+.camera-modal-content {
+  max-width: 640px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.camera-body {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-video,
+.camera-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-canvas {
+  display: none;
+}
+
+.camera-loading,
+.camera-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.7);
+  text-align: center;
+  padding: 20px;
+}
+
+.camera-error {
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.camera-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: #1e293b;
+}
+
+.camera-btn {
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: #334155;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+  min-width: 60px;
+}
+
+.camera-btn:hover {
+  background: #475569;
+  transform: translateY(-2px);
+}
+
+.camera-btn:active {
+  transform: translateY(0);
+}
+
+.camera-switch-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 22px;
+  background: #475569;
+}
+
+.camera-capture-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 32px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.camera-capture-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+}
+
+.camera-send-btn {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  padding: 12px 24px;
+}
+
+.camera-send-btn:hover {
+  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+}
+
+.camera-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ═══ Poll in Messages ═══ */
+.chat-poll {
+  padding: 12px 4px 6px;
+  min-width: 260px;
+  max-width: 100%;
+}
+
+.chat-poll-question {
+  font-size: 14px;
+  font-weight: 800;
+  color: inherit;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.chat-message.theirs .chat-poll-question {
+  color: var(--text);
+}
+
+.chat-poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chat-poll-option {
+  position: relative;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: right;
+  color: inherit;
+  transition: all 0.2s;
+  overflow: hidden;
+  min-height: 40px;
+}
+
+.chat-message.mine .chat-poll-option {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.chat-poll-option:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transform: translateX(-2px);
+}
+
+.chat-message.mine .chat-poll-option:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.chat-poll-option.voted {
+  border-color: var(--primary);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.chat-message.mine .chat-poll-option.voted {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #fff;
+}
+
+.chat-poll-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(59, 130, 246, 0.15);
+  transition: width 0.4s ease;
+  z-index: 0;
+  border-radius: 10px;
+}
+
+.chat-message.mine .chat-poll-bar {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.chat-poll-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-poll-text {
+  font-weight: 600;
+  font-size: 13px;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.chat-poll-count {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.75;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.chat-poll-footer {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  opacity: 0.7;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.chat-message.mine .chat-poll-footer {
+  border-top-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ═══ Poll Options in Modal ═══ */
+.poll-option-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.poll-option-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.poll-option-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.poll-option-remove {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.poll-option-remove:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+/* ═══ Wallpaper Modal ═══ */
+.wallpaper-section {
+  padding: 14px;
+  margin-bottom: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.wallpaper-section:last-child {
+  margin-bottom: 0;
+}
+
+.wallpaper-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 12px 0;
+}
+
+.wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+}
+
+.wallpaper-color {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  position: relative;
+}
+
+.wallpaper-color:hover {
+  transform: scale(1.15);
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.wallpaper-color.active {
+  border-color: var(--primary);
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.wallpaper-color.active::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  font-weight: 800;
+  color: #2563eb;
+  text-shadow: 0 0 4px #fff, 0 0 8px #fff;
+}
+
+/* ═══ Messages Container — Wallpaper ═══ */
+.chat-messages[style*="background-image"] {
+  background-attachment: local !important;
+}
+
+/* ═══════════════════════════════════════════
+   ⚡ Responsive — Phase 3-3
+   ═══════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .chat-emoji-picker {
+    left: 8px;
+    right: 8px;
+    max-height: 280px;
+  }
+
+  .emoji-picker-header {
+    padding: 6px 8px;
+  }
+
+  .emoji-cat-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .emoji-picker-body {
+    padding: 8px 10px;
+  }
+
+  .emoji-grid {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+
+  .emoji-item {
+    font-size: 22px;
+  }
+
+  /* ⚡ Camera */
+  .camera-modal-content {
+    max-width: 100%;
+    border-radius: 0;
+  }
+
+  .camera-capture-btn {
+    width: 64px;
+    height: 64px;
+    font-size: 28px;
+  }
+
+  .camera-switch-btn {
+    width: 46px;
+    height: 46px;
+    font-size: 20px;
+  }
+
+  .camera-btn {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  /* ⚡ Poll */
+  .chat-poll {
+    min-width: 220px;
+  }
+
+  .chat-poll-question {
+    font-size: 13px;
+  }
+
+  .chat-poll-option {
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .chat-poll-text {
+    font-size: 12px;
+  }
+
+  /* ═══ Wallpaper ═══ */
+  .wallpaper-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .emoji-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .emoji-item {
+    font-size: 20px;
+  }
+
+  .chat-poll {
+    min-width: 200px;
+  }
+}
