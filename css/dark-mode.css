@@ -3096,3 +3096,45 @@ html[data-theme="dark"] .sr-btn.reject:hover:not(:disabled) {
   color: #ffffff;
   border-color: #dc2626;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Chat — Typing Indicator / Read Receipts / Online Status
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Typing Indicator ═══ */
+html[data-theme="dark"] .chat-typing-indicator {
+  background: #1e293b;
+  color: #60a5fa;
+  border-top-color: #334155;
+}
+
+/* ═══ Read Receipts ═══ */
+html[data-theme="dark"] .chat-read-receipt.sent {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme="dark"] .chat-read-receipt.read {
+  color: #60a5fa;
+}
+
+html[data-theme="dark"] .chat-read-receipt.partial {
+  color: #93c5fd;
+}
+
+/* ═══ Online Dot ═══ */
+html[data-theme="dark"] .chat-online-dot {
+  border-color: #1e293b;
+}
+
+html[data-theme="dark"] .chat-item.active .chat-online-dot {
+  border-color: #1d4ed8;
+}
+
+/* ═══ Header Status — Online ═══ */
+html[data-theme="dark"] .chat-header-status.online {
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .chat-header-status.offline {
+  color: #94a3b8;
+}
