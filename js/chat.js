@@ -3,7 +3,8 @@
 //   ⚡ 1-to-1 + Groups + Channels + Realtime
 //   ⚡ Reply + Edit + Delete + Swipe
 //   ⚡ Typing + Read Receipts + Online Status
-//   ⚡ Group Management + Mute + Mentions (جديد)
+//   ⚡ Group Management + Mute + Mentions
+//   ⚡ FIXED: Mention dropdown close + full members list
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -58,6 +59,7 @@ let chatMutedIds = new Set();
 // ═══ ⚡ Mention State ═══
 let mentionDropdownActive = false;
 let mentionStartIndex = -1;
+let mentionOutsideClickBound = false;
 
 // ═══ Constants ═══
 const MAX_MESSAGE_LENGTH = 2000;
@@ -128,6 +130,8 @@ async function loadChatPage(area) {
       }
     });
 
+    console.log(`✅ Loaded ${Object.keys(chatPeople).length} people (${chatPeopleArray.length} active)`);
+
     // ⚡ حمّل الـMuted Chats
     loadMutedChats();
 
@@ -142,6 +146,12 @@ async function loadChatPage(area) {
     startOnlineHeartbeat();
     startOnlineListener();
 
+    // ⚡ ⚡ ⚡ أضف الـoutside click handler مرة واحدة فقط
+    if (!mentionOutsideClickBound) {
+      mentionOutsideClickBound = true;
+      document.addEventListener('click', handleOutsideClickForMention);
+    }
+
   } catch (err) {
     console.error('❌ Load chat error:', err);
     area.innerHTML = `<div class="placeholder-page">
@@ -149,6 +159,28 @@ async function loadChatPage(area) {
       <p>${err.message}</p>
       <button class="btn-primary" onclick="loadChatPage(document.getElementById('contentArea'))" style="margin-top:16px;">إعادة المحاولة</button>
     </div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Outside Click — إغلاق الـMention Dropdown
+// ═══════════════════════════════════════════════════════
+
+function handleOutsideClickForMention(e) {
+  if (!mentionDropdownActive) return;
+
+  const dropdown = document.getElementById('chatMentionDropdown');
+  const input = document.getElementById('chatInput');
+  const mentionBtn = document.getElementById('chatMentionBtn');
+
+  // ⚡ لو الضغط مش على dropdown/input/زر @ → اقفل
+  const clickedInside = 
+    (dropdown && dropdown.contains(e.target)) ||
+    (input && input.contains(e.target)) ||
+    (mentionBtn && mentionBtn.contains(e.target));
+
+  if (!clickedInside) {
+    hideMentionDropdown();
   }
 }
 
@@ -192,7 +224,6 @@ window.toggleMuteChat = function(chatId) {
   saveMutedChats();
   renderChatList();
 
-  // ⚡ حدّث الـheader لو مفتوح
   if (chatActiveChatId === chatId) {
     updateChatHeaderMuteButton();
   }
@@ -226,7 +257,6 @@ async function updateMyOnlineStatus() {
     await updateDoc(personRef, {
       LastSeen: new Date().toISOString()
     });
-    console.log('🟢 Online status updated');
   } catch (err) {
     console.warn('⚠️ updateMyOnlineStatus error:', err.message);
   }
@@ -495,8 +525,6 @@ function renderChatList() {
 
   list.querySelectorAll('.chat-item').forEach(item => {
     item.onclick = () => window.openChat(item.dataset.chatId);
-
-    // ⚡ long press للـMute في القائمة
     setupChatItemLongPress(item);
   });
 }
@@ -922,7 +950,15 @@ function renderChatMain() {
   if (imageBtn) imageBtn.onclick = window.openChatImagePicker;
 
   const mentionBtn = document.getElementById('chatMentionBtn');
-  if (mentionBtn) mentionBtn.onclick = () => window.showMentionDropdown(null);
+  if (mentionBtn) {
+    mentionBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.showMentionDropdown(null);
+      const input = document.getElementById('chatInput');
+      if (input) input.focus();
+    };
+  }
 
   const sendBtn = document.getElementById('chatSendBtn');
   if (sendBtn) sendBtn.onclick = window.sendChatMessage;
@@ -934,6 +970,12 @@ function renderChatMain() {
   const input = document.getElementById('chatInput');
   if (input) {
     input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mentionDropdownActive) {
+        e.preventDefault();
+        hideMentionDropdown();
+        return;
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         if (mentionDropdownActive) {
           e.preventDefault();
@@ -942,12 +984,6 @@ function renderChatMain() {
         }
         e.preventDefault();
         window.sendChatMessage();
-      }
-
-      // ⚡ Escape يغلق الـdropdown
-      if (e.key === 'Escape' && mentionDropdownActive) {
-        e.preventDefault();
-        hideMentionDropdown();
       }
     });
 
@@ -1079,6 +1115,17 @@ function renderMessageItem(msg) {
     `;
   }
 
+  // ⚡ System message
+  if (msg.Type === 'system') {
+    return `
+      <div class="chat-message" data-msg-id="${msg.id}" data-msg-type="system">
+        <div class="chat-message-bubble">
+          <div class="chat-message-text">${escapeHtml(msg.Text || '')}</div>
+        </div>
+      </div>
+    `;
+  }
+
   let contentHtml = '';
   if (msg.Type === 'image' && msg.ImageURL) {
     contentHtml = `
@@ -1131,7 +1178,7 @@ function renderMessageItem(msg) {
     }
   }
 
-  // ⚡ Mention check — لو فيه mention ليّ
+  // ⚡ Mention check
   const hasMention = checkMentionsForMe(msg);
 
   return `
@@ -1184,12 +1231,10 @@ function checkMentionsForMe(msg) {
   if (!msg || !msg.Text || !chatPerson) return false;
   if (msg.SenderID === chatPerson.id) return false;
 
-  // ⚡ لو فيه Mentions array
   if (Array.isArray(msg.Mentions) && msg.Mentions.includes(chatPerson.id)) {
     return true;
   }
 
-  // ⚡ fallback — ابحث عن الاسم
   const myFirstName = chatPerson.FirstName || '';
   if (myFirstName && msg.Text.includes(`@${myFirstName}`)) {
     return true;
@@ -1202,7 +1247,6 @@ function handleMentionTyping(input) {
   const value = input.value;
   const cursorPos = input.selectionStart;
 
-  // ⚡ ابحث عن آخر @ قبل الـcursor
   const beforeCursor = value.substring(0, cursorPos);
   const lastAt = beforeCursor.lastIndexOf('@');
 
@@ -1211,7 +1255,6 @@ function handleMentionTyping(input) {
     return;
   }
 
-  // ⚡ تحقق إن مفيش مسافة بين @ والـcursor
   const afterAt = beforeCursor.substring(lastAt + 1);
   if (afterAt.includes(' ') || afterAt.includes('\n')) {
     hideMentionDropdown();
@@ -1219,7 +1262,7 @@ function handleMentionTyping(input) {
   }
 
   mentionStartIndex = lastAt;
-  showMentionDropdown(afterAt);
+  window.showMentionDropdown(afterAt);
 }
 
 window.showMentionDropdown = function(searchTerm) {
@@ -1232,7 +1275,6 @@ window.showMentionDropdown = function(searchTerm) {
   // ⚡ ⚡ ⚡ حماية قوية — لو مفيش شات نشط
   let members = [];
 
-  // ⚡ حاول تقرأ من chatActiveChat الأول
   if (chatActiveChat && chatActiveChat.Type) {
     if (chatActiveChat.Type === 'direct') {
       const otherId = (chatActiveChat.Members || []).find(id => id !== chatPerson?.id);
@@ -1245,25 +1287,37 @@ window.showMentionDropdown = function(searchTerm) {
     }
   }
 
-  // ⚡ ⚡ ⚡ FALLBACK — لو مفيش أعضاء، استخدم كل الأشخاص
+  // ⚡ ⚡ ⚡ FALLBACK — كل الأشخاص النشطين
   if (members.length === 0) {
-    console.log('⚠️ No members from chat — using all people');
     members = chatPeopleArray.filter(p => p.id !== chatPerson?.id);
   }
 
   // ⚡ فلتر بالبحث
   if (searchTerm) {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
     members = members.filter(p => {
       const fullName = getPersonFullName(p).toLowerCase();
       const firstName = (p.FirstName || '').toLowerCase();
-      return fullName.includes(term) || firstName.includes(term);
+      const secondName = (p.SecondName || '').toLowerCase();
+      return fullName.includes(term)
+        || firstName.includes(term)
+        || secondName.includes(term);
     });
   }
 
+  // ⚡ رتّب أبجديًا
+  members.sort((a, b) =>
+    getPersonFullName(a).localeCompare(getPersonFullName(b), 'ar')
+  );
+
   if (members.length === 0) {
-    console.warn('⚠️ No members found for mention');
-    hideMentionDropdown();
+    dropdown.innerHTML = `
+      <div class="chat-mention-empty">
+        لا يوجد نتائج مطابقة
+      </div>
+    `;
+    dropdown.style.display = 'block';
+    mentionDropdownActive = true;
     return;
   }
 
@@ -1271,15 +1325,22 @@ window.showMentionDropdown = function(searchTerm) {
 
   mentionDropdownActive = true;
 
-  dropdown.innerHTML = members.slice(0, 8).map((p, idx) => {
+  dropdown.innerHTML = members.map((p, idx) => {
     const name = getPersonFullName(p);
     const avatar = p.PhotoURL
       ? `<img src="${p.PhotoURL}" alt="" />`
       : getInitial(p);
+    const isOnline = isUserOnline(p.id);
 
     return `
-      <div class="chat-mention-item" data-person-id="${p.id}" data-person-name="${escapeHtml(p.FirstName || name)}" data-idx="${idx}">
-        <div class="chat-mention-avatar">${avatar}</div>
+      <div class="chat-mention-item"
+           data-person-id="${p.id}"
+           data-person-name="${escapeHtml(p.FirstName || name)}"
+           data-idx="${idx}">
+        <div class="chat-mention-avatar">
+          ${avatar}
+          ${isOnline ? '<span class="chat-online-dot chat-online-dot-small"></span>' : ''}
+        </div>
         <div class="chat-mention-name">${escapeHtml(name)}</div>
       </div>
     `;
@@ -1289,7 +1350,15 @@ window.showMentionDropdown = function(searchTerm) {
 
   // ⚡ ربط الـclick
   dropdown.querySelectorAll('.chat-mention-item').forEach(el => {
-    el.onclick = () => {
+    el.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      insertMention(el.dataset.personId, el.dataset.personName);
+    };
+
+    el.ontouchend = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       insertMention(el.dataset.personId, el.dataset.personName);
     };
   });
@@ -1297,9 +1366,16 @@ window.showMentionDropdown = function(searchTerm) {
 
 window.hideMentionDropdown = function() {
   const dropdown = document.getElementById('chatMentionDropdown');
-  if (dropdown) dropdown.style.display = 'none';
+  if (dropdown) {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+  }
   mentionDropdownActive = false;
   mentionStartIndex = -1;
+};
+
+function hideMentionDropdown() {
+  window.hideMentionDropdown();
 }
 
 function selectMentionFromDropdown(idx) {
@@ -1329,6 +1405,10 @@ window.insertMention = function(personId, personName) {
   input.focus();
 
   hideMentionDropdown();
+};
+
+function insertMention(personId, personName) {
+  window.insertMention(personId, personName);
 }
 
 function extractMentionsFromText(text) {
@@ -1340,7 +1420,6 @@ function extractMentionsFromText(text) {
 
   while ((match = regex.exec(text)) !== null) {
     const name = match[1];
-    // ⚡ ابحث عن الشخص بالاسم
     const person = chatPeopleArray.find(p => {
       const firstName = p.FirstName || '';
       const fullName = getPersonFullName(p);
@@ -1380,7 +1459,7 @@ window.sendChatMessage = async function() {
   if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
   clearTypingIndicator();
 
-  // ⚡ اخفي الـmention dropdown
+  // ⚡ اقفل الـmention dropdown
   hideMentionDropdown();
 
   try {
@@ -1394,7 +1473,6 @@ window.sendChatMessage = async function() {
       Reactions: {}
     };
 
-    // ⚡ أضف الـmentions لو موجودة
     if (mentions.length > 0) {
       messageData.Mentions = mentions;
     }
@@ -2179,7 +2257,7 @@ window.createGroup = async function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Group Settings Modal (المرحلة 2 جديد)
+//   ⚡ Group Settings Modal
 // ═══════════════════════════════════════════════════════
 
 window.openGroupSettings = async function(chatId) {
@@ -2220,7 +2298,6 @@ function renderGroupSettingsModal(modal, chat) {
 
       <div class="modal-body" style="flex:1;overflow-y:auto;">
 
-        <!-- ═══ معلومات المجموعة ═══ -->
         <div class="group-settings-section">
           <h3 class="group-settings-title">📋 معلومات المجموعة</h3>
 
@@ -2237,7 +2314,6 @@ function renderGroupSettingsModal(modal, chat) {
           <button class="btn-primary" id="gsSaveInfoBtn" style="margin-top:8px;">💾 حفظ المعلومات</button>
         </div>
 
-        <!-- ═══ إضافة أعضاء ═══ -->
         <div class="group-settings-section">
           <h3 class="group-settings-title">➕ إضافة أعضاء</h3>
 
@@ -2248,7 +2324,6 @@ function renderGroupSettingsModal(modal, chat) {
           <div class="group-settings-list" id="gsAddList"></div>
         </div>
 
-        <!-- ═══ الأعضاء الحاليين ═══ -->
         <div class="group-settings-section">
           <h3 class="group-settings-title">👥 الأعضاء (${members.length})</h3>
 
@@ -2291,33 +2366,21 @@ function renderGroupSettingsModal(modal, chat) {
           </div>
         </div>
 
-        <!-- ═══ Danger Zone ═══ -->
-        ${isOwnerOrAdmin ? `
-          <div class="group-settings-section group-danger-section">
-            <h3 class="group-settings-title">⚠️ منطقة الخطر</h3>
-            <button class="btn-danger" id="gsLeaveBtn">🚪 ${isOwnerOrAdmin ? 'مغادرة المجموعة' : 'مغادرة'}</button>
-          </div>
-        ` : `
-          <div class="group-settings-section group-danger-section">
-            <h3 class="group-settings-title">⚠️ منطقة الخطر</h3>
-            <button class="btn-danger" id="gsLeaveBtn">🚪 مغادرة المجموعة</button>
-          </div>
-        `}
+        <div class="group-settings-section group-danger-section">
+          <h3 class="group-settings-title">⚠️ منطقة الخطر</h3>
+          <button class="btn-danger" id="gsLeaveBtn">🚪 مغادرة المجموعة</button>
+        </div>
 
       </div>
     </div>
   `;
 
-  // ═══ ربط الأحداث ═══
-
   document.getElementById('closeGroupSettingsBtn').onclick = () => {
     modal.style.display = 'none';
   };
 
-  // ⚡ حفظ معلومات المجموعة
   document.getElementById('gsSaveInfoBtn').onclick = () => saveGroupInfo(chat.id);
 
-  // ⚡ إضافة أعضاء — search
   const addSearch = document.getElementById('gsAddSearch');
   renderAddMembersList(chat);
 
@@ -2325,7 +2388,6 @@ function renderGroupSettingsModal(modal, chat) {
     renderAddMembersList(chat, e.target.value);
   };
 
-  // ⚡ إجراءات الأعضاء
   modal.querySelectorAll('[data-action]').forEach(btn => {
     btn.onclick = async () => {
       const action = btn.dataset.action;
@@ -2337,15 +2399,6 @@ function renderGroupSettingsModal(modal, chat) {
     };
   });
 
-  // ⚡ زر إضافة الأعضاء
-  modal.querySelectorAll('[data-add-member]').forEach(btn => {
-    btn.onclick = async () => {
-      const memberId = btn.dataset.addMember;
-      await addToGroup(chat.id, memberId);
-    };
-  });
-
-  // ⚡ زر المغادرة
   const leaveBtn = document.getElementById('gsLeaveBtn');
   if (leaveBtn) {
     leaveBtn.onclick = () => leaveGroup(chat.id);
@@ -2358,7 +2411,6 @@ function renderAddMembersList(chat, searchTerm = '') {
 
   const currentMembers = Array.isArray(chat.Members) ? chat.Members : [];
 
-  // ⚡ فلتر الأشخاص اللي مش في المجموعة
   let available = chatPeopleArray.filter(p => !currentMembers.includes(p.id));
 
   if (searchTerm) {
@@ -2391,7 +2443,6 @@ function renderAddMembersList(chat, searchTerm = '') {
     `;
   }).join('');
 
-  // ⚡ ربط أزرار الإضافة
   container.querySelectorAll('[data-add-member]').forEach(btn => {
     btn.onclick = async () => {
       await addToGroup(chat.id, btn.dataset.addMember);
@@ -2421,7 +2472,6 @@ async function saveGroupInfo(chatId) {
 
     showToast('✅ تم حفظ المعلومات');
 
-    // ⚡ حدّث الـheader
     if (chatActiveChatId === chatId) {
       const chatDoc = await getDoc(doc(db, 'chats', chatId));
       if (chatDoc.exists()) {
@@ -2447,7 +2497,6 @@ async function addToGroup(chatId, memberId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ أضف رسالة نظام
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       SenderID: 'system',
       SenderName: 'النظام',
@@ -2460,7 +2509,6 @@ async function addToGroup(chatId, memberId) {
 
     showToast('✅ تم الإضافة للمجموعة');
 
-    // ⚡ أعد فتح الإعدادات
     const chatDoc = await getDoc(doc(db, 'chats', chatId));
     if (chatDoc.exists()) {
       const chat = { id: chatDoc.id, ...chatDoc.data() };
@@ -2469,7 +2517,6 @@ async function addToGroup(chatId, memberId) {
         renderGroupSettingsModal(modal, chat);
       }
 
-      // ⚡ حدّث الشات النشط
       if (chatActiveChatId === chatId) {
         chatActiveChat = chat;
         renderChatMain();
@@ -2497,7 +2544,6 @@ async function removeFromGroup(chatId, memberId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ أضف رسالة نظام
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       SenderID: 'system',
       SenderName: 'النظام',
@@ -2510,7 +2556,6 @@ async function removeFromGroup(chatId, memberId) {
 
     showToast('✅ تم الإزالة');
 
-    // ⚡ أعد فتح الإعدادات
     const chatDoc = await getDoc(doc(db, 'chats', chatId));
     if (chatDoc.exists()) {
       const chat = { id: chatDoc.id, ...chatDoc.data() };
@@ -2545,7 +2590,6 @@ async function promoteToAdmin(chatId, memberId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ رسالة نظام
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       SenderID: 'system',
       SenderName: 'النظام',
@@ -2558,7 +2602,6 @@ async function promoteToAdmin(chatId, memberId) {
 
     showToast('⭐ تمت الترقية');
 
-    // ⚡ أعد فتح الإعدادات
     const chatDoc = await getDoc(doc(db, 'chats', chatId));
     if (chatDoc.exists()) {
       const chat = { id: chatDoc.id, ...chatDoc.data() };
@@ -2586,7 +2629,6 @@ async function demoteFromAdmin(chatId, memberId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ رسالة نظام
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       SenderID: 'system',
       SenderName: 'النظام',
@@ -2625,7 +2667,6 @@ async function leaveGroup(chatId) {
       UpdatedAt: new Date().toISOString()
     });
 
-    // ⚡ رسالة نظام
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       SenderID: 'system',
       SenderName: 'النظام',
@@ -2636,7 +2677,6 @@ async function leaveGroup(chatId) {
       Reactions: {}
     });
 
-    // ⚡ اقفل المودال والـchat
     const modal = document.getElementById('groupSettingsModal');
     if (modal) modal.style.display = 'none';
 
@@ -2743,10 +2783,8 @@ async function sendChatNotification(chat, messageData, mentions = []) {
   if (recipients.length === 0) return;
 
   for (const recipientId of recipients) {
-    // ⚡ لو الشخص كاتب الشات كـMute → ما نبعتش إشعار
     if (isChatMuted(chat.id)) continue;
 
-    // ⚡ هل ده mention ليّ؟
     const isMention = Array.isArray(mentions) && mentions.includes(recipientId);
 
     try {
@@ -2805,3 +2843,5 @@ window.addEventListener('beforeunload', () => {
 window.loadChatPage = loadChatPage;
 window.showSidebarMobile = showSidebarMobile;
 window.closeChatMobile = showSidebarMobile;
+
+console.log('✅ chat.js loaded (full — phase 1 + 2 + fixes)');
