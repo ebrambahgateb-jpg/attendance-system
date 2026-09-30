@@ -4,7 +4,7 @@
 //   ⚡ Reply + Edit + Delete + Swipe
 //   ⚡ Typing + Read Receipts + Online Status
 //   ⚡ Group Management + Mute + Mentions
-//   ⚡ FIXED: Mention dropdown close + full members list
+//   ⚡ Reactions + Star + Forward + Pin + Search (PHASE 3)
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -45,7 +45,7 @@ let chatUnsubscribeChats = null;
 let chatReplyTo = null;
 let longPressTimer = null;
 
-// ═══ ⚡ Typing/Online State ═══
+// ═══ Typing/Online State ═══
 let chatTypingUnsubscribe = null;
 let chatTypingUsers = {};
 let chatTypingTimeout = null;
@@ -53,13 +53,21 @@ let chatOnlineInterval = null;
 let chatOnlineUnsubscribe = null;
 let chatOnlineStatuses = {};
 
-// ═══ ⚡ Mute State ═══
+// ═══ Mute State ═══
 let chatMutedIds = new Set();
 
-// ═══ ⚡ Mention State ═══
+// ═══ Mention State ═══
 let mentionDropdownActive = false;
 let mentionStartIndex = -1;
 let mentionOutsideClickBound = false;
+
+// ═══ ⚡ Phase 3 State ═══
+let chatPinnedMessages = {};        // { chatId: messageId }
+let chatStarredIds = new Set();     // Set<messageId>
+let chatSearchActive = false;
+let chatSearchResults = [];
+let chatSearchIndex = -1;
+let chatSearchTerm = '';
 
 // ═══ Constants ═══
 const MAX_MESSAGE_LENGTH = 2000;
@@ -67,6 +75,9 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const TYPING_TIMEOUT_MS = 3000;
 const ONLINE_TIMEOUT_MS = 2 * 60 * 1000;
 const ONLINE_HEARTBEAT_MS = 30000;
+
+// ═══ ⚡ Reactions — 10 إيموجي ═══
+const REACTION_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '🎉', '👏', '💯'];
 
 // ═══ Default Channels ═══
 const DEFAULT_CHANNELS = [
@@ -90,7 +101,6 @@ async function loadChatPage(area) {
 
     chatWorkspace = chatUser.currentWorkspace || chatUser.selectedRole || 'User';
 
-    // ⚡ حمّل الشخص
     chatPerson = null;
     if (chatUser.personId) {
       const pDoc = await getDoc(doc(db, COLLECTIONS.PEOPLE, chatUser.personId));
@@ -118,7 +128,6 @@ async function loadChatPage(area) {
       return;
     }
 
-    // ⚡ حمّل الأشخاص
     const peopleSnap = await getDocs(collection(db, COLLECTIONS.PEOPLE));
     chatPeople = {};
     chatPeopleArray = [];
@@ -132,21 +141,17 @@ async function loadChatPage(area) {
 
     console.log(`✅ Loaded ${Object.keys(chatPeople).length} people (${chatPeopleArray.length} active)`);
 
-    // ⚡ حمّل الـMuted Chats
     loadMutedChats();
+    loadStarredMessages();
+    loadPinnedMessages();
 
-    // ⚡ هيّئ القنوات الافتراضية
     await ensureDefaultChannels();
 
-    // ⚡ ارسم الصفحة
     renderChatPage(area);
-
-    // ⚡ ابدأ Listener
     startChatsListener();
     startOnlineHeartbeat();
     startOnlineListener();
 
-    // ⚡ ⚡ ⚡ أضف الـoutside click handler مرة واحدة فقط
     if (!mentionOutsideClickBound) {
       mentionOutsideClickBound = true;
       document.addEventListener('click', handleOutsideClickForMention);
@@ -163,6 +168,205 @@ async function loadChatPage(area) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Starred Messages — localStorage + Firestore
+// ═══════════════════════════════════════════════════════
+
+function loadStarredMessages() {
+  try {
+    const saved = localStorage.getItem(`starred_${chatPerson.id}`);
+    if (saved) {
+      const arr = JSON.parse(saved);
+      chatStarredIds = new Set(Array.isArray(arr) ? arr : []);
+    }
+  } catch (e) {
+    chatStarredIds = new Set();
+  }
+}
+
+function saveStarredMessages() {
+  try {
+    localStorage.setItem(`starred_${chatPerson.id}`, JSON.stringify([...chatStarredIds]));
+  } catch (e) {}
+}
+
+function isMessageStarred(msgId) {
+  return chatStarredIds.has(msgId);
+}
+
+window.toggleStarMessage = function(msgId, msgData) {
+  if (!msgId) return;
+
+  if (chatStarredIds.has(msgId)) {
+    chatStarredIds.delete(msgId);
+    showToast('⭐ تم إزالة النجمة');
+  } else {
+    chatStarredIds.add(msgId);
+    showToast('⭐ تم الحفظ في المحفوظات');
+
+    // ⚡ احفظ نسخة من الرسالة في Firestore
+    saveStarredToFirestore(msgId, msgData);
+  }
+
+  saveStarredMessages();
+  renderMessages();
+};
+
+async function saveStarredToFirestore(msgId, msgData) {
+  if (!msgData || !chatPerson) return;
+
+  try {
+    const starRef = doc(db, 'starredMessages', `${chatPerson.id}_${msgId}`);
+    await setDoc(starRef, {
+      PersonID: chatPerson.id,
+      MessageID: msgId,
+      ChatID: chatActiveChatId,
+      ChatName: getChatDisplayName(chatActiveChat),
+      Text: msgData.Text || '',
+      Type: msgData.Type || 'text',
+      ImageURL: msgData.ImageURL || '',
+      SenderID: msgData.SenderID || '',
+      SenderName: msgData.SenderName || '',
+      SentAt: msgData.SentAt || '',
+      StarredAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn('⚠️ saveStarredToFirestore error:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Pinned Messages — Firestore
+// ═══════════════════════════════════════════════════════
+
+async function loadPinnedMessages() {
+  try {
+    const chatsSnap = await getDocs(collection(db, 'chats'));
+    chatPinnedMessages = {};
+    chatsSnap.docs.forEach(d => {
+      const chat = d.data();
+      if (chat.PinnedMessageId) {
+        chatPinnedMessages[d.id] = chat.PinnedMessageId;
+      }
+    });
+  } catch (err) {
+    console.warn('⚠️ loadPinnedMessages error:', err.message);
+  }
+}
+
+function getPinnedMessageId(chatId) {
+  return chatPinnedMessages[chatId] || null;
+}
+
+window.pinMessage = async function(msgId) {
+  if (!chatActiveChatId || !msgId) return;
+
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  if (msg.DeletedForEveryone) {
+    showToast('⚠️ لا يمكن تثبيت رسالة محذوفة');
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, 'chats', chatActiveChatId), {
+      PinnedMessageId: msgId,
+      PinnedAt: new Date().toISOString(),
+      PinnedBy: chatPerson.id,
+      PinnedByName: getPersonFullName(chatPerson)
+    });
+
+    chatPinnedMessages[chatActiveChatId] = msgId;
+
+    // ⚡ أضف رسالة نظام
+    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), {
+      SenderID: 'system',
+      SenderName: 'النظام',
+      Type: 'system',
+      Text: `📌 تم تثبيت رسالة`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    });
+
+    showToast('📌 تم التثبيت');
+
+    if (chatActiveChat) {
+      chatActiveChat.PinnedMessageId = msgId;
+    }
+
+    renderMessages();
+    updatePinnedBanner();
+
+  } catch (err) {
+    console.error('❌ pinMessage error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+window.unpinMessage = async function() {
+  if (!chatActiveChatId) return;
+
+  try {
+    await updateDoc(doc(db, 'chats', chatActiveChatId), {
+      PinnedMessageId: null,
+      PinnedAt: null,
+      PinnedBy: null
+    });
+
+    delete chatPinnedMessages[chatActiveChatId];
+
+    if (chatActiveChat) {
+      chatActiveChat.PinnedMessageId = null;
+    }
+
+    showToast('📌 تم إلغاء التثبيت');
+
+    renderMessages();
+    updatePinnedBanner();
+
+  } catch (err) {
+    console.error('❌ unpinMessage error:', err);
+    alert('خطأ: ' + err.message);
+  }
+};
+
+function updatePinnedBanner() {
+  const banner = document.getElementById('chatPinnedBanner');
+  if (!banner) return;
+
+  const pinnedId = getPinnedMessageId(chatActiveChatId);
+  if (!pinnedId) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const msg = chatMessages.find(m => m.id === pinnedId);
+  if (!msg) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const msgText = msg.Type === 'image'
+    ? '📷 صورة'
+    : (msg.Text || '').substring(0, 60);
+
+  const senderName = msg.SenderName || 'مستخدم';
+
+  banner.innerHTML = `
+    <div class="pinned-banner-content" onclick="window.jumpToMessage('${pinnedId}')">
+      <div class="pinned-banner-icon">📌</div>
+      <div class="pinned-banner-text">
+        <div class="pinned-banner-label">رسالة مثبتة — ${escapeHtml(senderName)}</div>
+        <div class="pinned-banner-preview">${escapeHtml(msgText)}</div>
+      </div>
+    </div>
+    <button class="pinned-banner-close" onclick="window.unpinMessage()" title="إلغاء التثبيت">✕</button>
+  `;
+  banner.style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════
 //   ⚡ Outside Click — إغلاق الـMention Dropdown
 // ═══════════════════════════════════════════════════════
 
@@ -173,8 +377,7 @@ function handleOutsideClickForMention(e) {
   const input = document.getElementById('chatInput');
   const mentionBtn = document.getElementById('chatMentionBtn');
 
-  // ⚡ لو الضغط مش على dropdown/input/زر @ → اقفل
-  const clickedInside = 
+  const clickedInside =
     (dropdown && dropdown.contains(e.target)) ||
     (input && input.contains(e.target)) ||
     (mentionBtn && mentionBtn.contains(e.target));
@@ -398,6 +601,7 @@ function renderChatPage(area) {
             <input type="text" id="chatSearchInput" placeholder="🔍 ابحث..." />
           </div>
           <div class="chat-sidebar-actions">
+            <button class="chat-starred-btn" id="starredBtn" title="⭐ المحفوظات">⭐</button>
             <button class="chat-new-btn" id="newChatBtn" title="محادثة جديدة">✏️</button>
             ${isAdmin ? `<button class="chat-new-group-btn" id="newGroupBtn" title="مجموعة جديدة">➕</button>` : ''}
           </div>
@@ -438,6 +642,9 @@ function renderChatPage(area) {
     searchInput.addEventListener('input', () => renderChatList());
   }
 
+  const starredBtn = document.getElementById('starredBtn');
+  if (starredBtn) starredBtn.onclick = window.openStarredModal;
+
   const newChatBtn = document.getElementById('newChatBtn');
   if (newChatBtn) newChatBtn.onclick = window.openNewChatModal;
 
@@ -464,6 +671,13 @@ function startChatsListener() {
       snap.docs.forEach(d => {
         const chat = { id: d.id, ...d.data() };
 
+        // ⚡ حدّث الـpinned
+        if (chat.PinnedMessageId) {
+          chatPinnedMessages[d.id] = chat.PinnedMessageId;
+        } else {
+          delete chatPinnedMessages[d.id];
+        }
+
         if (chat.Type === 'channel' || chat.IsDefault) {
           chatConversations.push(chat);
           return;
@@ -482,6 +696,11 @@ function startChatsListener() {
       });
 
       renderChatList();
+
+      // ⚡ حدّث الـPinned Banner لو الشات مفتوح
+      if (chatActiveChatId) {
+        updatePinnedBanner();
+      }
     }, (err) => {
       console.warn('⚠️ Chats listener error:', err.message);
     });
@@ -554,6 +773,7 @@ function renderChatListItem(chat) {
   }
 
   const muteBadge = isMuted ? '<span class="chat-mute-badge" title="مكتوم">🔕</span>' : '';
+  const pinBadge = chat.PinnedMessageId ? '<span class="chat-pin-badge" title="فيه رسالة مثبتة">📌</span>' : '';
 
   return `
     <div class="chat-item ${isActive ? 'active' : ''} ${isMuted ? 'muted' : ''}" data-chat-id="${chat.id}">
@@ -563,7 +783,7 @@ function renderChatListItem(chat) {
       </div>
       <div class="chat-item-content">
         <div class="chat-item-header">
-          <div class="chat-item-name">${typeBadge} ${escapeHtml(displayName)} ${muteBadge}</div>
+          <div class="chat-item-name">${typeBadge} ${escapeHtml(displayName)} ${muteBadge} ${pinBadge}</div>
           ${lastMsgTime ? `<div class="chat-item-time">${lastMsgTime}</div>` : ''}
         </div>
         <div class="chat-item-preview">${escapeHtml(lastMsgText)}</div>
@@ -743,6 +963,9 @@ window.openChat = async function(chatId) {
     chatTypingUnsubscribe = null;
   }
 
+  // ⚡ اقفل الـSearch لما تفتح شات جديد
+  closeSearchBar();
+
   try {
     const chatDoc = await getDoc(doc(db, 'chats', chatId));
     if (!chatDoc.exists()) {
@@ -894,16 +1117,34 @@ function renderChatMain() {
         </div>
       </div>
       <div class="chat-header-actions">
+        <button class="chat-header-btn" id="chatSearchBtn" title="بحث">🔍</button>
         <button class="chat-header-btn" id="chatMuteBtn" title="${isMuted ? 'إلغاء الكتم' : 'كتم'}">${isMuted ? '🔔' : '🔕'}</button>
         ${canManage ? `<button class="chat-header-btn" id="chatGroupSettingsBtn" title="إعدادات المجموعة">⚙️</button>` : ''}
       </div>
     </div>
+
+    <div class="chat-search-bar" id="chatSearchBar" style="display:none;">
+      <input type="text" id="chatSearchInputInline" class="chat-search-inline" placeholder="🔍 ابحث في الرسائل..." />
+      <div class="chat-search-info" id="chatSearchInfo"></div>
+      <div class="chat-search-nav">
+        <button class="chat-search-nav-btn" id="chatSearchPrev" title="السابق">⬆️</button>
+        <button class="chat-search-nav-btn" id="chatSearchNext" title="التالي">⬇️</button>
+        <button class="chat-search-nav-btn" id="chatSearchClose" title="إغلاق">✕</button>
+      </div>
+    </div>
+
+    <div class="chat-pinned-banner" id="chatPinnedBanner" style="display:none;"></div>
 
     <div class="chat-messages" id="chatMessages">
       <div class="loading-state"><div class="spinner"></div></div>
     </div>
 
     <div class="chat-typing-indicator" id="chatTypingIndicator" style="display:none;"></div>
+
+    <button class="chat-scroll-bottom-btn" id="chatScrollBottomBtn" style="display:none;" title="أسفل">
+      ⬇️
+      <span class="chat-scroll-badge" id="chatScrollBadge" style="display:none;">0</span>
+    </button>
 
     ${isReadOnly ? `
       <div class="chat-readonly">🔒 هذه القناة للقراءة فقط</div>
@@ -940,6 +1181,9 @@ function renderChatMain() {
     });
   }
 
+  const searchBtn = document.getElementById('chatSearchBtn');
+  if (searchBtn) searchBtn.onclick = window.toggleSearchBar;
+
   const muteBtn = document.getElementById('chatMuteBtn');
   if (muteBtn) muteBtn.onclick = () => window.toggleMuteChat(chat.id);
 
@@ -965,6 +1209,42 @@ function renderChatMain() {
 
   const replyCloseBtn = document.getElementById('chatReplyPreviewClose');
   if (replyCloseBtn) replyCloseBtn.onclick = () => window.cancelReply();
+
+  // ⚡ Search bar handlers
+  const searchInputInline = document.getElementById('chatSearchInputInline');
+  if (searchInputInline) {
+    searchInputInline.addEventListener('input', (e) => {
+      performInlineSearch(e.target.value);
+    });
+    searchInputInline.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        navigateSearch(e.shiftKey ? -1 : 1);
+      }
+      if (e.key === 'Escape') {
+        closeSearchBar();
+      }
+    });
+  }
+
+  const searchPrev = document.getElementById('chatSearchPrev');
+  if (searchPrev) searchPrev.onclick = () => navigateSearch(-1);
+
+  const searchNext = document.getElementById('chatSearchNext');
+  if (searchNext) searchNext.onclick = () => navigateSearch(1);
+
+  const searchClose = document.getElementById('chatSearchClose');
+  if (searchClose) searchClose.onclick = closeSearchBar;
+
+  // ⚡ Scroll to bottom button
+  const scrollBtn = document.getElementById('chatScrollBottomBtn');
+  if (scrollBtn) scrollBtn.onclick = scrollToBottom;
+
+  // ⚡ Scroll listener
+  const messagesEl = document.getElementById('chatMessages');
+  if (messagesEl) {
+    messagesEl.addEventListener('scroll', handleMessagesScroll);
+  }
 
   // ⚡ input handlers
   const input = document.getElementById('chatInput');
@@ -1001,6 +1281,7 @@ function renderChatMain() {
   }
 
   updateTypingIndicator();
+  updatePinnedBanner();
 }
 
 function updateChatHeaderMuteButton() {
@@ -1009,6 +1290,196 @@ function updateChatHeaderMuteButton() {
   const isMuted = isChatMuted(chatActiveChatId);
   btn.textContent = isMuted ? '🔔' : '🔕';
   btn.title = isMuted ? 'إلغاء الكتم' : 'كتم';
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Scroll to Bottom
+// ═══════════════════════════════════════════════════════
+
+function handleMessagesScroll() {
+  const messagesEl = document.getElementById('chatMessages');
+  const scrollBtn = document.getElementById('chatScrollBottomBtn');
+  if (!messagesEl || !scrollBtn) return;
+
+  const scrollFromBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+
+  // ⚡ لو المسافة من الأسفل أكتر من 300px → اعرض الزر
+  if (scrollFromBottom > 300) {
+    scrollBtn.style.display = 'flex';
+  } else {
+    scrollBtn.style.display = 'none';
+  }
+}
+
+function scrollToBottom() {
+  const messagesEl = document.getElementById('chatMessages');
+  if (!messagesEl) return;
+
+  messagesEl.scrollTo({
+    top: messagesEl.scrollHeight,
+    behavior: 'smooth'
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Search in Chat
+// ═══════════════════════════════════════════════════════
+
+window.toggleSearchBar = function() {
+  const bar = document.getElementById('chatSearchBar');
+  if (!bar) return;
+
+  if (bar.style.display === 'none') {
+    bar.style.display = 'flex';
+    chatSearchActive = true;
+    const input = document.getElementById('chatSearchInputInline');
+    if (input) {
+      input.focus();
+      input.value = '';
+    }
+    clearSearchHighlights();
+    updateSearchInfo();
+  } else {
+    closeSearchBar();
+  }
+};
+
+function closeSearchBar() {
+  const bar = document.getElementById('chatSearchBar');
+  if (bar) bar.style.display = 'none';
+
+  chatSearchActive = false;
+  chatSearchResults = [];
+  chatSearchIndex = -1;
+  chatSearchTerm = '';
+
+  clearSearchHighlights();
+}
+
+function performInlineSearch(term) {
+  chatSearchTerm = (term || '').trim();
+
+  if (!chatSearchTerm || chatSearchTerm.length < 2) {
+    chatSearchResults = [];
+    chatSearchIndex = -1;
+    clearSearchHighlights();
+    updateSearchInfo();
+    return;
+  }
+
+  const lowerTerm = chatSearchTerm.toLowerCase();
+
+  chatSearchResults = chatMessages
+    .filter(msg => !msg.DeletedForEveryone && msg.Text && msg.Text.toLowerCase().includes(lowerTerm))
+    .map(msg => msg.id);
+
+  chatSearchIndex = chatSearchResults.length > 0 ? 0 : -1;
+
+  highlightSearchResults();
+  updateSearchInfo();
+
+  if (chatSearchIndex >= 0) {
+    scrollToSearchResult(chatSearchIndex);
+  }
+}
+
+function highlightSearchResults() {
+  // ⚡ امسح الـhighlights القديمة
+  document.querySelectorAll('.chat-message.search-match').forEach(el => {
+    el.classList.remove('search-match', 'search-current');
+  });
+
+  // ⚡ علّم النتائج الجديدة
+  chatSearchResults.forEach((msgId, idx) => {
+    const el = document.querySelector(`.chat-message[data-msg-id="${msgId}"]`);
+    if (el) {
+      el.classList.add('search-match');
+      if (idx === chatSearchIndex) {
+        el.classList.add('search-current');
+      }
+    }
+  });
+
+  // ⚡ Highlight النص جوه الرسالة
+  highlightTextInMessages();
+}
+
+function highlightTextInMessages() {
+  if (!chatSearchTerm) return;
+
+  const lowerTerm = chatSearchTerm.toLowerCase();
+  const escapedTerm = chatSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  chatSearchResults.forEach(msgId => {
+    const el = document.querySelector(`.chat-message[data-msg-id="${msgId}"] .chat-message-text`);
+    if (!el) return;
+
+    // ⚡ restore original first
+    const originalText = el.dataset.originalText || el.textContent;
+    if (!el.dataset.originalText) {
+      el.dataset.originalText = originalText;
+    }
+
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+    const html = escapeHtml(originalText).replace(regex, '<mark class="chat-search-mark">$1</mark>');
+    el.innerHTML = html;
+  });
+}
+
+function clearSearchHighlights() {
+  document.querySelectorAll('.chat-message.search-match, .chat-message.search-current').forEach(el => {
+    el.classList.remove('search-match', 'search-current');
+  });
+
+  document.querySelectorAll('.chat-message-text').forEach(el => {
+    if (el.dataset.originalText) {
+      el.textContent = el.dataset.originalText;
+      delete el.dataset.originalText;
+    }
+  });
+}
+
+function updateSearchInfo() {
+  const info = document.getElementById('chatSearchInfo');
+  if (!info) return;
+
+  if (chatSearchResults.length === 0) {
+    info.textContent = chatSearchTerm.length >= 2 ? 'لا يوجد نتائج' : '';
+    return;
+  }
+
+  info.textContent = `${chatSearchIndex + 1} من ${chatSearchResults.length}`;
+}
+
+function navigateSearch(direction) {
+  if (chatSearchResults.length === 0) return;
+
+  chatSearchIndex += direction;
+
+  if (chatSearchIndex < 0) chatSearchIndex = chatSearchResults.length - 1;
+  if (chatSearchIndex >= chatSearchResults.length) chatSearchIndex = 0;
+
+  // ⚡ حدّث الـcurrent highlight
+  document.querySelectorAll('.chat-message.search-current').forEach(el => {
+    el.classList.remove('search-current');
+  });
+
+  const currentId = chatSearchResults[chatSearchIndex];
+  const el = document.querySelector(`.chat-message[data-msg-id="${currentId}"]`);
+  if (el) el.classList.add('search-current');
+
+  scrollToSearchResult(chatSearchIndex);
+  updateSearchInfo();
+}
+
+function scrollToSearchResult(index) {
+  const msgId = chatSearchResults[index];
+  if (!msgId) return;
+
+  const el = document.querySelector(`.chat-message[data-msg-id="${msgId}"]`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1023,11 +1494,23 @@ function startMessagesListener(chatId) {
     chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMessages();
     markMessagesAsRead();
+    updatePinnedBanner();
 
-    setTimeout(() => {
-      const messagesEl = document.getElementById('chatMessages');
-      if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
-    }, 100);
+    // ⚡ لو فيه بحث نشط → أعد البحث
+    if (chatSearchActive && chatSearchTerm.length >= 2) {
+      performInlineSearch(chatSearchTerm);
+    }
+
+    // ⚡ Auto-scroll if user is near bottom
+    const messagesEl = document.getElementById('chatMessages');
+    if (messagesEl) {
+      const scrollFromBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+      if (scrollFromBottom < 200) {
+        setTimeout(() => {
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }, 100);
+      }
+    }
   }, (err) => {
     console.warn('⚠️ Messages listener error:', err.message);
   });
@@ -1090,6 +1573,14 @@ function renderMessages() {
     if (isMobile()) {
       setupSwipeToReply(el, msgId);
     }
+
+    // ⚡ ربط الـreactions
+    el.querySelectorAll('.reaction-chip').forEach(chip => {
+      chip.onclick = (e) => {
+        e.stopPropagation();
+        window.toggleReaction(msgId, chip.dataset.emoji);
+      };
+    });
   });
 
   setTimeout(() => {
@@ -1103,6 +1594,7 @@ function renderMessageItem(msg) {
   const senderName = msg.SenderName || getPersonFullName(sender) || 'غير معروف';
   const senderAvatar = getSenderAvatar(sender);
   const time = msg.SentAt ? formatTime(parseDate(msg.SentAt)) : '';
+  const isStarred = isMessageStarred(msg.id);
 
   if (msg.DeletedForEveryone) {
     return `
@@ -1115,7 +1607,6 @@ function renderMessageItem(msg) {
     `;
   }
 
-  // ⚡ System message
   if (msg.Type === 'system') {
     return `
       <div class="chat-message" data-msg-id="${msg.id}" data-msg-type="system">
@@ -1138,6 +1629,7 @@ function renderMessageItem(msg) {
   }
 
   const editedBadge = msg.Edited ? '<span class="chat-edited-badge">✏️ تم التعديل</span>' : '';
+  const starBadge = isStarred ? '<span class="chat-star-badge" title="محفوظة">⭐</span>' : '';
 
   let replyHtml = '';
   if (msg.ReplyTo && msg.ReplyTo.MessageID) {
@@ -1159,7 +1651,6 @@ function renderMessageItem(msg) {
 
   const showSender = !isMine && chatActiveChat && (chatActiveChat.Type === 'group' || chatActiveChat.Type === 'channel');
 
-  // ⚡ Read Receipts
   let readReceiptHtml = '';
   if (isMine) {
     const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
@@ -1178,8 +1669,8 @@ function renderMessageItem(msg) {
     }
   }
 
-  // ⚡ Mention check
   const hasMention = checkMentionsForMe(msg);
+  const reactionsHtml = renderReactions(msg);
 
   return `
     <div class="chat-message ${isMine ? 'mine' : 'theirs'} ${hasMention ? 'mentioned' : ''}"
@@ -1194,8 +1685,10 @@ function renderMessageItem(msg) {
         <div class="chat-message-meta">
           <span class="chat-message-time">${time}</span>
           ${editedBadge}
+          ${starBadge}
           ${readReceiptHtml}
         </div>
+        ${reactionsHtml}
       </div>
     </div>
   `;
@@ -1207,6 +1700,75 @@ function getSenderAvatar(sender) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Reactions — Render
+// ═══════════════════════════════════════════════════════
+
+function renderReactions(msg) {
+  if (!msg.Reactions || typeof msg.Reactions !== 'object') return '';
+
+  const counts = {};
+  const myReactions = new Set();
+
+  Object.keys(msg.Reactions).forEach(personId => {
+    const emoji = msg.Reactions[personId];
+    if (!emoji) return;
+
+    counts[emoji] = (counts[emoji] || 0) + 1;
+    if (personId === chatPerson.id) myReactions.add(emoji);
+  });
+
+  const emojis = Object.keys(counts);
+  if (emojis.length === 0) return '';
+
+  return `
+    <div class="chat-reactions">
+      ${emojis.map(emoji => {
+        const isMine = myReactions.has(emoji);
+        return `
+          <button class="reaction-chip ${isMine ? 'mine' : ''}"
+                  data-emoji="${emoji}"
+                  data-msg-id="${msg.id}"
+                  title="${counts[emoji]} تفاعل">
+            <span class="reaction-emoji">${emoji}</span>
+            <span class="reaction-count">${counts[emoji]}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+window.toggleReaction = async function(msgId, emoji) {
+  if (!msgId || !emoji || !chatActiveChatId) return;
+
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  if (msg.DeletedForEveryone) return;
+
+  try {
+    const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msgId);
+    const currentReactions = msg.Reactions || {};
+    const myCurrentReaction = currentReactions[chatPerson.id];
+
+    if (myCurrentReaction === emoji) {
+      // ⚡ شيل الـreaction
+      const newReactions = { ...currentReactions };
+      delete newReactions[chatPerson.id];
+
+      await updateDoc(msgRef, { Reactions: newReactions });
+    } else {
+      // ⚡ ضيف/غيّر الـreaction
+      await updateDoc(msgRef, {
+        [`Reactions.${chatPerson.id}`]: emoji
+      });
+    }
+  } catch (err) {
+    console.error('❌ toggleReaction error:', err);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
 //   ⚡ Format Message Text (with mentions highlight)
 // ═══════════════════════════════════════════════════════
 
@@ -1215,7 +1777,6 @@ function formatMessageText(text) {
 
   let html = escapeHtml(text);
 
-  // ⚡ Highlight @mentions
   html = html.replace(/@([^\s@]+)/g, (match, name) => {
     return `<span class="chat-mention">${match}</span>`;
   });
@@ -1267,12 +1828,8 @@ function handleMentionTyping(input) {
 
 window.showMentionDropdown = function(searchTerm) {
   const dropdown = document.getElementById('chatMentionDropdown');
-  if (!dropdown) {
-    console.warn('⚠️ Dropdown element not found');
-    return;
-  }
+  if (!dropdown) return;
 
-  // ⚡ ⚡ ⚡ حماية قوية — لو مفيش شات نشط
   let members = [];
 
   if (chatActiveChat && chatActiveChat.Type) {
@@ -1287,12 +1844,10 @@ window.showMentionDropdown = function(searchTerm) {
     }
   }
 
-  // ⚡ ⚡ ⚡ FALLBACK — كل الأشخاص النشطين
   if (members.length === 0) {
     members = chatPeopleArray.filter(p => p.id !== chatPerson?.id);
   }
 
-  // ⚡ فلتر بالبحث
   if (searchTerm) {
     const term = searchTerm.toLowerCase().trim();
     members = members.filter(p => {
@@ -1305,23 +1860,16 @@ window.showMentionDropdown = function(searchTerm) {
     });
   }
 
-  // ⚡ رتّب أبجديًا
   members.sort((a, b) =>
     getPersonFullName(a).localeCompare(getPersonFullName(b), 'ar')
   );
 
   if (members.length === 0) {
-    dropdown.innerHTML = `
-      <div class="chat-mention-empty">
-        لا يوجد نتائج مطابقة
-      </div>
-    `;
+    dropdown.innerHTML = `<div class="chat-mention-empty">لا يوجد نتائج مطابقة</div>`;
     dropdown.style.display = 'block';
     mentionDropdownActive = true;
     return;
   }
-
-  console.log(`✅ Showing ${members.length} members in mention dropdown`);
 
   mentionDropdownActive = true;
 
@@ -1348,7 +1896,6 @@ window.showMentionDropdown = function(searchTerm) {
 
   dropdown.style.display = 'block';
 
-  // ⚡ ربط الـclick
   dropdown.querySelectorAll('.chat-mention-item').forEach(el => {
     el.onclick = (e) => {
       e.preventDefault();
@@ -1450,7 +1997,6 @@ window.sendChatMessage = async function() {
     return;
   }
 
-  // ⚡ استخرج الـmentions
   const mentions = extractMentionsFromText(text);
 
   input.value = '';
@@ -1459,7 +2005,6 @@ window.sendChatMessage = async function() {
   if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
   clearTypingIndicator();
 
-  // ⚡ اقفل الـmention dropdown
   hideMentionDropdown();
 
   try {
@@ -1687,135 +2232,6 @@ window.jumpToMessage = function(msgId) {
 };
 
 // ═══════════════════════════════════════════════════════
-//   Message Actions (Long Press / Right Click)
-// ═══════════════════════════════════════════════════════
-
-function attachMessageActions(el) {
-  const msgId = el.dataset.msgId;
-  const isMine = el.dataset.msgMine === '1';
-  const msgType = el.dataset.msgType;
-
-  el.addEventListener('touchstart', (e) => {
-    longPressTimer = setTimeout(() => {
-      e.preventDefault();
-      showMessageActionsMenu(msgId, isMine, msgType, e.touches[0].clientX, e.touches[0].clientY);
-      if (navigator.vibrate) navigator.vibrate(30);
-    }, 500);
-  }, { passive: true });
-
-  el.addEventListener('touchend', () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  });
-
-  el.addEventListener('touchmove', () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  });
-
-  el.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    showMessageActionsMenu(msgId, isMine, msgType, e.clientX, e.clientY);
-  });
-
-  const replyEl = el.querySelector('.chat-message-reply');
-  if (replyEl) {
-    replyEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const targetId = replyEl.dataset.jumpTo;
-      if (targetId) window.jumpToMessage(targetId);
-    });
-  }
-}
-
-function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
-  closeMessageActionsMenu();
-
-  const msg = chatMessages.find(m => m.id === msgId);
-  if (!msg) return;
-
-  const now = Date.now();
-  const sentAt = msg.SentAt ? new Date(msg.SentAt).getTime() : 0;
-  const minutesSinceSent = (now - sentAt) / 60000;
-
-  const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
-
-  const canReply = !msg.DeletedForEveryone;
-  const canEdit = isMine && msgType === 'text' && minutesSinceSent < 60 && !msg.DeletedForEveryone;
-  const canCopy = msgType === 'text' && !msg.DeletedForEveryone;
-  const canDeleteForEveryone =
-    !msg.DeletedForEveryone &&
-    (isAdminOrOwner || (isMine && minutesSinceSent < 60));
-
-  const menu = document.createElement('div');
-  menu.id = 'messageActionsMenu';
-  menu.className = 'message-actions-menu';
-
-  const left = Math.min(x, window.innerWidth - 200);
-  const top = Math.min(y, window.innerHeight - 300);
-
-  menu.innerHTML = `
-    <div class="msg-menu-backdrop"></div>
-    <div class="msg-menu-content" style="left: ${left}px; top: ${top}px;">
-      ${canReply ? `
-        <button class="msg-menu-item" data-action="reply">
-          <span>↩️</span> <span>رد</span>
-        </button>
-      ` : ''}
-      ${canCopy ? `
-        <button class="msg-menu-item" data-action="copy">
-          <span>📋</span> <span>نسخ</span>
-        </button>
-      ` : ''}
-      ${canEdit ? `
-        <button class="msg-menu-item" data-action="edit">
-          <span>✏️</span> <span>تعديل</span>
-        </button>
-      ` : ''}
-      <button class="msg-menu-item" data-action="delete-me">
-        <span>🗑️</span> <span>حذف ليّ</span>
-      </button>
-      ${canDeleteForEveryone ? `
-        <button class="msg-menu-item danger" data-action="delete-all">
-          <span>🗑️</span> <span>حذف للجميع</span>
-        </button>
-      ` : ''}
-      <button class="msg-menu-item cancel" data-action="cancel">
-        <span>✕</span> <span>إلغاء</span>
-      </button>
-    </div>
-  `;
-
-  document.body.appendChild(menu);
-
-  menu.querySelector('.msg-menu-backdrop').onclick = closeMessageActionsMenu;
-
-  menu.querySelectorAll('.msg-menu-item').forEach(btn => {
-    btn.onclick = () => {
-      const action = btn.dataset.action;
-      closeMessageActionsMenu();
-
-      if (action === 'reply') window.startReply(msgId);
-      else if (action === 'edit') editMessage(msgId);
-      else if (action === 'copy') copyMessageText(msg.Text);
-      else if (action === 'delete-me') deleteMessageForMe(msgId);
-      else if (action === 'delete-all') deleteMessageForEveryone(msgId);
-    };
-  });
-}
-
-function closeMessageActionsMenu() {
-  const menu = document.getElementById('messageActionsMenu');
-  if (menu) menu.remove();
-}
-
-window.closeMessageActionsMenu = closeMessageActionsMenu;
-
-// ═══════════════════════════════════════════════════════
 //   Copy / Toast
 // ═══════════════════════════════════════════════════════
 
@@ -1985,6 +2401,549 @@ function setupSwipeToReply(el, msgId) {
     }
   }, { passive: true });
 }
+
+// ═══════════════════════════════════════════════════════
+//   Message Actions (Long Press / Right Click)
+// ═══════════════════════════════════════════════════════
+
+function attachMessageActions(el) {
+  const msgId = el.dataset.msgId;
+  const isMine = el.dataset.msgMine === '1';
+  const msgType = el.dataset.msgType;
+
+  el.addEventListener('touchstart', (e) => {
+    longPressTimer = setTimeout(() => {
+      e.preventDefault();
+      showMessageActionsMenu(msgId, isMine, msgType, e.touches[0].clientX, e.touches[0].clientY);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 500);
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  });
+
+  el.addEventListener('touchmove', () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  });
+
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showMessageActionsMenu(msgId, isMine, msgType, e.clientX, e.clientY);
+  });
+
+  // ⚡ Double click = ❤️ quick reaction
+  el.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    window.toggleReaction(msgId, '❤️');
+  });
+
+  const replyEl = el.querySelector('.chat-message-reply');
+  if (replyEl) {
+    replyEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetId = replyEl.dataset.jumpTo;
+      if (targetId) window.jumpToMessage(targetId);
+    });
+  }
+}
+
+function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
+  closeMessageActionsMenu();
+
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  if (msg.DeletedForEveryone) return;
+
+  const now = Date.now();
+  const sentAt = msg.SentAt ? new Date(msg.SentAt).getTime() : 0;
+  const minutesSinceSent = (now - sentAt) / 60000;
+
+  const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
+  const isStarred = isMessageStarred(msgId);
+  const isPinned = getPinnedMessageId(chatActiveChatId) === msgId;
+
+  const canReply = msg.Type !== 'system';
+  const canEdit = isMine && msgType === 'text' && minutesSinceSent < 60;
+  const canCopy = msgType === 'text';
+  const canDeleteForEveryone = isAdminOrOwner || (isMine && minutesSinceSent < 60);
+  const canStar = msg.Type !== 'system';
+  const canForward = msg.Type !== 'system';
+  const canPin = isAdminOrOwner || chatActiveChat?.Type === 'group';
+
+  const menu = document.createElement('div');
+  menu.id = 'messageActionsMenu';
+  menu.className = 'message-actions-menu';
+
+  const menuWidth = 320;
+  const menuHeight = 480;
+
+  const left = Math.max(8, Math.min(x - menuWidth / 2, window.innerWidth - menuWidth - 8));
+  const top = Math.max(8, Math.min(y - menuHeight / 2, window.innerHeight - menuHeight - 8));
+
+  menu.innerHTML = `
+    <div class="msg-menu-backdrop"></div>
+    <div class="msg-menu-content msg-menu-wide" style="left: ${left}px; top: ${top}px;">
+
+      <!-- ⚡ Reactions Bar -->
+      ${msg.Type !== 'system' ? `
+        <div class="reactions-picker">
+          ${REACTION_EMOJIS.map(emoji => {
+            const isMine = (msg.Reactions || {})[chatPerson.id] === emoji;
+            return `
+              <button class="reaction-picker-btn ${isMine ? 'active' : ''}"
+                      data-emoji="${emoji}">
+                ${emoji}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
+
+      <!-- ⚡ Actions List -->
+      <div class="msg-menu-items">
+
+        ${canReply ? `
+          <button class="msg-menu-item" data-action="reply">
+            <span class="msg-menu-icon">↩️</span> <span>رد</span>
+          </button>
+        ` : ''}
+
+        ${canStar ? `
+          <button class="msg-menu-item" data-action="star">
+            <span class="msg-menu-icon">${isStarred ? '⭐' : '☆'}</span>
+            <span>${isStarred ? 'إزالة النجمة' : 'حفظ في المحفوظات'}</span>
+          </button>
+        ` : ''}
+
+        ${canForward ? `
+          <button class="msg-menu-item" data-action="forward">
+            <span class="msg-menu-icon">📤</span> <span>إعادة توجيه</span>
+          </button>
+        ` : ''}
+
+        ${canPin ? `
+          <button class="msg-menu-item" data-action="pin">
+            <span class="msg-menu-icon">📌</span>
+            <span>${isPinned ? 'إلغاء التثبيت' : 'تثبيت الرسالة'}</span>
+          </button>
+        ` : ''}
+
+        ${canCopy ? `
+          <button class="msg-menu-item" data-action="copy">
+            <span class="msg-menu-icon">📋</span> <span>نسخ</span>
+          </button>
+        ` : ''}
+
+        ${canEdit ? `
+          <button class="msg-menu-item" data-action="edit">
+            <span class="msg-menu-icon">✏️</span> <span>تعديل</span>
+          </button>
+        ` : ''}
+
+        <button class="msg-menu-item" data-action="delete-me">
+          <span class="msg-menu-icon">🗑️</span> <span>حذف ليّ</span>
+        </button>
+
+        ${canDeleteForEveryone ? `
+          <button class="msg-menu-item danger" data-action="delete-all">
+            <span class="msg-menu-icon">🗑️</span> <span>حذف للجميع</span>
+          </button>
+        ` : ''}
+
+        <button class="msg-menu-item cancel" data-action="cancel">
+          <span class="msg-menu-icon">✕</span> <span>إلغاء</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(menu);
+
+  menu.querySelector('.msg-menu-backdrop').onclick = closeMessageActionsMenu;
+
+  // ⚡ Reactions buttons
+  menu.querySelectorAll('.reaction-picker-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const emoji = btn.dataset.emoji;
+      window.toggleReaction(msgId, emoji);
+      closeMessageActionsMenu();
+    };
+  });
+
+  // ⚡ Action buttons
+  menu.querySelectorAll('.msg-menu-item').forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      closeMessageActionsMenu();
+
+      if (action === 'reply') window.startReply(msgId);
+      else if (action === 'star') window.toggleStarMessage(msgId, msg);
+      else if (action === 'forward') window.openForwardModal(msgId);
+      else if (action === 'pin') isPinned ? window.unpinMessage() : window.pinMessage(msgId);
+      else if (action === 'edit') editMessage(msgId);
+      else if (action === 'copy') copyMessageText(msg.Text);
+      else if (action === 'delete-me') deleteMessageForMe(msgId);
+      else if (action === 'delete-all') deleteMessageForEveryone(msgId);
+    };
+  });
+}
+
+function closeMessageActionsMenu() {
+  const menu = document.getElementById('messageActionsMenu');
+  if (menu) menu.remove();
+}
+
+window.closeMessageActionsMenu = closeMessageActionsMenu;
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Forward Modal (Multi-Select)
+// ═══════════════════════════════════════════════════════
+
+window.openForwardModal = function(msgId) {
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  let modal = document.getElementById('forwardModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'forwardModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const selectedChats = new Set();
+
+  const availableChats = chatConversations
+    .filter(c => c.id !== chatActiveChatId)
+    .sort((a, b) => {
+      const aTime = a.LastMessageAt || a.CreatedAt || '';
+      const bTime = b.LastMessageAt || b.CreatedAt || '';
+      return String(bTime).localeCompare(String(aTime));
+    });
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:540px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>📤 إعادة توجيه</h2>
+        <button class="modal-close" id="closeForwardBtn">✕</button>
+      </div>
+
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
+
+        <!-- ⚡ Preview الرسالة -->
+        <div class="forward-preview">
+          <div class="forward-preview-label">📨 الرسالة:</div>
+          <div class="forward-preview-content">
+            ${msg.Type === 'image'
+              ? `<img src="${escapeHtml(msg.ImageURL)}" class="forward-preview-img" />`
+              : `<div class="forward-preview-text">${escapeHtml((msg.Text || '').substring(0, 200))}</div>`
+            }
+          </div>
+        </div>
+
+        <!-- ⚡ Search -->
+        <div class="form-row">
+          <input type="text" id="forwardSearch" placeholder="🔍 ابحث عن محادثة..." class="chat-new-search" />
+        </div>
+
+        <!-- ⚡ Selected count -->
+        <div class="forward-selected-count" id="forwardSelectedCount" style="display:none;">
+          ✅ <span id="forwardCountNum">0</span> محادثة محددة
+        </div>
+
+        <!-- ⚡ Chats list -->
+        <div class="forward-chats-list" id="forwardChatsList">
+          ${availableChats.map(c => renderForwardChatItem(c, selectedChats.has(c.id))).join('')}
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelForwardBtn">إلغاء</button>
+        <button class="btn-primary" id="confirmForwardBtn" disabled>
+          📤 إرسال (<span id="forwardCountBtn">0</span>)
+        </button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  const updateSelectedCount = () => {
+    const count = selectedChats.size;
+    document.getElementById('forwardCountNum').textContent = count;
+    document.getElementById('forwardCountBtn').textContent = count;
+
+    const countBox = document.getElementById('forwardSelectedCount');
+    countBox.style.display = count > 0 ? 'block' : 'none';
+
+    document.getElementById('confirmForwardBtn').disabled = count === 0;
+  };
+
+  const bindChatItems = () => {
+    modal.querySelectorAll('.forward-chat-item').forEach(item => {
+      item.onclick = () => {
+        const chatId = item.dataset.chatId;
+        if (selectedChats.has(chatId)) {
+          selectedChats.delete(chatId);
+          item.classList.remove('selected');
+        } else {
+          selectedChats.add(chatId);
+          item.classList.add('selected');
+        }
+        updateSelectedCount();
+      };
+    });
+  };
+
+  bindChatItems();
+
+  document.getElementById('closeForwardBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('cancelForwardBtn').onclick = () => modal.style.display = 'none';
+
+  document.getElementById('confirmForwardBtn').onclick = async () => {
+    if (selectedChats.size === 0) return;
+
+    const btn = document.getElementById('confirmForwardBtn');
+    btn.disabled = true;
+    btn.innerHTML = '⏳ جاري الإرسال...';
+
+    await forwardMessageToChats(msg, Array.from(selectedChats));
+
+    modal.style.display = 'none';
+    showToast(`📤 تم الإرسال لـ ${selectedChats.size} محادثة`);
+  };
+
+  // ⚡ Search
+  const searchInput = document.getElementById('forwardSearch');
+  searchInput.oninput = (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    const list = document.getElementById('forwardChatsList');
+
+    const filtered = availableChats.filter(c => {
+      const name = getChatDisplayName(c).toLowerCase();
+      return name.includes(term);
+    });
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:20px;">لا يوجد نتائج</p>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(c => renderForwardChatItem(c, selectedChats.has(c.id))).join('');
+    bindChatItems();
+  };
+
+  setTimeout(() => searchInput.focus(), 100);
+};
+
+function renderForwardChatItem(chat, isSelected) {
+  const displayName = getChatDisplayName(chat);
+  const avatar = getChatAvatar(chat);
+
+  let typeBadge = '';
+  if (chat.Type === 'channel' || chat.IsDefault) {
+    typeBadge = '<span class="chat-item-badge">📢</span>';
+  } else if (chat.Type === 'group') {
+    typeBadge = '<span class="chat-item-badge">👥</span>';
+  }
+
+  return `
+    <div class="forward-chat-item ${isSelected ? 'selected' : ''}" data-chat-id="${chat.id}">
+      <div class="forward-chat-checkbox">
+        ${isSelected ? '✅' : '⬜'}
+      </div>
+      <div class="forward-chat-avatar">${avatar}</div>
+      <div class="forward-chat-info">
+        <div class="forward-chat-name">${typeBadge} ${escapeHtml(displayName)}</div>
+      </div>
+    </div>
+  `;
+}
+
+async function forwardMessageToChats(msg, chatIds) {
+  const forwardedData = {
+    SenderID: chatPerson.id,
+    SenderName: getPersonFullName(chatPerson),
+    Type: msg.Type || 'text',
+    Text: msg.Text || '',
+    ImageURL: msg.ImageURL || '',
+    SentAt: new Date().toISOString(),
+    ReadBy: [chatPerson.id],
+    Reactions: {},
+    Forwarded: true,
+    ForwardedFrom: chatActiveChatId,
+    ForwardedFromName: getChatDisplayName(chatActiveChat)
+  };
+
+  for (const chatId of chatIds) {
+    try {
+      await addDoc(collection(db, 'chats', chatId, 'messages'), forwardedData);
+
+      await updateDoc(doc(db, 'chats', chatId), {
+        LastMessage: {
+          Text: msg.Type === 'image' ? '📷 صورة' : (msg.Text || '').substring(0, 100),
+          Type: msg.Type || 'text',
+          SenderID: chatPerson.id,
+          SenderName: getPersonFullName(chatPerson),
+          SentAt: forwardedData.SentAt
+        },
+        LastMessageAt: forwardedData.SentAt
+      });
+
+      // ⚡ إشعار
+      const targetChat = chatConversations.find(c => c.id === chatId);
+      if (targetChat) {
+        await sendChatNotification(targetChat, forwardedData, []);
+      }
+    } catch (err) {
+      console.warn(`⚠️ Forward to ${chatId} error:`, err.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Starred Messages Modal
+// ═══════════════════════════════════════════════════════
+
+window.openStarredModal = async function() {
+  let modal = document.getElementById('starredModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'starredModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>⭐ المحفوظات</h2>
+        <button class="modal-close" id="closeStarredBtn">✕</button>
+      </div>
+
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
+        <div class="loading-state"><div class="spinner"></div><div>جاري التحميل...</div></div>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+  document.getElementById('closeStarredBtn').onclick = () => modal.style.display = 'none';
+
+  try {
+    const q = query(
+      collection(db, 'starredMessages'),
+      where('PersonID', '==', chatPerson.id)
+    );
+    const snap = await getDocs(q);
+
+    const starred = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const aT = a.StarredAt || '';
+        const bT = b.StarredAt || '';
+        return String(bT).localeCompare(String(aT));
+      });
+
+    const body = modal.querySelector('.modal-body');
+
+    if (starred.length === 0) {
+      body.innerHTML = `
+        <div class="starred-empty">
+          <div class="starred-empty-icon">⭐</div>
+          <h3>لا يوجد رسائل محفوظة</h3>
+          <p>احفظ الرسائل المهمة عشان تلقاها هنا بسهولة</p>
+        </div>
+      `;
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="starred-list">
+        ${starred.map(s => {
+          const sentAt = s.SentAt ? parseDate(s.SentAt) : null;
+          const timeStr = sentAt ? formatRelativeTime(sentAt) : '';
+
+          return `
+            <div class="starred-item" data-starred-id="${s.id}" data-chat-id="${s.ChatID}" data-msg-id="${s.MessageID}">
+              <div class="starred-item-header">
+                <div class="starred-item-chat">💬 ${escapeHtml(s.ChatName || 'شات')}</div>
+                <div class="starred-item-time">${timeStr}</div>
+              </div>
+              <div class="starred-item-content">
+                ${s.Type === 'image'
+                  ? `<img src="${escapeHtml(s.ImageURL)}" class="starred-item-img" />`
+                  : `<div class="starred-item-text">${escapeHtml((s.Text || '').substring(0, 200))}</div>`
+                }
+              </div>
+              <div class="starred-item-footer">
+                <span class="starred-item-sender">👤 ${escapeHtml(s.SenderName || '')}</span>
+                <button class="starred-item-remove" data-remove-id="${s.MessageID}" title="إزالة">🗑️</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // ⚡ Jump to message
+    body.querySelectorAll('.starred-item').forEach(item => {
+      item.onclick = (e) => {
+        if (e.target.closest('.starred-item-remove')) return;
+
+        const chatId = item.dataset.chatId;
+        const msgId = item.dataset.msgId;
+
+        modal.style.display = 'none';
+        window.openChat(chatId);
+
+        setTimeout(() => window.jumpToMessage(msgId), 1500);
+      };
+    });
+
+    // ⚡ Remove from starred
+    body.querySelectorAll('.starred-item-remove').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const msgId = btn.dataset.removeId;
+        const starredDocId = `${chatPerson.id}_${msgId}`;
+
+        if (!confirm('🗑️ إزالة الرسالة من المحفوظات؟')) return;
+
+        try {
+          await deleteDoc(doc(db, 'starredMessages', starredDocId));
+          chatStarredIds.delete(msgId);
+          saveStarredMessages();
+
+          btn.closest('.starred-item').remove();
+          showToast('✅ تم الإزالة');
+
+          if (body.querySelectorAll('.starred-item').length === 0) {
+            window.openStarredModal();
+          }
+        } catch (err) {
+          console.error('❌ Remove starred error:', err);
+        }
+      };
+    });
+
+  } catch (err) {
+    console.error('❌ openStarredModal error:', err);
+    const body = modal.querySelector('.modal-body');
+    if (body) {
+      body.innerHTML = `<div class="placeholder-page"><h2>خطأ</h2><p>${err.message}</p></div>`;
+    }
+  }
+};
 
 // ═══════════════════════════════════════════════════════
 //   New Chat Modal
@@ -2257,7 +3216,7 @@ window.createGroup = async function() {
 };
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Group Settings Modal
+//   Group Settings Modal
 // ═══════════════════════════════════════════════════════
 
 window.openGroupSettings = async function(chatId) {
@@ -2451,7 +3410,7 @@ function renderAddMembersList(chat, searchTerm = '') {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Group Actions
+//   Group Actions
 // ═══════════════════════════════════════════════════════
 
 async function saveGroupInfo(chatId) {
@@ -2816,6 +3775,32 @@ async function sendChatNotification(chat, messageData, mentions = []) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   Keyboard Shortcuts
+// ═══════════════════════════════════════════════════════
+
+document.addEventListener('keydown', (e) => {
+  // ⚡ Ctrl+F / Cmd+F → Search in Chat
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    if (chatActiveChatId && document.getElementById('chatMain')?.contains(document.activeElement)) {
+      e.preventDefault();
+      window.toggleSearchBar();
+    }
+  }
+
+  // ⚡ Escape → إغلاق كل حاجة
+  if (e.key === 'Escape') {
+    if (mentionDropdownActive) {
+      hideMentionDropdown();
+    }
+    if (chatSearchActive) {
+      closeSearchBar();
+    }
+    closeMessageActionsMenu();
+    closeChatActionsMenu();
+  }
+});
+
+// ═══════════════════════════════════════════════════════
 //   Cleanup
 // ═══════════════════════════════════════════════════════
 
@@ -2844,4 +3829,4 @@ window.loadChatPage = loadChatPage;
 window.showSidebarMobile = showSidebarMobile;
 window.closeChatMobile = showSidebarMobile;
 
-console.log('✅ chat.js loaded (full — phase 1 + 2 + fixes)');
+console.log('✅ chat.js loaded (full — phase 1 + 2 + 3)');
