@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════
    ⚡ dashboard.css — Sidebar + Topbar + Layout
    ⚡ Mobile-First + Responsive + Modern
-   ⚡ Full sidebar name display (no truncation)
+   ⚡ Full sidebar name + Elegant logo layout
    ═══════════════════════════════════════════════════════ */
 
 body.dashboard-body {
@@ -43,48 +43,52 @@ body.dashboard-body {
   pointer-events: auto !important;
 }
 
-/* ═══ Sidebar Header — Full Name Display ═══ */
+/* ═══════════════════════════════════════════════════════
+   ⚡ Sidebar Header — Elegant Logo + Full Name
+   ═══════════════════════════════════════════════════════ */
+
 .sidebar-header {
-  padding: var(--space-3, 12px) var(--space-4, 16px);
+  padding: var(--space-4, 16px);
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
 }
 
 .sidebar-logo {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-2, 8px);
-  font-weight: var(--font-bold, 700);
-  font-size: var(--font-base, 14px);
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3, 12px);
   color: #ffffff;
   min-width: 0;
   width: 100%;
-  padding-top: 4px;
-}
-
-.sidebar-logo span {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-base, 14px);
-  line-height: 1.35;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .app-logo {
-  height: 32px;
-  width: 32px;
+  height: 56px;
+  width: 56px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 12px);
   background: transparent;
   padding: 0;
   border: none;
   box-shadow: none;
   flex-shrink: 0;
-  margin-top: 2px;
+}
+
+.sidebar-logo span {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: var(--font-bold, 700);
+  line-height: 1.4;
+  color: #ffffff;
+  text-align: right;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* ═══ Sidebar Nav ═══ */
@@ -1016,13 +1020,17 @@ body.dashboard-body {
   }
 
   .sidebar-logo {
-    font-size: var(--font-base, 14px);
     gap: var(--space-2, 8px);
   }
 
   .app-logo {
-    height: 28px;
-    width: 28px;
+    height: 48px;
+    width: 48px;
+  }
+
+  .sidebar-logo span {
+    font-size: 13px;
+    line-height: 1.35;
   }
 
   .nav-item {
@@ -1086,6 +1094,11 @@ body.dashboard-body {
     padding: var(--space-3, 12px);
   }
 
+  .app-logo {
+    height: 40px;
+    width: 40px;
+  }
+
   .sidebar-logo span {
     font-size: var(--font-sm, 12px);
     line-height: 1.25;
@@ -1121,6 +1134,15 @@ body.dashboard-body {
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: var(--space-5, 20px);
+  }
+
+  .app-logo {
+    height: 64px;
+    width: 64px;
+  }
+
+  .sidebar-logo span {
+    font-size: 15px;
   }
 }
 
