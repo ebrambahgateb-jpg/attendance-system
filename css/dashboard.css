@@ -44,7 +44,7 @@ body.dashboard-body {
 
 /* ═══ Sidebar Header ═══ */
 .sidebar-header {
-  padding: var(--space-4, 16px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
 }
@@ -52,23 +52,30 @@ body.dashboard-body {
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: var(--space-3, 12px);
+  gap: var(--space-2, 8px);
   font-weight: var(--font-bold, 700);
-  font-size: var(--font-lg, 16px);
+  font-size: var(--font-base, 14px);
   color: #ffffff;
   min-width: 0;
+  width: 100%;
 }
 
 .sidebar-logo span {
-  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-base, 14px);
+  line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
-
 .app-logo {
-  height: 32px;
-  width: 32px;
+  height: 28px;
+  width: 28px;
   object-fit: contain;
   border-radius: 4px;
   background: transparent;
