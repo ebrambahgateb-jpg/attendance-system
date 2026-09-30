@@ -10,12 +10,12 @@
 /* ═══ Filters ═══ */
 .rpt-filters {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
   flex-wrap: wrap;
   background: var(--card-bg);
-  padding: 14px;
-  border-radius: 12px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   align-items: flex-end;
 }
@@ -23,24 +23,25 @@
 .rpt-filter-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 140px;
 }
 
 .rpt-filter-group label {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
   color: var(--text-muted);
 }
 
 .rpt-filter-group input {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-sm);
   background: var(--card-bg);
   color: var(--text);
+  min-height: 38px;
 }
 
 .rpt-filter-group input:focus {
@@ -50,7 +51,7 @@
 
 .rpt-export-group {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   margin-right: auto;
   flex-wrap: wrap;
 }
@@ -59,26 +60,26 @@
 .rpt-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
 }
 
 .rpt-stat {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .rpt-stat-icon {
-  font-size: 28px;
+  font-size: var(--font-3xl);
   width: 50px;
   height: 50px;
-  border-radius: 12px;
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: var(--bg-alt);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,34 +93,34 @@
 }
 
 .rpt-stat-value {
-  font-size: 24px;
-  font-weight: 800;
+  font-size: var(--font-2xl);
+  font-weight: var(--font-extrabold);
   color: var(--primary);
   line-height: 1;
 }
 
 .rpt-stat-label {
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: var(--text-muted);
-  margin-top: 4px;
-  font-weight: 600;
+  margin-top: var(--space-1);
+  font-weight: var(--font-semibold);
 }
 
 /* ═══ Sections ═══ */
 .rpt-section {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 20px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
 }
 
 .rpt-section-title {
-  font-size: 16px;
-  font-weight: 800;
+  font-size: var(--font-lg);
+  font-weight: var(--font-extrabold);
   color: var(--text);
-  margin: 0 0 16px 0;
-  padding-bottom: 12px;
+  margin: 0 0 var(--space-4) 0;
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border);
 }
 
@@ -138,22 +139,22 @@
 .rpt-top-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .rpt-person-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg);
-  border-radius: 10px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-alt);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
 .rpt-person-rank {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: var(--font-xl);
+  font-weight: var(--font-extrabold);
   min-width: 40px;
   text-align: center;
   color: var(--text-muted);
@@ -162,7 +163,7 @@
 .rpt-person-photo {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -170,14 +171,14 @@
 .rpt-person-photo-placeholder {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--primary);
-  color: #fff;
+  color: var(--text-on-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: var(--font-bold);
+  font-size: var(--font-lg);
   flex-shrink: 0;
 }
 
@@ -187,16 +188,16 @@
 }
 
 .rpt-person-name {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--font-base);
+  font-weight: var(--font-bold);
   color: var(--text);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 
 .rpt-person-bar {
   height: 6px;
   background: var(--card-bg);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   border: 1px solid var(--border);
 }
@@ -204,31 +205,31 @@
 .rpt-person-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--primary), var(--accent));
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   transition: width 0.5s ease;
 }
 
 .rpt-person-count {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: var(--font-xl);
+  font-weight: var(--font-extrabold);
   color: var(--primary);
   min-width: 40px;
   text-align: center;
-  background: var(--bg);
-  padding: 6px 10px;
-  border-radius: 8px;
+  background: var(--bg-alt);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
 /* ═══ Empty ═══ */
 .rpt-empty {
   text-align: center;
-  padding: 40px 20px;
+  padding: var(--space-10) var(--space-5);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--font-base);
 }
 
-/* ═══ Responsive ═══ */
+/* ═══ Responsive — Mobile (≤ 768px) ═══ */
 @media (max-width: 768px) {
   .rpt-filters {
     flex-direction: column;
@@ -236,6 +237,7 @@
 
   .rpt-filter-group {
     width: 100%;
+    min-width: 0;
   }
 
   .rpt-export-group {
@@ -252,17 +254,17 @@
   }
 
   .rpt-stat {
-    padding: 12px;
+    padding: var(--space-3);
   }
 
   .rpt-stat-icon {
-    font-size: 22px;
+    font-size: var(--font-2xl);
     width: 40px;
     height: 40px;
   }
 
   .rpt-stat-value {
-    font-size: 20px;
+    font-size: var(--font-xl);
   }
 
   .rpt-chart-container {
@@ -274,28 +276,28 @@
   }
 
   .rpt-section {
-    padding: 14px;
+    padding: var(--space-4);
   }
 
   .rpt-person-rank {
     min-width: 30px;
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 
   .rpt-person-photo,
   .rpt-person-photo-placeholder {
     width: 34px;
     height: 34px;
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 
   .rpt-person-name {
-    font-size: 13px;
+    font-size: var(--font-sm);
   }
 
   .rpt-person-count {
-    font-size: 15px;
-    padding: 4px 8px;
+    font-size: var(--font-md);
+    padding: var(--space-1) var(--space-2);
     min-width: 32px;
   }
 }
