@@ -3935,154 +3935,382 @@ function insertEmojiToInput(emoji) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Camera
+//   ⚡ Camera — Modern Full-Screen UI
 // ═══════════════════════════════════════════════════════
+
+let cameraFlashOn = false;
+let cameraZoom = 1;
+let cameraCapturedBlob = null;
+let cameraTouchStart = null;
+let cameraPinchStart = null;
 
 window.openCamera = async function() {
   let modal = document.getElementById('chatCameraModal');
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'chatCameraModal';
-    modal.className = 'modal-overlay';
+    modal.className = 'camera-modal-overlay';
     document.body.appendChild(modal);
   }
 
+  // ⚡ Reset state
+  cameraFlashOn = false;
+  cameraZoom = 1;
+  cameraCapturedBlob = null;
+
   modal.innerHTML = `
-    <div class="modal-content camera-modal-content">
-      <div class="modal-header">
-        <h2>📷 الكاميرا</h2>
-        <button class="modal-close" id="closeCameraBtn">✕</button>
+    <div class="camera-screen">
+
+      <!-- ═══ Top Bar ═══ -->
+      <div class="camera-topbar">
+        <button class="camera-topbar-btn" id="cameraCloseBtn" title="إغلاق">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+
+        <div class="camera-topbar-actions">
+          <button class="camera-topbar-btn" id="cameraFlashBtn" title="فلاش">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </button>
+          <button class="camera-topbar-btn" id="cameraRotateBtn" title="تبديل الكاميرا">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 4v6h-6"></path>
+              <path d="M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <div class="camera-body">
+      <!-- ═══ Camera View ═══ -->
+      <div class="camera-viewport" id="cameraViewport">
         <video id="cameraVideo" class="camera-video" autoplay playsinline muted></video>
         <canvas id="cameraCanvas" class="camera-canvas" style="display:none;"></canvas>
         <img id="cameraPreview" class="camera-preview" style="display:none;" />
-        <div class="camera-loading" id="cameraLoading">
-          <div class="spinner"></div>
-          <div>جاري تشغيل الكاميرا...</div>
+
+        <!-- ═══ Grid Overlay ═══ -->
+        <div class="camera-grid" id="cameraGrid">
+          <div class="camera-grid-line camera-grid-v1"></div>
+          <div class="camera-grid-line camera-grid-v2"></div>
+          <div class="camera-grid-line camera-grid-h1"></div>
+          <div class="camera-grid-line camera-grid-h2"></div>
         </div>
-        <div class="camera-error" id="cameraError" style="display:none;"></div>
+
+        <!-- ═══ Loading ═══ -->
+        <div class="camera-loading" id="cameraLoading">
+          <div class="camera-loading-spinner"></div>
+          <div class="camera-loading-text">جاري تشغيل الكاميرا...</div>
+        </div>
+
+        <!-- ═══ Error ═══ -->
+        <div class="camera-error" id="cameraError" style="display:none;">
+          <div class="camera-error-icon">📷</div>
+          <div class="camera-error-text" id="cameraErrorText">لا يمكن تشغيل الكاميرا</div>
+          <button class="camera-error-btn" id="cameraRetryBtn">🔄 إعادة المحاولة</button>
+        </div>
+
+        <!-- ═══ Zoom Indicator ═══ -->
+        <div class="camera-zoom-indicator" id="cameraZoomIndicator" style="display:none;">
+          <span id="cameraZoomValue">1.0x</span>
+        </div>
       </div>
 
-      <div class="camera-actions">
-        <button class="camera-btn" id="cameraCancelBtn" title="إلغاء" style="display:none;">✕ إلغاء</button>
-        <button class="camera-btn camera-switch-btn" id="cameraSwitchBtn" title="تبديل الكاميرا">🔄</button>
-        <button class="camera-btn camera-capture-btn" id="cameraCaptureBtn" title="تصوير">📸</button>
-        <button class="camera-btn camera-send-btn" id="cameraSendBtn" title="إرسال" style="display:none;">📤 إرسال</button>
+      <!-- ═══ Bottom Bar ═══ -->
+      <div class="camera-bottombar" id="cameraBottombar">
+
+        <!-- ═══ Capture Mode ═══ -->
+        <div class="camera-capture-actions" id="cameraCaptureActions">
+          <button class="camera-gallery-btn" id="cameraGalleryBtn" title="المعرض">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </button>
+
+          <button class="camera-capture-btn" id="cameraCaptureBtn" title="تصوير">
+            <span class="camera-capture-ring"></span>
+            <span class="camera-capture-inner"></span>
+          </button>
+
+          <div class="camera-side-space"></div>
+        </div>
+
+        <!-- ═══ Preview Mode ═══ -->
+        <div class="camera-preview-actions" id="cameraPreviewActions" style="display:none;">
+          <button class="camera-action-btn camera-retake-btn" id="cameraRetakeBtn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            <span>إعادة</span>
+          </button>
+
+          <button class="camera-action-btn camera-send-btn" id="cameraSendBtn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            <span>إرسال</span>
+          </button>
+        </div>
+
       </div>
+
     </div>
   `;
 
   modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 
   // ⚡ Start camera
   await startCamera();
 
-  // ⚡ Close
-  document.getElementById('closeCameraBtn').onclick = closeCamera;
-  document.getElementById('cameraCancelBtn').onclick = closeCamera;
-
-  // ⚡ Switch camera
-  document.getElementById('cameraSwitchBtn').onclick = switchCamera;
-
-  // ⚡ Capture
+  // ═══ ربط الأزرار ═══
+  document.getElementById('cameraCloseBtn').onclick = closeCamera;
+  document.getElementById('cameraRotateBtn').onclick = switchCamera;
+  document.getElementById('cameraFlashBtn').onclick = toggleFlash;
   document.getElementById('cameraCaptureBtn').onclick = capturePhoto;
-
-  // ⚡ Send
+  document.getElementById('cameraRetakeBtn').onclick = retakePhoto;
   document.getElementById('cameraSendBtn').onclick = sendCapturedPhoto;
+  document.getElementById('cameraGalleryBtn').onclick = openGallery;
+  document.getElementById('cameraRetryBtn').onclick = startCamera;
+
+  // ═══ Pinch to zoom ═══
+  const viewport = document.getElementById('cameraViewport');
+  if (viewport) {
+    setupPinchZoom(viewport);
+  }
+
+  // ═══ Escape to close ═══
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeCamera();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
 };
 
 async function startCamera() {
   const video = document.getElementById('cameraVideo');
   const loading = document.getElementById('cameraLoading');
   const error = document.getElementById('cameraError');
+  const grid = document.getElementById('cameraGrid');
 
   if (!video) return;
 
-  try {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-    }
+  // ⚡ Reset
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+  }
 
-    cameraStream = await navigator.mediaDevices.getUserMedia({
+  if (loading) loading.style.display = 'flex';
+  if (error) error.style.display = 'none';
+  if (grid) grid.style.display = 'block';
+
+  try {
+    const constraints = {
       video: {
         facingMode: currentCameraFacing,
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       },
       audio: false
-    });
+    };
+
+    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
 
     video.srcObject = cameraStream;
     video.style.display = 'block';
 
+    // ⚡ Apply zoom if supported
+    applyZoom();
+
     if (loading) loading.style.display = 'none';
-    if (error) error.style.display = 'none';
+
+    console.log('✅ Camera started:', currentCameraFacing);
 
   } catch (err) {
     console.error('❌ Camera error:', err);
+
     if (loading) loading.style.display = 'none';
+
     if (error) {
-      error.style.display = 'block';
-      let msg = '⚠️ لا يمكن تشغيل الكاميرا';
-      if (err.name === 'NotAllowedError') msg = '⚠️ تم رفض إذن الكاميرا';
-      else if (err.name === 'NotFoundError') msg = '⚠️ لا توجد كاميرا متاحة';
-      else if (err.name === 'NotReadableError') msg = '⚠️ الكاميرا مشغولة بتطبيق آخر';
-      error.textContent = msg;
+      error.style.display = 'flex';
+      let msg = 'لا يمكن تشغيل الكاميرا';
+
+      if (err.name === 'NotAllowedError') {
+        msg = 'تم رفض إذن الكاميرا. اسمح بالوصول من إعدادات المتصفح.';
+      } else if (err.name === 'NotFoundError') {
+        msg = 'لا توجد كاميرا متاحة على هذا الجهاز.';
+      } else if (err.name === 'NotReadableError') {
+        msg = 'الكاميرا مشغولة بتطبيق آخر.';
+      } else if (err.name === 'OverconstrainedError') {
+        msg = 'دقة الكاميرا غير مدعومة.';
+      }
+
+      const errorText = document.getElementById('cameraErrorText');
+      if (errorText) errorText.textContent = msg;
     }
   }
 }
 
 async function switchCamera() {
   currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
+
+  // ⚡ Animation
+  const viewport = document.getElementById('cameraViewport');
+  if (viewport) {
+    viewport.classList.add('camera-flip');
+    setTimeout(() => viewport.classList.remove('camera-flip'), 400);
+  }
+
   await startCamera();
+
+  // ⚡ Haptic
+  if (navigator.vibrate) navigator.vibrate(20);
+}
+
+function toggleFlash() {
+  cameraFlashOn = !cameraFlashOn;
+
+  const flashBtn = document.getElementById('cameraFlashBtn');
+  if (flashBtn) {
+    flashBtn.classList.toggle('active', cameraFlashOn);
+  }
+
+  // ⚡ Apply torch to camera track
+  if (cameraStream) {
+    const track = cameraStream.getVideoTracks()[0];
+    if (track) {
+      try {
+        track.applyConstraints({
+          advanced: [{ torch: cameraFlashOn }]
+        }).catch(() => {
+          // ⚡ Fallback: flash via screen
+          flashScreen();
+        });
+      } catch (e) {
+        flashScreen();
+      }
+    }
+  }
+
+  if (navigator.vibrate) navigator.vibrate(15);
+}
+
+function flashScreen() {
+  // ⚡ فلاش احتياطي — شاشة بيضا سريعة
+  const flash = document.createElement('div');
+  flash.className = 'camera-screen-flash';
+  document.body.appendChild(flash);
+
+  setTimeout(() => flash.classList.add('show'), 10);
+  setTimeout(() => {
+    flash.classList.remove('show');
+    setTimeout(() => flash.remove(), 200);
+  }, 100);
 }
 
 function capturePhoto() {
   const video = document.getElementById('cameraVideo');
   const canvas = document.getElementById('cameraCanvas');
   const preview = document.getElementById('cameraPreview');
-  const captureBtn = document.getElementById('cameraCaptureBtn');
-  const sendBtn = document.getElementById('cameraSendBtn');
-  const cancelBtn = document.getElementById('cameraCancelBtn');
-  const switchBtn = document.getElementById('cameraSwitchBtn');
+  const captureActions = document.getElementById('cameraCaptureActions');
+  const previewActions = document.getElementById('cameraPreviewActions');
+  const grid = document.getElementById('cameraGrid');
 
   if (!video || !canvas) return;
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  // ⚡ Flash effect
+  if (cameraFlashOn && currentCameraFacing === 'user') {
+    flashScreen();
+  }
+
+  // ═══ Capture Image ═══
+  const videoWidth = video.videoWidth;
+  const videoHeight = video.videoHeight;
+
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
 
   const ctx = canvas.getContext('2d');
+
+  // ⚡ Mirror للكاميرا الأمامية
+  if (currentCameraFacing === 'user') {
+    ctx.translate(videoWidth, 0);
+    ctx.scale(-1, 1);
+  }
+
   ctx.drawImage(video, 0, 0);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  // ═══ Convert to Blob ═══
+  canvas.toBlob((blob) => {
+    if (!blob) return;
 
-  preview.src = dataUrl;
-  preview.style.display = 'block';
-  video.style.display = 'none';
+    cameraCapturedBlob = blob;
+    const dataUrl = URL.createObjectURL(blob);
 
-  if (captureBtn) captureBtn.style.display = 'none';
-  if (switchBtn) switchBtn.style.display = 'none';
-  if (sendBtn) sendBtn.style.display = 'flex';
-  if (cancelBtn) cancelBtn.style.display = 'flex';
+    preview.src = dataUrl;
+    preview.style.display = 'block';
+    video.style.display = 'none';
+
+    if (grid) grid.style.display = 'none';
+    if (captureActions) captureActions.style.display = 'none';
+    if (previewActions) previewActions.style.display = 'flex';
+
+    // ═══ Animation ═══
+    preview.classList.add('camera-preview-animate');
+    setTimeout(() => preview.classList.remove('camera-preview-animate'), 400);
+
+  }, 'image/jpeg', 0.92);
+
+  // ═══ Haptic ═══
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+
+function retakePhoto() {
+  const video = document.getElementById('cameraVideo');
+  const preview = document.getElementById('cameraPreview');
+  const captureActions = document.getElementById('cameraCaptureActions');
+  const previewActions = document.getElementById('cameraPreviewActions');
+  const grid = document.getElementById('cameraGrid');
+
+  if (preview.src) {
+    URL.revokeObjectURL(preview.src);
+  }
+
+  cameraCapturedBlob = null;
+
+  if (preview) preview.style.display = 'none';
+  if (video) video.style.display = 'block';
+  if (grid) grid.style.display = 'block';
+  if (captureActions) captureActions.style.display = 'flex';
+  if (previewActions) previewActions.style.display = 'none';
 }
 
 async function sendCapturedPhoto() {
-  const canvas = document.getElementById('cameraCanvas');
-  if (!canvas) return;
+  if (!cameraCapturedBlob) return;
 
   const sendBtn = document.getElementById('cameraSendBtn');
   if (sendBtn) {
     sendBtn.disabled = true;
-    sendBtn.textContent = '⏳ جاري الإرسال...';
+    sendBtn.classList.add('sending');
+    sendBtn.innerHTML = `
+      <div class="camera-send-spinner"></div>
+      <span>جاري الإرسال...</span>
+    `;
   }
 
   try {
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-    if (!blob) throw new Error('فشل إنشاء الصورة');
-
-    const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const file = new File([cameraCapturedBlob], `camera_${Date.now()}.jpg`, {
+      type: 'image/jpeg'
+    });
 
     closeCamera();
     await sendChatImage(file);
@@ -4090,21 +4318,135 @@ async function sendCapturedPhoto() {
   } catch (err) {
     console.error('❌ Send captured photo error:', err);
     alert('خطأ: ' + err.message);
+
     if (sendBtn) {
       sendBtn.disabled = false;
-      sendBtn.textContent = '📤 إرسال';
+      sendBtn.classList.remove('sending');
+      sendBtn.innerHTML = `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+        <span>إرسال</span>
+      `;
     }
   }
+}
+
+function openGallery() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
+
+  input.onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      alert(`حجم الصورة أكبر من ${MAX_IMAGE_SIZE / 1024 / 1024} MB`);
+      return;
+    }
+
+    closeCamera();
+    await sendChatImage(file);
+  };
+
+  input.click();
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Pinch to Zoom
+// ═══════════════════════════════════════════════════════
+
+function setupPinchZoom(viewport) {
+  viewport.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      cameraPinchStart = Math.sqrt(dx * dx + dy * dy);
+      cameraTouchStart = cameraZoom;
+    }
+  }, { passive: true });
+
+  viewport.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && cameraPinchStart) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      const scale = distance / cameraPinchStart;
+      let newZoom = cameraTouchStart * scale;
+
+      // ⚡ Clamp 1x - 5x
+      newZoom = Math.max(1, Math.min(5, newZoom));
+
+      cameraZoom = newZoom;
+      applyZoom();
+      showZoomIndicator();
+    }
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', () => {
+    cameraPinchStart = null;
+    cameraTouchStart = null;
+
+    setTimeout(() => {
+      const indicator = document.getElementById('cameraZoomIndicator');
+      if (indicator) indicator.style.display = 'none';
+    }, 1000);
+  });
+}
+
+function applyZoom() {
+  const video = document.getElementById('cameraVideo');
+  if (!video) return;
+
+  // ⚡ Apply zoom via CSS transform
+  video.style.transform = `scale(${cameraZoom})`;
+
+  // ⚡ Or try native zoom if supported
+  if (cameraStream) {
+    const track = cameraStream.getVideoTracks()[0];
+    if (track) {
+      const capabilities = track.getCapabilities?.();
+      if (capabilities?.zoom) {
+        const zoom = Math.min(capabilities.zoom.max, cameraZoom);
+        track.applyConstraints({ advanced: [{ zoom }] }).catch(() => {});
+      }
+    }
+  }
+}
+
+function showZoomIndicator() {
+  const indicator = document.getElementById('cameraZoomIndicator');
+  const value = document.getElementById('cameraZoomValue');
+
+  if (indicator) indicator.style.display = 'flex';
+  if (value) value.textContent = `${cameraZoom.toFixed(1)}x`;
 }
 
 window.closeCamera = function() {
   const modal = document.getElementById('chatCameraModal');
   if (modal) modal.style.display = 'none';
 
+  document.body.style.overflow = '';
+
   if (cameraStream) {
     cameraStream.getTracks().forEach(t => t.stop());
     cameraStream = null;
   }
+
+  if (cameraCapturedBlob) {
+    const preview = document.getElementById('cameraPreview');
+    if (preview?.src) URL.revokeObjectURL(preview.src);
+    cameraCapturedBlob = null;
+  }
+
+  // ⚡ Reset state
+  cameraFlashOn = false;
+  cameraZoom = 1;
+  cameraPinchStart = null;
+  cameraTouchStart = null;
 };
 
 // ═══════════════════════════════════════════════════════
