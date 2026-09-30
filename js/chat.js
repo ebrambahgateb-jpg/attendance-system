@@ -2,6 +2,7 @@
 //   Chat — Internal Messaging System
 //   ⚡ 1-to-1 + Groups + Channels + Realtime
 //   ⚡ Reply + Edit + Delete + Swipe
+//   ⚡ Typing Indicator + Read Receipts + Online Status
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -17,7 +18,8 @@ import {
   limit,
   onSnapshot,
   setDoc,
-  arrayUnion
+  arrayUnion,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 import {
@@ -40,9 +42,20 @@ let chatUnsubscribeChats = null;
 let chatReplyTo = null;
 let longPressTimer = null;
 
+// ═══ ⚡ Typing/Online State ═══
+let chatTypingUnsubscribe = null;
+let chatTypingUsers = {};
+let chatTypingTimeout = null;
+let chatOnlineInterval = null;
+let chatOnlineUnsubscribe = null;
+let chatOnlineStatuses = {};
+
 // ═══ Constants ═══
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const TYPING_TIMEOUT_MS = 3000;        // ⚡ 3 ثواني
+const ONLINE_TIMEOUT_MS = 2 * 60 * 1000; // ⚡ دقيقتين
+const ONLINE_HEARTBEAT_MS = 30000;      // ⚡ 30 ثانية
 
 // ═══ Default Channels ═══
 const DEFAULT_CHANNELS = [
@@ -115,6 +128,10 @@ async function loadChatPage(area) {
     // ⚡ ابدأ Listener
     startChatsListener();
 
+    // ⚡ ⚡ ⚡ ابدأ Online Heartbeat
+    startOnlineHeartbeat();
+    startOnlineListener();
+
   } catch (err) {
     console.error('❌ Load chat error:', err);
     area.innerHTML = `<div class="placeholder-page">
@@ -122,6 +139,141 @@ async function loadChatPage(area) {
       <p>${err.message}</p>
       <button class="btn-primary" onclick="loadChatPage(document.getElementById('contentArea'))" style="margin-top:16px;">إعادة المحاولة</button>
     </div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Online Status — Heartbeat & Listener
+// ═══════════════════════════════════════════════════════
+
+function startOnlineHeartbeat() {
+  if (chatOnlineInterval) clearInterval(chatOnlineInterval);
+
+  // ⚡ نبض فوري
+  updateMyOnlineStatus();
+
+  // ⚡ نبض دوري كل 30 ثانية
+  chatOnlineInterval = setInterval(updateMyOnlineStatus, ONLINE_HEARTBEAT_MS);
+
+  // ⚡ نبض عند إغلاق الصفحة
+  window.addEventListener('beforeunload', markMeOffline);
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      markMeOffline();
+    } else {
+      updateMyOnlineStatus();
+    }
+  });
+}
+
+async function updateMyOnlineStatus() {
+  if (!chatPerson) return;
+
+  try {
+    const personRef = doc(db, COLLECTIONS.PEOPLE, chatPerson.id);
+    await updateDoc(personRef, {
+      LastSeen: new Date().toISOString()
+    });
+    console.log('🟢 Online status updated');
+  } catch (err) {
+    console.warn('⚠️ updateMyOnlineStatus error:', err.message);
+  }
+}
+
+function markMeOffline() {
+  if (!chatPerson) return;
+
+  try {
+    const personRef = doc(db, COLLECTIONS.PEOPLE, chatPerson.id);
+    // ⚡ fire & forget
+    updateDoc(personRef, {
+      LastSeen: new Date().toISOString()
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+function startOnlineListener() {
+  if (chatOnlineUnsubscribe) {
+    try { chatOnlineUnsubscribe(); } catch (e) {}
+  }
+
+  // ⚡ استخدم الأشخاص اللي محملين
+  chatOnlineStatuses = {};
+  Object.keys(chatPeople).forEach(id => {
+    chatOnlineStatuses[id] = chatPeople[id].LastSeen || null;
+  });
+
+  // ⚡ listener على collection people
+  try {
+    chatOnlineUnsubscribe = onSnapshot(
+      collection(db, COLLECTIONS.PEOPLE),
+      (snap) => {
+        snap.docs.forEach(d => {
+          const p = d.data();
+          chatOnlineStatuses[d.id] = p.LastSeen || null;
+        });
+        // ⚡ حدّث الـUI
+        updateOnlineStatusUI();
+        // ⚡ حدّث القائمة
+        renderChatList();
+      },
+      (err) => {
+        console.warn('⚠️ Online listener error:', err.message);
+      }
+    );
+  } catch (err) {
+    console.warn('⚠️ Could not start online listener:', err.message);
+  }
+}
+
+function isUserOnline(personId) {
+  const lastSeen = chatOnlineStatuses[personId];
+  if (!lastSeen) return false;
+
+  const lastSeenDate = new Date(lastSeen);
+  const now = new Date();
+  const diff = now - lastSeenDate;
+
+  return diff < ONLINE_TIMEOUT_MS;
+}
+
+function getOnlineStatusText(personId) {
+  if (!personId) return '';
+
+  const lastSeen = chatOnlineStatuses[personId];
+  if (!lastSeen) return '';
+
+  const lastSeenDate = new Date(lastSeen);
+  const now = new Date();
+  const diff = now - lastSeenDate;
+
+  if (diff < ONLINE_TIMEOUT_MS) return '🟢 متاح الآن';
+
+  // ⚡ منذ X
+  const diffMinutes = Math.floor(diff / 60000);
+  if (diffMinutes < 60) return `منذ ${diffMinutes} دقيقة`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `منذ ${diffDays} يوم`;
+
+  return 'منذ فترة طويلة';
+}
+
+function updateOnlineStatusUI() {
+  // ⚡ حدّث الـheader status
+  const statusEl = document.getElementById('chatHeaderStatus');
+  if (!statusEl || !chatActiveChat) return;
+
+  if (chatActiveChat.Type === 'direct') {
+    const otherId = (chatActiveChat.Members || []).find(id => id !== chatPerson.id);
+    if (otherId) {
+      const statusText = getOnlineStatusText(otherId);
+      statusEl.textContent = statusText;
+      statusEl.className = 'chat-header-status ' + (isUserOnline(otherId) ? 'online' : 'offline');
+    }
   }
 }
 
@@ -198,7 +350,6 @@ function renderChatPage(area) {
     </div>
   `;
 
-  // ⚡ ربط الأزرار
   document.querySelectorAll('.chat-filter-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('.chat-filter-btn').forEach(b => b.classList.remove('active'));
@@ -317,9 +468,21 @@ function renderChatListItem(chat) {
     typeBadge = '<span class="chat-item-badge">👥</span>';
   }
 
+  // ⚡ Online indicator للـdirect
+  let onlineDot = '';
+  if (chat.Type === 'direct') {
+    const otherId = (chat.Members || []).find(id => id !== chatPerson.id);
+    if (otherId && isUserOnline(otherId)) {
+      onlineDot = '<span class="chat-online-dot"></span>';
+    }
+  }
+
   return `
     <div class="chat-item ${isActive ? 'active' : ''}" data-chat-id="${chat.id}">
-      <div class="chat-item-avatar">${avatar}</div>
+      <div class="chat-item-avatar">
+        ${avatar}
+        ${onlineDot}
+      </div>
       <div class="chat-item-content">
         <div class="chat-item-header">
           <div class="chat-item-name">${typeBadge} ${escapeHtml(displayName)}</div>
@@ -400,6 +563,12 @@ window.openChat = async function(chatId) {
     chatUnsubscribeMessages = null;
   }
 
+  // ⚡ ⚡ ⚡ اقفل typing listener القديم
+  if (chatTypingUnsubscribe) {
+    try { chatTypingUnsubscribe(); } catch (e) {}
+    chatTypingUnsubscribe = null;
+  }
+
   try {
     const chatDoc = await getDoc(doc(db, 'chats', chatId));
     if (!chatDoc.exists()) {
@@ -412,8 +581,12 @@ window.openChat = async function(chatId) {
     // ⚡ صفّر الـReply
     window.cancelReply();
 
+    // ⚡ ⚡ ⚡ صفّر typing users
+    chatTypingUsers = {};
+
     renderChatMain();
     startMessagesListener(chatId);
+    startTypingListener(chatId); // ⚡ بدأ Typing Listener
 
     if (isMobile()) showChatMobile();
 
@@ -422,6 +595,97 @@ window.openChat = async function(chatId) {
     alert('خطأ: ' + err.message);
   }
 };
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Typing Indicator — Listener
+// ═══════════════════════════════════════════════════════
+
+function startTypingListener(chatId) {
+  try {
+    const typingRef = collection(db, 'chats', chatId, 'typing');
+
+    chatTypingUnsubscribe = onSnapshot(typingRef, (snap) => {
+      const now = Date.now();
+      chatTypingUsers = {};
+
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (d.id === chatPerson.id) return; // ⚡ تجاهل نفسي
+
+        // ⚡ تحقق من الـtimeout
+        const timestamp = data.timestamp ? new Date(data.timestamp).getTime() : 0;
+        if (now - timestamp < TYPING_TIMEOUT_MS) {
+          chatTypingUsers[d.id] = {
+            name: data.name || 'مستخدم',
+            timestamp: timestamp
+          };
+        }
+      });
+
+      updateTypingIndicator();
+    }, (err) => {
+      console.warn('⚠️ Typing listener error:', err.message);
+    });
+  } catch (err) {
+    console.warn('⚠️ startTypingListener error:', err.message);
+  }
+}
+
+function updateTypingIndicator() {
+  const typingEl = document.getElementById('chatTypingIndicator');
+  if (!typingEl) return;
+
+  const userIds = Object.keys(chatTypingUsers);
+  if (userIds.length === 0) {
+    typingEl.style.display = 'none';
+    typingEl.textContent = '';
+    return;
+  }
+
+  const names = userIds.map(id => chatTypingUsers[id].name);
+
+  let text = '';
+  if (names.length === 1) {
+    text = `${names[0]} بيكتب...`;
+  } else if (names.length === 2) {
+    text = `${names[0]} و ${names[1]} بيكتبوا...`;
+  } else {
+    text = `${names[0]} و ${names.length - 1} آخرين بيكتبوا...`;
+  }
+
+  typingEl.textContent = text;
+  typingEl.style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Typing Indicator — Send
+// ═══════════════════════════════════════════════════════
+
+async function sendTypingIndicator() {
+  if (!chatActiveChatId || !chatPerson) return;
+
+  try {
+    const typingRef = doc(db, 'chats', chatActiveChatId, 'typing', chatPerson.id);
+    await setDoc(typingRef, {
+      name: chatPerson.FirstName || 'مستخدم',
+      personId: chatPerson.id,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn('⚠️ sendTypingIndicator error:', err.message);
+  }
+}
+
+async function clearTypingIndicator() {
+  if (!chatActiveChatId || !chatPerson) return;
+
+  try {
+    const typingRef = doc(db, 'chats', chatActiveChatId, 'typing', chatPerson.id);
+    await deleteDoc(typingRef);
+  } catch (err) {
+    console.warn('⚠️ clearTypingIndicator error:', err.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 //   Render Chat Main
@@ -435,9 +699,18 @@ function renderChatMain() {
   const displayName = getChatDisplayName(chat);
   const isReadOnly = chat.ReadOnly && !['Owner', 'Admin'].includes(chatWorkspace);
 
+  // ⚡ status text
   let statusText = '';
+  let statusClass = '';
+
   if (chat.Type === 'direct') {
-    statusText = 'محادثة فردية';
+    const otherId = (chat.Members || []).find(id => id !== chatPerson.id);
+    if (otherId) {
+      statusText = getOnlineStatusText(otherId);
+      statusClass = isUserOnline(otherId) ? 'online' : 'offline';
+    } else {
+      statusText = 'محادثة فردية';
+    }
   } else if (chat.Type === 'group') {
     statusText = `${(chat.Members || []).length} عضو`;
   } else if (chat.Description) {
@@ -451,7 +724,7 @@ function renderChatMain() {
         <div class="chat-header-avatar">${getChatAvatar(chat)}</div>
         <div class="chat-header-details">
           <div class="chat-header-name">${escapeHtml(displayName)}</div>
-          <div class="chat-header-status">${statusText}</div>
+          <div class="chat-header-status ${statusClass}" id="chatHeaderStatus">${statusText}</div>
         </div>
       </div>
     </div>
@@ -459,6 +732,8 @@ function renderChatMain() {
     <div class="chat-messages" id="chatMessages">
       <div class="loading-state"><div class="spinner"></div></div>
     </div>
+
+    <div class="chat-typing-indicator" id="chatTypingIndicator" style="display:none;"></div>
 
     ${isReadOnly ? `
       <div class="chat-readonly">🔒 هذه القناة للقراءة فقط</div>
@@ -503,7 +778,7 @@ function renderChatMain() {
   const replyCloseBtn = document.getElementById('chatReplyPreviewClose');
   if (replyCloseBtn) replyCloseBtn.onclick = () => window.cancelReply();
 
-  // ⚡ input
+  // ⚡ input — ⚡ Typing Indicator
   const input = document.getElementById('chatInput');
   if (input) {
     input.addEventListener('keydown', (e) => {
@@ -512,71 +787,22 @@ function renderChatMain() {
         window.sendChatMessage();
       }
     });
+
+    // ⚡ إرسال typing indicator مع debounce
+    input.addEventListener('input', () => {
+      sendTypingIndicator();
+
+      if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
+      chatTypingTimeout = setTimeout(() => {
+        clearTypingIndicator();
+      }, TYPING_TIMEOUT_MS);
+    });
+
     setTimeout(() => input.focus(), 100);
   }
 
-    // ⚡ Swipe للرجوع — ملغي
-  // setupSwipeBack();
-}
-// ═══════════════════════════════════════════════════════
-//   Swipe Back (Mobile)
-// ═══════════════════════════════════════════════════════
-
-function setupSwipeBack() {
-  const main = document.getElementById('chatMain');
-  if (!main) return;
-
-  if (main._swipeHandler) {
-    main.removeEventListener('touchstart', main._swipeHandler.start);
-    main.removeEventListener('touchmove', main._swipeHandler.move);
-    main.removeEventListener('touchend', main._swipeHandler.end);
-  }
-
-  let startX = 0;
-  let startY = 0;
-  let isSwiping = false;
-
-  const start = (e) => {
-    if (!isMobile()) return;
-    if (e.touches.length !== 1) return;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    isSwiping = false;
-  };
-
-  const move = (e) => {
-    if (!isMobile()) return;
-    if (e.touches.length !== 1) return;
-
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - startX;
-    const diffY = Math.abs(currentY - startY);
-
-    if (diffX > 10 && diffY < 50 && startX < window.innerWidth * 0.3) {
-      isSwiping = true;
-    }
-  };
-
-  const end = (e) => {
-    if (!isMobile()) return;
-    if (!isSwiping) return;
-
-    const endX = e.changedTouches[0].clientX;
-    const diffX = endX - startX;
-
-    if (diffX > 80) {
-      showSidebarMobile();
-    }
-
-    isSwiping = false;
-  };
-
-  main.addEventListener('touchstart', start, { passive: true });
-  main.addEventListener('touchmove', move, { passive: true });
-  main.addEventListener('touchend', end, { passive: true });
-
-  main._swipeHandler = { start, move, end };
+  // ⚡ حدّث typing indicator فورًا
+  updateTypingIndicator();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -591,6 +817,9 @@ function startMessagesListener(chatId) {
     chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderMessages();
 
+    // ⚡ ⚡ ⚡ علّم الرسائل كمقروءة
+    markMessagesAsRead();
+
     setTimeout(() => {
       const messagesEl = document.getElementById('chatMessages');
       if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -601,6 +830,35 @@ function startMessagesListener(chatId) {
 }
 
 // ═══════════════════════════════════════════════════════
+//   ⚡ Mark Messages as Read
+// ═══════════════════════════════════════════════════════
+
+async function markMessagesAsRead() {
+  if (!chatActiveChatId || !chatPerson || !chatMessages.length) return;
+
+  try {
+    const unreadMessages = chatMessages.filter(msg => {
+      if (msg.SenderID === chatPerson.id) return false; // ⚡ رسائلي
+      const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
+      return !readBy.includes(chatPerson.id);
+    });
+
+    if (unreadMessages.length === 0) return;
+
+    console.log(`📖 Marking ${unreadMessages.length} messages as read`);
+
+    for (const msg of unreadMessages) {
+      const msgRef = doc(db, 'chats', chatActiveChatId, 'messages', msg.id);
+      await updateDoc(msgRef, {
+        ReadBy: arrayUnion(chatPerson.id)
+      });
+    }
+  } catch (err) {
+    console.warn('⚠️ markMessagesAsRead error:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 //   Render Messages
 // ═══════════════════════════════════════════════════════
 
@@ -608,7 +866,6 @@ function renderMessages() {
   const container = document.getElementById('chatMessages');
   if (!container) return;
 
-  // ⚡ فلترة الرسائل المحذوفة ليّ
   const visibleMessages = chatMessages.filter(msg => {
     const deletedFor = Array.isArray(msg.DeletedFor) ? msg.DeletedFor : [];
     return !deletedFor.includes(chatPerson.id);
@@ -626,7 +883,6 @@ function renderMessages() {
 
   container.innerHTML = visibleMessages.map(msg => renderMessageItem(msg)).join('');
 
-  // ⚡ اربط الأحداث
   container.querySelectorAll('.chat-message').forEach(el => {
     if (el.classList.contains('chat-message-deleted')) return;
 
@@ -650,7 +906,6 @@ function renderMessageItem(msg) {
   const senderAvatar = getSenderAvatar(sender);
   const time = msg.SentAt ? formatTime(parseDate(msg.SentAt)) : '';
 
-  // ⚡ محذوفة للجميع
   if (msg.DeletedForEveryone) {
     return `
       <div class="chat-message ${isMine ? 'mine' : 'theirs'} chat-message-deleted">
@@ -662,7 +917,6 @@ function renderMessageItem(msg) {
     `;
   }
 
-  // ⚡ المحتوى
   let contentHtml = '';
   if (msg.Type === 'image' && msg.ImageURL) {
     contentHtml = `
@@ -674,10 +928,8 @@ function renderMessageItem(msg) {
     contentHtml = `<div class="chat-message-text">${escapeHtml(msg.Text || '')}</div>`;
   }
 
-  // ⚡ Edited badge
   const editedBadge = msg.Edited ? '<span class="chat-edited-badge">✏️ تم التعديل</span>' : '';
 
-  // ⚡ Reply preview
   let replyHtml = '';
   if (msg.ReplyTo && msg.ReplyTo.MessageID) {
     const replyType = msg.ReplyTo.Type || 'text';
@@ -696,8 +948,30 @@ function renderMessageItem(msg) {
     `;
   }
 
-  // ⚡ Sender name (للمجموعات والقنوات)
   const showSender = !isMine && chatActiveChat && (chatActiveChat.Type === 'group' || chatActiveChat.Type === 'channel');
+
+  // ⚡ ⚡ ⚡ Read Receipts (للرسائل بتاعتي بس)
+  let readReceiptHtml = '';
+  if (isMine) {
+    const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
+    // ⚡ عدد الأعضاء التانيين
+    const totalMembers = chatActiveChat.Type === 'direct'
+      ? 1
+      : Math.max(1, (chatActiveChat.Members || []).length - 1);
+
+    const readCount = readBy.filter(id => id !== chatPerson.id).length;
+
+    if (readCount === 0) {
+      // ⚡ Sent (✓)
+      readReceiptHtml = '<span class="chat-read-receipt sent" title="تم الإرسال">✓</span>';
+    } else if (readCount >= totalMembers) {
+      // ⚡ Read (✓✓)
+      readReceiptHtml = '<span class="chat-read-receipt read" title="تم القراءة">✓✓</span>';
+    } else {
+      // ⚡ Partially read
+      readReceiptHtml = `<span class="chat-read-receipt partial" title="${readCount} من ${totalMembers} قرأوا">✓✓</span>`;
+    }
+  }
 
   return `
     <div class="chat-message ${isMine ? 'mine' : 'theirs'}"
@@ -712,6 +986,7 @@ function renderMessageItem(msg) {
         <div class="chat-message-meta">
           <span class="chat-message-time">${time}</span>
           ${editedBadge}
+          ${readReceiptHtml}
         </div>
       </div>
     </div>
@@ -742,6 +1017,10 @@ window.sendChatMessage = async function() {
   input.value = '';
   input.focus();
 
+  // ⚡ امسح typing indicator
+  if (chatTypingTimeout) clearTimeout(chatTypingTimeout);
+  clearTypingIndicator();
+
   try {
     const messageData = {
       SenderID: chatPerson.id,
@@ -753,7 +1032,6 @@ window.sendChatMessage = async function() {
       Reactions: {}
     };
 
-    // ⚡ Reply
     if (chatReplyTo) {
       messageData.ReplyTo = {
         MessageID: chatReplyTo.MessageID,
@@ -763,7 +1041,7 @@ window.sendChatMessage = async function() {
       };
     }
 
-       await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
+    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
       LastMessage: {
@@ -776,7 +1054,6 @@ window.sendChatMessage = async function() {
       LastMessageAt: messageData.SentAt
     });
 
-    // ⚡ ابعت إشعار للأعضاء التانيين
     await sendChatNotification(chatActiveChat, messageData);
 
     window.cancelReply();
@@ -844,7 +1121,6 @@ async function sendChatImage(file) {
       Reactions: {}
     };
 
-    // ⚡ Reply
     if (chatReplyTo) {
       messageData.ReplyTo = {
         MessageID: chatReplyTo.MessageID,
@@ -854,7 +1130,7 @@ async function sendChatImage(file) {
       };
     }
 
-        await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
+    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
 
     await updateDoc(doc(db, 'chats', chatActiveChatId), {
       LastMessage: {
@@ -867,7 +1143,6 @@ async function sendChatImage(file) {
       LastMessageAt: messageData.SentAt
     });
 
-    // ⚡ ابعت إشعار للأعضاء التانيين
     await sendChatNotification(chatActiveChat, messageData);
 
     window.cancelReply();
@@ -951,7 +1226,6 @@ window.cancelReply = function() {
   if (preview) preview.style.display = 'none';
 };
 
-// ═══ Jump to Message ═══
 window.jumpToMessage = function(msgId) {
   const targetEl = document.querySelector(`.chat-message[data-msg-id="${msgId}"]`);
   if (!targetEl) {
@@ -976,7 +1250,6 @@ function attachMessageActions(el) {
   const isMine = el.dataset.msgMine === '1';
   const msgType = el.dataset.msgType;
 
-  // ⚡ Long press (Mobile)
   el.addEventListener('touchstart', (e) => {
     longPressTimer = setTimeout(() => {
       e.preventDefault();
@@ -999,13 +1272,11 @@ function attachMessageActions(el) {
     }
   });
 
-  // ⚡ Right click (Desktop)
   el.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     showMessageActionsMenu(msgId, isMine, msgType, e.clientX, e.clientY);
   });
 
-  // ⚡ Reply click (Jump to)
   const replyEl = el.querySelector('.chat-message-reply');
   if (replyEl) {
     replyEl.addEventListener('click', (e) => {
@@ -1026,15 +1297,11 @@ function showMessageActionsMenu(msgId, isMine, msgType, x, y) {
   const sentAt = msg.SentAt ? new Date(msg.SentAt).getTime() : 0;
   const minutesSinceSent = (now - sentAt) / 60000;
 
-    const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
+  const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
 
   const canReply = !msg.DeletedForEveryone;
   const canEdit = isMine && msgType === 'text' && minutesSinceSent < 60 && !msg.DeletedForEveryone;
   const canCopy = msgType === 'text' && !msg.DeletedForEveryone;
-
-  // ⚡ حذف للجميع:
-  // - رسائلك خلال 60 دقيقة
-  // - أو أي رسالة لو Owner/Admin
   const canDeleteForEveryone =
     !msg.DeletedForEveryone &&
     (isAdminOrOwner || (isMine && minutesSinceSent < 60));
@@ -1104,7 +1371,7 @@ function closeMessageActionsMenu() {
 window.closeMessageActionsMenu = closeMessageActionsMenu;
 
 // ═══════════════════════════════════════════════════════
-//   Copy
+//   Copy / Toast
 // ═══════════════════════════════════════════════════════
 
 function copyMessageText(text) {
@@ -1183,13 +1450,11 @@ async function deleteMessageForEveryone(msgId) {
   const isAdminOrOwner = ['Owner', 'Admin'].includes(chatWorkspace);
   const isMine = msg.SenderID === chatPerson.id;
 
-  // ⚡ تحقق من الصلاحية
   if (!isAdminOrOwner && !isMine) {
     alert('⚠️ لا يمكنك حذف رسائل الآخرين');
     return;
   }
 
-  // ⚡ Confirm رسالة مخصصة
   const confirmMsg = isAdminOrOwner && !isMine
     ? `🗑️ حذف رسالة "${msg.SenderName || 'مستخدم'}" للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)`
     : '🗑️ حذف الرسالة للجميع؟\n(هتختفي عند الكل — لا يمكن التراجع)';
@@ -1215,7 +1480,7 @@ async function deleteMessageForEveryone(msgId) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Swipe to Reply (Mobile)
+//   Swipe to Reply
 // ═══════════════════════════════════════════════════════
 
 function setupSwipeToReply(el, msgId) {
@@ -1227,11 +1492,9 @@ function setupSwipeToReply(el, msgId) {
   const bubble = el.querySelector('.chat-message-bubble');
   if (!bubble) return;
 
-  // ⚡ شيل أي Reply icon قديم
   const oldIcon = el.querySelector('.chat-swipe-reply-icon');
   if (oldIcon) oldIcon.remove();
 
-  // ⚡ ضيف Reply icon
   const replyIcon = document.createElement('div');
   replyIcon.className = 'chat-swipe-reply-icon';
   replyIcon.innerHTML = '↩️';
@@ -1339,10 +1602,14 @@ window.openNewChatModal = function() {
 function renderNewChatPerson(p) {
   const name = getPersonFullName(p);
   const avatar = p.PhotoURL ? `<img src="${p.PhotoURL}" alt="" />` : getInitial(p);
+  const isOnline = isUserOnline(p.id);
 
   return `
     <div class="new-chat-person" data-person-id="${p.id}">
-      <div class="new-chat-avatar">${avatar}</div>
+      <div class="new-chat-avatar">
+        ${avatar}
+        ${isOnline ? '<span class="chat-online-dot"></span>' : ''}
+      </div>
       <div class="new-chat-info">
         <div class="new-chat-name">${escapeHtml(name)}</div>
         <div class="new-chat-email">${escapeHtml(p.Email || '')}</div>
@@ -1593,38 +1860,39 @@ function escapeHtml(str) {
 }
 
 // ═══════════════════════════════════════════════════════
-//   ⚡ Send Chat Notification
+//   Send Chat Notification
 // ═══════════════════════════════════════════════════════
 
 async function sendChatNotification(chat, messageData) {
-  // ⚡ متبعتش إشعارات للقنوات
-  if (chat.Type === 'channel' || chat.IsDefault) {
-    console.log('⏭️ Skipped notification for channel');
-    return;
-  }
-
-  // ⚡ الأعضاء (ما عدا المُرسل)
-  const recipients = (chat.Members || []).filter(id => id !== chatPerson.id);
-
-  if (recipients.length === 0) return;
-
-  // ⚡ نص الرسالة
   const previewText = messageData.Type === 'image'
     ? '📷 صورة'
     : (messageData.Text || '').substring(0, 80);
 
-  // ⚡ اسم الشات
   const chatName = getChatDisplayName(chat);
 
-  // ⚡ لكل عضو → إشعار
+  // ⚡ الأعضاء
+  let recipients = [];
+
+  if (chat.Type === 'channel' || chat.IsDefault) {
+    // ⚡ القنوات: كل الأشخاص
+    recipients = chatPeopleArray
+      .map(p => p.id)
+      .filter(id => id !== chatPerson.id);
+  } else {
+    // ⚡ 1-to-1 ومجموعات
+    recipients = (chat.Members || []).filter(id => id !== chatPerson.id);
+  }
+
+  if (recipients.length === 0) return;
+
   for (const recipientId of recipients) {
     try {
       await addDoc(collection(db, 'notifications'), {
         Type: 'chat_message',
-        Title: `💬 رسالة من ${chatPerson.FirstName || 'مستخدم'}`,
-        Body: `${chatName}:\n${previewText}`,
+        Title: `💬 رسالة في ${chatName}`,
+        Body: `${chatPerson.FirstName || 'مستخدم'}:\n${previewText}`,
         RelatedChatID: chat.id,
-        ChatID: chat.id, // ⚡ مزدوج للاحتياط
+        ChatID: chat.id,
         RelatedID: chat.id,
         RelatedTitle: chatName,
         TargetType: 'person',
@@ -1642,6 +1910,32 @@ async function sendChatNotification(chat, messageData) {
 
   console.log(`✅ Sent ${recipients.length} chat notifications`);
 }
+
+// ═══════════════════════════════════════════════════════
+//   Cleanup
+// ═══════════════════════════════════════════════════════
+
+window.addEventListener('beforeunload', () => {
+  // ⚡ اقفل typing indicator
+  clearTypingIndicator();
+
+  // ═══ Cleanup ═══
+  if (chatUnsubscribeMessages) {
+    try { chatUnsubscribeMessages(); } catch (e) {}
+  }
+  if (chatUnsubscribeChats) {
+    try { chatUnsubscribeChats(); } catch (e) {}
+  }
+  if (chatTypingUnsubscribe) {
+    try { chatTypingUnsubscribe(); } catch (e) {}
+  }
+  if (chatOnlineUnsubscribe) {
+    try { chatOnlineUnsubscribe(); } catch (e) {}
+  }
+  if (chatOnlineInterval) {
+    clearInterval(chatOnlineInterval);
+  }
+});
 
 // ═══ Expose ═══
 window.loadChatPage = loadChatPage;
