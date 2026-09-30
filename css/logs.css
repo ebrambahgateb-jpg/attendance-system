@@ -11,43 +11,43 @@
 .logs-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
 }
 
 .logs-stat {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .logs-stat-value {
-  font-size: 24px;
-  font-weight: 800;
+  font-size: var(--font-2xl);
+  font-weight: var(--font-extrabold);
   color: var(--primary);
   line-height: 1;
 }
 
 .logs-stat-label {
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 /* ═══ Filters ═══ */
 .logs-filters {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
   flex-wrap: wrap;
   background: var(--card-bg);
-  padding: 14px;
-  border-radius: 12px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   align-items: flex-end;
 }
@@ -55,26 +55,27 @@
 .logs-filter-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 130px;
   flex: 1;
 }
 
 .logs-filter-group label {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
   color: var(--text-muted);
 }
 
 .logs-filter-group input,
 .logs-filter-group select {
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-sm);
   background: var(--card-bg);
   color: var(--text);
+  min-height: 38px;
 }
 
 .logs-filter-group input:focus,
@@ -87,19 +88,19 @@
 .logs-results {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
 }
 
 .logs-results-header {
-  margin-bottom: 14px;
-  padding-bottom: 10px;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border);
 }
 
 .logs-results-header h3 {
-  font-size: 16px;
-  font-weight: 800;
+  font-size: var(--font-lg);
+  font-weight: var(--font-extrabold);
   color: var(--text);
   margin: 0;
 }
@@ -112,31 +113,31 @@
 .logs-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--font-sm);
 }
 
 .logs-table thead {
-  background: var(--bg);
+  background: var(--bg-alt);
 }
 
 .logs-table th {
-  padding: 12px 10px;
+  padding: var(--space-3) var(--space-2);
   text-align: right;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--font-sm);
+  font-weight: var(--font-bold);
   color: var(--text-muted);
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
 
 .logs-table td {
-  padding: 12px 10px;
+  padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
 .logs-table tr:hover {
-  background: var(--bg);
+  background: var(--bg-alt);
 }
 
 .logs-table tr:last-child td {
@@ -147,16 +148,16 @@
 .logs-action-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 180px;
 }
 
 .logs-action-icon {
-  font-size: 18px;
+  font-size: var(--font-lg);
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--bg-alt);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,9 +166,9 @@
 }
 
 .logs-action-title {
-  font-weight: 700;
+  font-weight: var(--font-bold);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-sm);
   word-break: break-word;
 }
 
@@ -175,9 +176,9 @@
 .logs-type-badge {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 700;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  font-weight: var(--font-bold);
   white-space: nowrap;
 }
 
@@ -186,14 +187,14 @@
 .logs-type-attendance { background: #d1fae5; color: #065f46; }
 .logs-type-request { background: #fef3c7; color: #92400e; }
 .logs-type-account { background: #ede9fe; color: #5b21b6; }
-.logs-type-settings { background: #e2e8f0; color: #475569; }
+.logs-type-settings { background: var(--bg-alt); color: var(--text-muted); }
 .logs-type-template { background: #fce7f3; color: #9d174d; }
 
 /* ═══ Description ═══ */
 .logs-desc {
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: var(--line-snug);
   max-width: 300px;
   word-break: break-word;
 }
@@ -204,20 +205,20 @@
 }
 
 .logs-user-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
   color: var(--text);
   word-break: break-word;
 }
 
 .logs-user-role {
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 
 /* ═══ Time ═══ */
 .logs-time {
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: var(--text-muted);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -227,34 +228,35 @@
 .logs-pagination {
   display: flex;
   justify-content: center;
-  gap: 6px;
-  margin-top: 20px;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
   flex-wrap: wrap;
 }
 
 .logs-page-btn {
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   background: var(--card-bg);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  transition: all 0.2s;
+  font-size: var(--font-sm);
+  font-weight: var(--font-bold);
+  transition: all var(--transition-base);
   min-width: 36px;
+  min-height: 36px;
 }
 
 .logs-page-btn:hover:not(:disabled) {
   background: var(--primary);
-  color: #fff;
+  color: var(--text-on-primary);
   border-color: var(--primary);
 }
 
 .logs-page-btn.active {
   background: var(--primary);
-  color: #fff;
+  color: var(--text-on-primary);
   border-color: var(--primary);
 }
 
@@ -266,42 +268,42 @@
 /* ═══ Empty ═══ */
 .logs-empty {
   text-align: center;
-  padding: 60px 20px;
-  background: var(--bg);
+  padding: var(--space-12) var(--space-5);
+  background: var(--bg-alt);
   border: 1px dashed var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
 }
 
 .logs-empty-icon {
   font-size: 56px;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
   opacity: 0.6;
 }
 
 .logs-empty h3 {
-  font-size: 18px;
+  font-size: var(--font-xl);
   color: var(--text);
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--space-2) 0;
 }
 
 .logs-empty p {
-  font-size: 14px;
+  font-size: var(--font-base);
   color: var(--text-muted);
   margin: 0;
 }
 
-/* ═══ Responsive ═══ */
+/* ═══ Responsive — Mobile (≤ 768px) ═══ */
 @media (max-width: 768px) {
   .logs-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 
   .logs-stat {
-    padding: 12px;
+    padding: var(--space-3);
   }
 
   .logs-stat-value {
-    font-size: 20px;
+    font-size: var(--font-xl);
   }
 
   .logs-filters {
@@ -310,8 +312,10 @@
 
   .logs-filter-group {
     width: 100%;
+    min-width: 0;
   }
 
+  /* إخفاء أعمدة على الموبايل */
   .logs-table th:nth-child(3),
   .logs-table td:nth-child(3),
   .logs-table th:nth-child(4),
@@ -320,15 +324,41 @@
   }
 
   .logs-table {
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 
   .logs-table th,
   .logs-table td {
-    padding: 8px 6px;
+    padding: var(--space-2);
   }
 
   .logs-action-cell {
     min-width: 120px;
+  }
+
+  .logs-action-icon {
+    width: 28px;
+    height: 28px;
+    font-size: var(--font-base);
+  }
+}
+
+/* ═══ Responsive — Small Mobile (≤ 480px) ═══ */
+@media (max-width: 480px) {
+  .logs-stat-value {
+    font-size: var(--font-lg);
+  }
+
+  .logs-stat-label {
+    font-size: 10px;
+  }
+
+  .logs-table {
+    font-size: var(--font-xs);
+  }
+
+  .logs-table th,
+  .logs-table td {
+    padding: var(--space-2) var(--space-1);
   }
 }
