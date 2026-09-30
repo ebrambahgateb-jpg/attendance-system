@@ -1640,3 +1640,21 @@ html[data-theme="dark"] .msg-menu-item.danger:hover {
     font-size: 12px;
   }
 }
+
+/* ═══ Mention Dropdown — Empty State ═══ */
+.chat-mention-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ═══ Online Dot صغير في الـMention ═══ */
+.chat-online-dot-small {
+  width: 10px;
+  height: 10px;
+  bottom: 0;
+  right: 0;
+  border-width: 2px;
+}
