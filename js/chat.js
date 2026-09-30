@@ -1224,21 +1224,31 @@ function handleMentionTyping(input) {
 
 window.showMentionDropdown = function(searchTerm) {
   const dropdown = document.getElementById('chatMentionDropdown');
-  if (!dropdown) return;
+  if (!dropdown) {
+    console.warn('⚠️ Dropdown element not found');
+    return;
+  }
 
-  // ⚡ فلتر الأعضاء
+  // ⚡ ⚡ ⚡ حماية قوية — لو مفيش شات نشط
   let members = [];
 
-  if (chatActiveChat.Type === 'direct') {
-    // ⚡ في الـ1-to-1 — اذكر الطرف التاني بس
-    const otherId = (chatActiveChat.Members || []).find(id => id !== chatPerson.id);
-    if (otherId && chatPeople[otherId]) {
-      members = [chatPeople[otherId]];
+  // ⚡ حاول تقرأ من chatActiveChat الأول
+  if (chatActiveChat && chatActiveChat.Type) {
+    if (chatActiveChat.Type === 'direct') {
+      const otherId = (chatActiveChat.Members || []).find(id => id !== chatPerson?.id);
+      if (otherId && chatPeople[otherId]) {
+        members = [chatPeople[otherId]];
+      }
+    } else {
+      const memberIds = (chatActiveChat.Members || []).filter(id => id !== chatPerson?.id);
+      members = memberIds.map(id => chatPeople[id]).filter(Boolean);
     }
-  } else {
-    // ⚡ في المجموعات — كل الأعضاء ما عداي
-    const memberIds = (chatActiveChat.Members || []).filter(id => id !== chatPerson.id);
-    members = memberIds.map(id => chatPeople[id]).filter(Boolean);
+  }
+
+  // ⚡ ⚡ ⚡ FALLBACK — لو مفيش أعضاء، استخدم كل الأشخاص
+  if (members.length === 0) {
+    console.log('⚠️ No members from chat — using all people');
+    members = chatPeopleArray.filter(p => p.id !== chatPerson?.id);
   }
 
   // ⚡ فلتر بالبحث
@@ -1252,9 +1262,12 @@ window.showMentionDropdown = function(searchTerm) {
   }
 
   if (members.length === 0) {
+    console.warn('⚠️ No members found for mention');
     hideMentionDropdown();
     return;
   }
+
+  console.log(`✅ Showing ${members.length} members in mention dropdown`);
 
   mentionDropdownActive = true;
 
@@ -1280,7 +1293,7 @@ window.showMentionDropdown = function(searchTerm) {
       insertMention(el.dataset.personId, el.dataset.personName);
     };
   });
-}
+};
 
 window.hideMentionDropdown = function() {
   const dropdown = document.getElementById('chatMentionDropdown');
