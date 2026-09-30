@@ -30,6 +30,8 @@ import {
   COLLECTIONS
 } from './firebase-config.js';
 
+import { EMOJI_CATEGORIES } from './emoji-data.js';
+
 // ═══ State ═══
 let chatUser = null;
 let chatPerson = null;
@@ -3829,4 +3831,928 @@ window.loadChatPage = loadChatPage;
 window.showSidebarMobile = showSidebarMobile;
 window.closeChatMobile = showSidebarMobile;
 
-console.log('✅ chat.js loaded (full — phase 1 + 2 + 3)');
+// ═══════════════════════════════════════════════════════
+//   ⚡ PHASE 3-3: Emoji Picker + Camera + Poll + Wallpaper
+// ═══════════════════════════════════════════════════════
+
+
+// ═══ State ═══
+let emojiPickerActive = false;
+let cameraStream = null;
+let currentCameraFacing = 'environment'; // environment | user
+let wallpaperCache = {}; // { chatId: url }
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Emoji Picker
+// ═══════════════════════════════════════════════════════
+
+window.toggleEmojiPicker = function() {
+  const picker = document.getElementById('chatEmojiPicker');
+  if (!picker) return;
+
+  if (emojiPickerActive) {
+    closeEmojiPicker();
+    return;
+  }
+
+  emojiPickerActive = true;
+  renderEmojiPicker(picker);
+  picker.style.display = 'flex';
+};
+
+window.closeEmojiPicker = function() {
+  const picker = document.getElementById('chatEmojiPicker');
+  if (picker) picker.style.display = 'none';
+  emojiPickerActive = false;
+};
+
+function renderEmojiPicker(container) {
+  if (!EMOJI_CATEGORIES || EMOJI_CATEGORIES.length === 0) {
+    container.innerHTML = '<div class="emoji-picker-empty">⚠️ الإيموجي مش محمّلة</div>';
+    return;
+  }
+
+  const activeCat = container.dataset.activeCat || EMOJI_CATEGORIES[0].id;
+  const currentCategory = EMOJI_CATEGORIES.find(c => c.id === activeCat) || EMOJI_CATEGORIES[0];
+
+  container.innerHTML = `
+    <div class="emoji-picker-header">
+      <div class="emoji-picker-tabs">
+        ${EMOJI_CATEGORIES.map(cat => `
+          <button class="emoji-cat-btn ${cat.id === currentCategory.id ? 'active' : ''}"
+                  data-cat="${cat.id}"
+                  title="${cat.name}">
+            ${cat.icon}
+          </button>
+        `).join('')}
+      </div>
+      <button class="emoji-picker-close" id="emojiPickerCloseBtn" title="إغلاق">✕</button>
+    </div>
+    <div class="emoji-picker-body" id="emojiPickerBody">
+      <div class="emoji-cat-title">${currentCategory.name}</div>
+      <div class="emoji-grid">
+        ${currentCategory.emojis.map(e => `
+          <button class="emoji-item" data-emoji="${e}">${e}</button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // ⚡ Close button
+  const closeBtn = document.getElementById('emojiPickerCloseBtn');
+  if (closeBtn) closeBtn.onclick = closeEmojiPicker;
+
+  // ⚡ Category tabs
+  container.querySelectorAll('.emoji-cat-btn').forEach(btn => {
+    btn.onclick = () => {
+      container.dataset.activeCat = btn.dataset.cat;
+      renderEmojiPicker(container);
+    };
+  });
+
+  // ⚡ Emoji clicks
+  container.querySelectorAll('.emoji-item').forEach(btn => {
+    btn.onclick = () => {
+      const emoji = btn.dataset.emoji;
+      insertEmojiToInput(emoji);
+    };
+  });
+}
+
+function insertEmojiToInput(emoji) {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+
+  const start = input.selectionStart || input.value.length;
+  const end = input.selectionEnd || input.value.length;
+
+  input.value = input.value.substring(0, start) + emoji + input.value.substring(end);
+  input.setSelectionRange(start + emoji.length, start + emoji.length);
+  input.focus();
+
+  // ⚡ Typing indicator
+  sendTypingIndicator();
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Camera
+// ═══════════════════════════════════════════════════════
+
+window.openCamera = async function() {
+  let modal = document.getElementById('chatCameraModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'chatCameraModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content camera-modal-content">
+      <div class="modal-header">
+        <h2>📷 الكاميرا</h2>
+        <button class="modal-close" id="closeCameraBtn">✕</button>
+      </div>
+
+      <div class="camera-body">
+        <video id="cameraVideo" class="camera-video" autoplay playsinline muted></video>
+        <canvas id="cameraCanvas" class="camera-canvas" style="display:none;"></canvas>
+        <img id="cameraPreview" class="camera-preview" style="display:none;" />
+        <div class="camera-loading" id="cameraLoading">
+          <div class="spinner"></div>
+          <div>جاري تشغيل الكاميرا...</div>
+        </div>
+        <div class="camera-error" id="cameraError" style="display:none;"></div>
+      </div>
+
+      <div class="camera-actions">
+        <button class="camera-btn" id="cameraCancelBtn" title="إلغاء" style="display:none;">✕ إلغاء</button>
+        <button class="camera-btn camera-switch-btn" id="cameraSwitchBtn" title="تبديل الكاميرا">🔄</button>
+        <button class="camera-btn camera-capture-btn" id="cameraCaptureBtn" title="تصوير">📸</button>
+        <button class="camera-btn camera-send-btn" id="cameraSendBtn" title="إرسال" style="display:none;">📤 إرسال</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  // ⚡ Start camera
+  await startCamera();
+
+  // ⚡ Close
+  document.getElementById('closeCameraBtn').onclick = closeCamera;
+  document.getElementById('cameraCancelBtn').onclick = closeCamera;
+
+  // ⚡ Switch camera
+  document.getElementById('cameraSwitchBtn').onclick = switchCamera;
+
+  // ⚡ Capture
+  document.getElementById('cameraCaptureBtn').onclick = capturePhoto;
+
+  // ⚡ Send
+  document.getElementById('cameraSendBtn').onclick = sendCapturedPhoto;
+};
+
+async function startCamera() {
+  const video = document.getElementById('cameraVideo');
+  const loading = document.getElementById('cameraLoading');
+  const error = document.getElementById('cameraError');
+
+  if (!video) return;
+
+  try {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+    }
+
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: currentCameraFacing,
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+
+    if (loading) loading.style.display = 'none';
+    if (error) error.style.display = 'none';
+
+  } catch (err) {
+    console.error('❌ Camera error:', err);
+    if (loading) loading.style.display = 'none';
+    if (error) {
+      error.style.display = 'block';
+      let msg = '⚠️ لا يمكن تشغيل الكاميرا';
+      if (err.name === 'NotAllowedError') msg = '⚠️ تم رفض إذن الكاميرا';
+      else if (err.name === 'NotFoundError') msg = '⚠️ لا توجد كاميرا متاحة';
+      else if (err.name === 'NotReadableError') msg = '⚠️ الكاميرا مشغولة بتطبيق آخر';
+      error.textContent = msg;
+    }
+  }
+}
+
+async function switchCamera() {
+  currentCameraFacing = currentCameraFacing === 'environment' ? 'user' : 'environment';
+  await startCamera();
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  const preview = document.getElementById('cameraPreview');
+  const captureBtn = document.getElementById('cameraCaptureBtn');
+  const sendBtn = document.getElementById('cameraSendBtn');
+  const cancelBtn = document.getElementById('cameraCancelBtn');
+  const switchBtn = document.getElementById('cameraSwitchBtn');
+
+  if (!video || !canvas) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+  preview.src = dataUrl;
+  preview.style.display = 'block';
+  video.style.display = 'none';
+
+  if (captureBtn) captureBtn.style.display = 'none';
+  if (switchBtn) switchBtn.style.display = 'none';
+  if (sendBtn) sendBtn.style.display = 'flex';
+  if (cancelBtn) cancelBtn.style.display = 'flex';
+}
+
+async function sendCapturedPhoto() {
+  const canvas = document.getElementById('cameraCanvas');
+  if (!canvas) return;
+
+  const sendBtn = document.getElementById('cameraSendBtn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = '⏳ جاري الإرسال...';
+  }
+
+  try {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('فشل إنشاء الصورة');
+
+    const file = new File([blob], `camera_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    closeCamera();
+    await sendChatImage(file);
+
+  } catch (err) {
+    console.error('❌ Send captured photo error:', err);
+    alert('خطأ: ' + err.message);
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = '📤 إرسال';
+    }
+  }
+}
+
+window.closeCamera = function() {
+  const modal = document.getElementById('chatCameraModal');
+  if (modal) modal.style.display = 'none';
+
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Poll
+// ═══════════════════════════════════════════════════════
+
+window.openPollModal = function() {
+  let modal = document.getElementById('pollModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'pollModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>📊 تصويت جديد</h2>
+        <button class="modal-close" id="closePollBtn">✕</button>
+      </div>
+
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
+        <div class="form-row">
+          <label>السؤال *</label>
+          <input type="text" id="pollQuestion" placeholder="اكتب سؤالك..." maxlength="200" />
+        </div>
+
+        <div class="form-row">
+          <label>الخيارات (2-10) *</label>
+          <div id="pollOptionsList"></div>
+          <button class="btn-secondary" id="addPollOptionBtn" style="margin-top:8px;">➕ إضافة خيار</button>
+        </div>
+
+        <div class="form-row checkbox-row">
+          <input type="checkbox" id="pollMultiple" />
+          <label for="pollMultiple">السماح باختيار أكثر من خيار</label>
+        </div>
+
+        <div class="form-row checkbox-row">
+          <input type="checkbox" id="pollAnonymous" />
+          <label for="pollAnonymous">تصويت مجهول (إخفاء الأسماء)</label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelPollBtn">إلغاء</button>
+        <button class="btn-primary" id="createPollBtn">📊 إنشاء التصويت</button>
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  // ⚡ Initial options (2)
+  const optionsList = document.getElementById('pollOptionsList');
+  optionsList.innerHTML = '';
+  addPollOption();
+  addPollOption();
+
+  document.getElementById('addPollOptionBtn').onclick = addPollOption;
+  document.getElementById('closePollBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('cancelPollBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('createPollBtn').onclick = createPoll;
+};
+
+function addPollOption() {
+  const list = document.getElementById('pollOptionsList');
+  if (!list) return;
+
+  const count = list.children.length;
+  if (count >= 10) {
+    alert('⚠️ الحد الأقصى 10 خيارات');
+    return;
+  }
+
+  const idx = count + 1;
+  const div = document.createElement('div');
+  div.className = 'poll-option-row';
+  div.innerHTML = `
+    <input type="text" class="poll-option-input" placeholder="الخيار ${idx}" maxlength="100" />
+    ${count >= 2 ? `<button class="poll-option-remove" title="حذف">✕</button>` : ''}
+  `;
+
+  const removeBtn = div.querySelector('.poll-option-remove');
+  if (removeBtn) {
+    removeBtn.onclick = () => {
+      div.remove();
+      renumberPollOptions();
+    };
+  }
+
+  list.appendChild(div);
+}
+
+function renumberPollOptions() {
+  const list = document.getElementById('pollOptionsList');
+  if (!list) return;
+  list.querySelectorAll('.poll-option-row').forEach((row, i) => {
+    const input = row.querySelector('.poll-option-input');
+    if (input) input.placeholder = `الخيار ${i + 1}`;
+  });
+}
+
+async function createPoll() {
+  const question = document.getElementById('pollQuestion')?.value.trim();
+  const multiple = document.getElementById('pollMultiple')?.checked || false;
+  const anonymous = document.getElementById('pollAnonymous')?.checked || false;
+
+  const inputs = document.querySelectorAll('.poll-option-input');
+  const options = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+
+  if (!question) {
+    alert('⚠️ اكتب السؤال');
+    return;
+  }
+  if (options.length < 2) {
+    alert('⚠️ لازم خيارين على الأقل');
+    return;
+  }
+
+  try {
+    const pollData = {
+      Question: question,
+      Options: options.map((text, i) => ({ id: `opt_${i}`, text, votes: [] })),
+      Multiple: multiple,
+      Anonymous: anonymous,
+      CreatedBy: chatPerson.id,
+      CreatedByName: getPersonFullName(chatPerson),
+      CreatedAt: new Date().toISOString(),
+      TotalVotes: 0
+    };
+
+    const messageData = {
+      SenderID: chatPerson.id,
+      SenderName: getPersonFullName(chatPerson),
+      Type: 'poll',
+      Poll: pollData,
+      Text: `📊 تصويت: ${question}`,
+      SentAt: new Date().toISOString(),
+      ReadBy: [chatPerson.id],
+      Reactions: {}
+    };
+
+    if (chatReplyTo) {
+      messageData.ReplyTo = {
+        MessageID: chatReplyTo.MessageID,
+        Text: chatReplyTo.Text,
+        SenderName: chatReplyTo.SenderName,
+        Type: chatReplyTo.Type || 'text'
+      };
+    }
+
+    await addDoc(collection(db, 'chats', chatActiveChatId, 'messages'), messageData);
+
+    await updateDoc(doc(db, 'chats', chatActiveChatId), {
+      LastMessage: {
+        Text: `📊 ${question}`,
+        Type: 'poll',
+        SenderID: chatPerson.id,
+        SenderName: getPersonFullName(chatPerson),
+        SentAt: messageData.SentAt
+      },
+      LastMessageAt: messageData.SentAt
+    });
+
+    await sendChatNotification(chatActiveChat, messageData, []);
+
+    document.getElementById('pollModal').style.display = 'none';
+    window.cancelReply();
+
+    showToast('📊 تم إنشاء التصويت');
+
+  } catch (err) {
+    console.error('❌ createPoll error:', err);
+    alert('خطأ: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Poll — Vote Handler
+// ═══════════════════════════════════════════════════════
+
+window.votePoll = async function(msgId, optionId) {
+  if (!msgId || !optionId || !chatActiveChatId) return;
+
+  const msg = chatMessages.find(m => m.id === msgId);
+  if (!msg || !msg.Poll) return;
+
+  const poll = msg.Poll;
+  const isMultiple = poll.Multiple === true;
+
+  try {
+    // ⚡ جهّز الخيارات الجديدة
+    const newOptions = poll.Options.map(opt => {
+      const votes = Array.isArray(opt.votes) ? [...opt.votes] : [];
+
+      if (isMultiple) {
+        // ⚡ Multi: toggle
+        if (opt.id === optionId) {
+          const idx = votes.indexOf(chatPerson.id);
+          if (idx === -1) votes.push(chatPerson.id);
+          else votes.splice(idx, 1);
+        }
+      } else {
+        // ⚡ Single: شيل صوّتي من كل الخيارات + ضيف هنا
+        const idx = votes.indexOf(chatPerson.id);
+        if (idx !== -1) votes.splice(idx, 1);
+
+        if (opt.id === optionId) {
+          votes.push(chatPerson.id);
+        }
+      }
+
+      return { ...opt, votes };
+    });
+
+    const totalVotes = newOptions.reduce((sum, opt) => sum + opt.votes.length, 0);
+
+    await updateDoc(doc(db, 'chats', chatActiveChatId, 'messages', msgId), {
+      'Poll.Options': newOptions,
+      'Poll.TotalVotes': totalVotes
+    });
+
+  } catch (err) {
+    console.error('❌ votePoll error:', err);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Wallpaper
+// ═══════════════════════════════════════════════════════
+
+async function loadWallpapers() {
+  try {
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'chatWallpapers'),
+      where('PersonID', '==', chatPerson.id)
+    );
+    const snap = await getDocs(q);
+
+    wallpaperCache = {};
+    snap.docs.forEach(d => {
+      const data = d.data();
+      wallpaperCache[data.ChatID] = data.Url;
+    });
+  } catch (err) {
+    console.warn('⚠️ loadWallpapers error:', err.message);
+  }
+}
+
+function applyWallpaper(chatId) {
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+
+  const url = wallpaperCache[chatId];
+
+  if (url) {
+    container.style.backgroundImage = `url('${url}')`;
+    container.style.backgroundSize = 'cover';
+    container.style.backgroundPosition = 'center';
+    container.style.backgroundAttachment = 'local';
+  } else {
+    container.style.backgroundImage = 'none';
+  }
+}
+
+window.openWallpaperModal = function() {
+  if (!chatActiveChatId) return;
+
+  let modal = document.getElementById('wallpaperModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'wallpaperModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const currentUrl = wallpaperCache[chatActiveChatId] || '';
+
+  const presetColors = [
+    '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0',
+    '#fef3c7', '#fed7aa', '#fecaca', '#fbcfe8',
+    '#e9d5ff', '#ddd6fe', '#bfdbfe', '#a5f3fc',
+    '#d1fae5', '#bbf7d0', '#fef9c3', '#fef08a',
+    '#1e293b', '#0f172a', '#111827', '#1f2937'
+  ];
+
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:520px;max-height:85vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h2>🖼️ خلفية المحادثة</h2>
+        <button class="modal-close" id="closeWallpaperBtn">✕</button>
+      </div>
+
+      <div class="modal-body" style="flex:1;overflow-y:auto;">
+
+        <!-- ⚡ Upload -->
+        <div class="wallpaper-section">
+          <h3 class="wallpaper-title">📸 رفع صورة</h3>
+          <button class="btn-primary" id="uploadWallpaperBtn">📤 رفع خلفية</button>
+        </div>
+
+        <!-- ⚡ Preset Colors -->
+        <div class="wallpaper-section">
+          <h3 class="wallpaper-title">🎨 خلفيات جاهزة</h3>
+          <div class="wallpaper-grid">
+            ${presetColors.map(c => `
+              <button class="wallpaper-color ${currentUrl === c ? 'active' : ''}"
+                      data-color="${c}"
+                      style="background: ${c};"></button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- ⚡ Remove -->
+        ${currentUrl ? `
+          <div class="wallpaper-section">
+            <button class="btn-danger" id="removeWallpaperBtn">❌ إزالة الخلفية</button>
+          </div>
+        ` : ''}
+
+      </div>
+    </div>
+  `;
+
+  modal.style.display = 'flex';
+
+  document.getElementById('closeWallpaperBtn').onclick = () => modal.style.display = 'none';
+  document.getElementById('uploadWallpaperBtn').onclick = uploadWallpaper;
+
+  // ⚡ Preset colors
+  modal.querySelectorAll('.wallpaper-color').forEach(btn => {
+    btn.onclick = () => setWallpaperColor(btn.dataset.color);
+  });
+
+  // ⚡ Remove
+  const removeBtn = document.getElementById('removeWallpaperBtn');
+  if (removeBtn) removeBtn.onclick = removeWallpaper;
+};
+
+async function uploadWallpaper() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
+
+  input.onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('⚠️ الحد الأقصى 5 MB');
+      return;
+    }
+
+    try {
+      const btn = document.getElementById('uploadWallpaperBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ جاري الرفع...';
+      }
+
+      if (typeof window.uploadPersonPhoto !== 'function') {
+        throw new Error('خدمة الرفع غير متوفرة');
+      }
+
+      const result = await window.uploadPersonPhoto(file);
+
+      await saveWallpaper(chatActiveChatId, result.url);
+
+      applyWallpaper(chatActiveChatId);
+      document.getElementById('wallpaperModal').style.display = 'none';
+      showToast('🖼️ تم تعيين الخلفية');
+
+    } catch (err) {
+      console.error('❌ uploadWallpaper error:', err);
+      alert('خطأ: ' + err.message);
+    }
+  };
+
+  input.click();
+}
+
+async function setWallpaperColor(color) {
+  try {
+    await saveWallpaper(chatActiveChatId, color);
+    applyWallpaper(chatActiveChatId);
+
+    // ⚡ حدّث الـUI
+    document.querySelectorAll('.wallpaper-color').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.color === color);
+    });
+
+    showToast('🎨 تم تعيين الخلفية');
+
+  } catch (err) {
+    console.error('❌ setWallpaperColor error:', err);
+  }
+}
+
+async function removeWallpaper() {
+  try {
+    const wallpaperDocId = `${chatPerson.id}_${chatActiveChatId}`;
+    await deleteDoc(doc(db, 'chatWallpapers', wallpaperDocId));
+
+    delete wallpaperCache[chatActiveChatId];
+    applyWallpaper(chatActiveChatId);
+
+    document.getElementById('wallpaperModal').style.display = 'none';
+    showToast('❌ تم إزالة الخلفية');
+
+  } catch (err) {
+    console.error('❌ removeWallpaper error:', err);
+  }
+}
+
+async function saveWallpaper(chatId, url) {
+  const wallpaperDocId = `${chatPerson.id}_${chatId}`;
+
+  await setDoc(doc(db, 'chatWallpapers', wallpaperDocId), {
+    PersonID: chatPerson.id,
+    ChatID: chatId,
+    Url: url,
+    UpdatedAt: new Date().toISOString()
+  });
+
+  wallpaperCache[chatId] = url;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Render Poll Item (in messages)
+// ═══════════════════════════════════════════════════════
+
+function renderPollItem(msg) {
+  const poll = msg.Poll;
+  if (!poll) return '';
+
+  const totalVotes = poll.TotalVotes || 0;
+  const myVotes = new Set();
+
+  poll.Options.forEach(opt => {
+    const votes = Array.isArray(opt.votes) ? opt.votes : [];
+    if (votes.includes(chatPerson.id)) myVotes.add(opt.id);
+  });
+
+  const hasVoted = myVotes.size > 0;
+
+  return `
+    <div class="chat-poll">
+      <div class="chat-poll-question">📊 ${escapeHtml(poll.Question)}</div>
+      <div class="chat-poll-options">
+        ${poll.Options.map(opt => {
+          const votes = Array.isArray(opt.votes) ? opt.votes : [];
+          const count = votes.length;
+          const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+          const isMyVote = myVotes.has(opt.id);
+
+          return `
+            <button class="chat-poll-option ${isMyVote ? 'voted' : ''}"
+                    onclick="window.votePoll('${msg.id}', '${opt.id}')">
+              <div class="chat-poll-bar" style="width: ${percent}%;"></div>
+              <div class="chat-poll-content">
+                <span class="chat-poll-text">
+                  ${isMyVote ? '✅' : '⬜'} ${escapeHtml(opt.text)}
+                </span>
+                <span class="chat-poll-count">${count} (${percent}%)</span>
+              </div>
+            </button>
+          `;
+        }).join('')}
+      </div>
+      <div class="chat-poll-footer">
+        <span>${totalVotes} صوت</span>
+        ${poll.Multiple ? '<span>• متعدد</span>' : ''}
+        ${poll.Anonymous ? '<span>• مجهول</span>' : ''}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Hooks — نضيفها للـrenderChatMain + renderMessageItem
+// ═══════════════════════════════════════════════════════
+
+// ⚡ احفظ الدوال الأصلية
+const _originalRenderChatMain = renderChatMain;
+const _originalRenderMessageItem = renderMessageItem;
+
+// ⚡ Override renderChatMain — نضيف الأزرار الجديدة
+renderChatMain = function() {
+  _originalRenderChatMain();
+
+  // ⚡ أضف الأزرار الجديدة للـheader
+  const headerActions = document.querySelector('.chat-header-actions');
+  if (headerActions) {
+    // ⚡ زرار Wallpaper
+    const wallpaperBtn = document.createElement('button');
+    wallpaperBtn.className = 'chat-header-btn';
+    wallpaperBtn.id = 'chatWallpaperBtn';
+    wallpaperBtn.title = 'خلفية';
+    wallpaperBtn.textContent = '🖼️';
+    wallpaperBtn.onclick = window.openWallpaperModal;
+
+    // ⚡ ضيف قبل الـsearch
+    const searchBtn = headerActions.querySelector('#chatSearchBtn');
+    if (searchBtn) {
+      headerActions.insertBefore(wallpaperBtn, searchBtn);
+    } else {
+      headerActions.appendChild(wallpaperBtn);
+    }
+  }
+
+  // ⚡ أضف زرار Emoji + Camera + Poll في الـinput bar
+  const inputBar = document.querySelector('.chat-input-bar');
+  if (inputBar) {
+    const imageBtn = inputBar.querySelector('#chatImageBtn');
+
+    // ⚡ زرار Emoji 😀 (قبل الـimage)
+    const emojiBtn = document.createElement('button');
+    emojiBtn.className = 'chat-input-btn';
+    emojiBtn.id = 'chatEmojiBtn';
+    emojiBtn.type = 'button';
+    emojiBtn.title = 'إيموجي';
+    emojiBtn.textContent = '😀';
+    emojiBtn.onclick = window.toggleEmojiPicker;
+
+    // ⚡ زرار Camera 📷
+    const cameraBtn = document.createElement('button');
+    cameraBtn.className = 'chat-input-btn';
+    cameraBtn.id = 'chatCameraBtn';
+    cameraBtn.type = 'button';
+    cameraBtn.title = 'الكاميرا';
+    cameraBtn.textContent = '📷';
+    cameraBtn.onclick = window.openCamera;
+
+    // ⚡ زرار Poll 📊
+    const pollBtn = document.createElement('button');
+    pollBtn.className = 'chat-input-btn';
+    pollBtn.id = 'chatPollBtn';
+    pollBtn.type = 'button';
+    pollBtn.title = 'تصويت';
+    pollBtn.textContent = '📊';
+    pollBtn.onclick = window.openPollModal;
+
+    // ⚡ ضيف قبل زرار الـimage
+    if (imageBtn) {
+      inputBar.insertBefore(emojiBtn, imageBtn);
+      inputBar.insertBefore(cameraBtn, imageBtn);
+      inputBar.insertBefore(pollBtn, imageBtn);
+    } else {
+      inputBar.appendChild(emojiBtn);
+      inputBar.appendChild(cameraBtn);
+      inputBar.appendChild(pollBtn);
+    }
+  }
+
+  // ⚡ أضف الـEmoji Picker container
+  const inputWrapper = document.querySelector('.chat-input-wrapper');
+  if (inputWrapper && !document.getElementById('chatEmojiPicker')) {
+    const picker = document.createElement('div');
+    picker.id = 'chatEmojiPicker';
+    picker.className = 'chat-emoji-picker';
+    picker.style.display = 'none';
+    inputWrapper.appendChild(picker);
+  }
+
+  // ⚡ طبّق الـWallpaper
+  applyWallpaper(chatActiveChatId);
+};
+
+// ⚡ Override renderMessageItem — نضيف Poll + Wallpaper
+renderMessageItem = function(msg) {
+  // ⚡ لو Poll → استخدم renderPollItem
+  if (msg.Type === 'poll' && msg.Poll) {
+    const isMine = msg.SenderID === chatPerson.id;
+    const sender = chatPeople[msg.SenderID];
+    const senderName = msg.SenderName || getPersonFullName(sender) || 'غير معروف';
+    const senderAvatar = getSenderAvatar(sender);
+    const time = msg.SentAt ? formatTime(parseDate(msg.SentAt)) : '';
+    const showSender = !isMine && chatActiveChat && (chatActiveChat.Type === 'group' || chatActiveChat.Type === 'channel');
+
+    let readReceiptHtml = '';
+    if (isMine) {
+      const readBy = Array.isArray(msg.ReadBy) ? msg.ReadBy : [];
+      const totalMembers = chatActiveChat.Type === 'direct'
+        ? 1
+        : Math.max(1, (chatActiveChat.Members || []).length - 1);
+      const readCount = readBy.filter(id => id !== chatPerson.id).length;
+
+      if (readCount === 0) {
+        readReceiptHtml = '<span class="chat-read-receipt sent">✓</span>';
+      } else if (readCount >= totalMembers) {
+        readReceiptHtml = '<span class="chat-read-receipt read">✓✓</span>';
+      } else {
+        readReceiptHtml = '<span class="chat-read-receipt partial">✓✓</span>';
+      }
+    }
+
+    return `
+      <div class="chat-message ${isMine ? 'mine' : 'theirs'}"
+           data-msg-id="${msg.id}"
+           data-msg-mine="${isMine ? '1' : '0'}"
+           data-msg-type="poll">
+        ${!isMine ? `<div class="chat-message-avatar">${senderAvatar}</div>` : ''}
+        <div class="chat-message-bubble">
+          ${showSender ? `<div class="chat-message-sender">${escapeHtml(senderName)}</div>` : ''}
+          ${renderPollItem(msg)}
+          <div class="chat-message-meta">
+            <span class="chat-message-time">${time}</span>
+            ${readReceiptHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ⚡ باقي الرسائل → الدالة الأصلية
+  return _originalRenderMessageItem(msg);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Hook — تحميل الـWallpapers عند فتح شات
+// ═══════════════════════════════════════════════════════
+
+const _originalOpenChat = window.openChat;
+window.openChat = async function(chatId) {
+  await _originalOpenChat(chatId);
+
+  // ⚡ حمّل الـwallpapers لو لسه مش محمّلة
+  if (Object.keys(wallpaperCache).length === 0) {
+    await loadWallpapers();
+  }
+
+  // ⚡ طبّق الخلفية
+  applyWallpaper(chatId);
+};
+
+// ═══════════════════════════════════════════════════════
+//   ⚡ Keyboard Shortcut — Escape لإغلاق Emoji Picker
+// ═══════════════════════════════════════════════════════
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (emojiPickerActive) closeEmojiPicker();
+  }
+});
+
+console.log('✅ chat.js loaded (full — phase 1 + 2 + 3 + 3-3)');
