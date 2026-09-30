@@ -3138,3 +3138,136 @@ html[data-theme="dark"] .chat-header-status.online {
 html[data-theme="dark"] .chat-header-status.offline {
   color: #94a3b8;
 }
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ Chat — Mute + Mentions + Group Settings (Dark Mode)
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Mute Badge ═══ */
+html[data-theme="dark"] .chat-mute-badge {
+  opacity: 0.85;
+}
+
+html[data-theme="dark"] .chat-item.muted .chat-item-preview {
+  color: #64748b;
+}
+
+/* ═══ Header Buttons ═══ */
+html[data-theme="dark"] .chat-header-btn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .chat-header-btn:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+/* ═══ Mention Dropdown ═══ */
+html[data-theme="dark"] .chat-mention-dropdown {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme="dark"] .chat-mention-item:hover,
+html[data-theme="dark"] .chat-mention-item.active {
+  background: #0f172a;
+}
+
+html[data-theme="dark"] .chat-mention-name {
+  color: #f1f5f9;
+}
+
+/* ═══ Mention Highlight ═══ */
+html[data-theme="dark"] .chat-mention {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.25);
+}
+
+/* ═══ Mentioned Message ═══ */
+html[data-theme="dark"] .chat-message.mentioned .chat-message-bubble {
+  border-right-color: #60a5fa;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
+}
+
+/* ═══ Group Settings ═══ */
+html[data-theme="dark"] .group-settings-section {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .group-settings-title {
+  color: #f1f5f9;
+  border-bottom-color: #334155;
+}
+
+html[data-theme="dark"] .group-member-item {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .group-member-item:hover {
+  border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .group-member-name {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .group-member-email {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .group-member-badge.me {
+  background: rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+}
+
+html[data-theme="dark"] .group-member-badge.creator {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
+}
+
+html[data-theme="dark"] .group-member-badge.admin {
+  background: rgba(34, 197, 94, 0.25);
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .group-member-actions .btn-icon {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .group-member-actions .btn-icon:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+html[data-theme="dark"] .group-member-actions .btn-icon.danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* ═══ Danger Section ═══ */
+html[data-theme="dark"] .group-danger-section {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+html[data-theme="dark"] .group-danger-section .group-settings-title {
+  color: #f87171;
+  border-bottom-color: rgba(220, 38, 38, 0.3);
+}
+
+/* ═══ System Messages ═══ */
+html[data-theme="dark"] .chat-message[data-msg-type="system"] .chat-message-bubble {
+  background: rgba(148, 163, 184, 0.15) !important;
+  color: #94a3b8 !important;
+}
+
+html[data-theme="dark"] .chat-message[data-msg-type="system"] .chat-message-text {
+  color: #94a3b8;
+}
