@@ -1303,3 +1303,367 @@ html[data-theme="dark"] .chat-reply-preview {
     font-size: 12px;
   }
 }
+/* ═══════════════════════════════════════════════════════
+   ⚡ المرحلة 2 — Mute + Mentions + Group Settings
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Mute Badge في قائمة الشات ═══ */
+.chat-mute-badge {
+  display: inline-block;
+  font-size: 11px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+.chat-item.muted .chat-item-preview {
+  font-style: italic;
+  opacity: 0.75;
+}
+
+/* ═══ Header Actions ═══ */
+.chat-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chat-header-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.chat-header-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ═══ Mention Dropdown ═══ */
+.chat-mention-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 16px;
+  right: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.15);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  margin-bottom: 8px;
+  z-index: 100;
+  animation: mentionSlideUp 0.2s ease-out;
+}
+
+@keyframes mentionSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chat-mention-item:hover,
+.chat-mention-item.active {
+  background: var(--bg);
+}
+
+.chat-mention-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.chat-mention-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chat-mention-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ═══ Mention Highlight في الرسالة ═══ */
+.chat-mention {
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.15);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.chat-message.mine .chat-mention {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ═══ Message Mentioned — Highlight للرسالة اللي فيها mention ليّ ═══ */
+.chat-message.mentioned .chat-message-bubble {
+  border-right: 4px solid #2563eb;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.05) 100%);
+}
+
+.chat-message.mine.mentioned .chat-message-bubble {
+  border-right: 4px solid #fff;
+}
+
+/* ═══ Group Settings Modal ═══ */
+.group-settings-section {
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.group-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.group-settings-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.group-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* ═══ Group Member Item ═══ */
+.group-member-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.15s;
+}
+
+.group-member-item:hover {
+  border-color: var(--primary);
+}
+
+.group-member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 15px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.group-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.group-member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.group-member-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.group-member-email {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-member-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.group-member-badge.me {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+
+.group-member-badge.creator {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.group-member-badge.admin {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.group-member-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.group-member-actions .btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.group-member-actions .btn-icon:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.group-member-actions .btn-icon.danger:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.group-member-actions .btn-primary.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* ═══ Danger Section ═══ */
+.group-danger-section {
+  background: rgba(220, 38, 38, 0.06);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.group-danger-section .group-settings-title {
+  color: #dc2626;
+  border-bottom-color: rgba(220, 38, 38, 0.2);
+}
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .chat-mention-dropdown {
+    left: 8px;
+    right: 8px;
+    max-height: 180px;
+  }
+
+  .group-settings-section {
+    padding: 12px;
+  }
+
+  .group-member-item {
+    padding: 8px 10px;
+  }
+
+  .group-member-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .group-member-name {
+    font-size: 13px;
+  }
+
+  .group-member-actions .btn-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}
+
+/* ═══ System Messages ═══ */
+.chat-message[data-msg-type="system"] {
+  align-self: center;
+  max-width: 90%;
+}
+
+.chat-message[data-msg-type="system"] .chat-message-bubble {
+  background: rgba(148, 163, 184, 0.15) !important;
+  border: none !important;
+  color: var(--text-muted) !important;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-style: italic;
+}
+
+.chat-message[data-msg-type="system"] .chat-message-text {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.chat-message[data-msg-type="system"] .chat-message-time {
+  display: none;
+}
