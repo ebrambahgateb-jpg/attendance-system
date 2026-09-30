@@ -32,7 +32,7 @@ body.dashboard-body {
   right: 0;
   bottom: 0;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: var(--z-dropdown, 100);
+  z-index: 600;  /* ⚡ أعلى من الـoverlay */
   padding-top: var(--safe-top, 0);
   padding-bottom: var(--safe-bottom, 0);
   overflow: hidden;
