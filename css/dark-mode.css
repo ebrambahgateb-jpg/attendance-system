@@ -3771,3 +3771,208 @@ html[data-theme="dark"] .msg-menu-item[data-action="pin"]:hover {
 html[data-theme="dark"] .msg-menu-item[data-action="reply"]:hover {
   background: rgba(59, 130, 246, 0.15);
 }
+
+
+/* ═══════════════════════════════════════════════════════
+   ⚡ PHASE 3-3: Emoji + Camera + Poll + Wallpaper (Dark)
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ Emoji Picker ═══ */
+html[data-theme="dark"] .chat-emoji-picker {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme="dark"] .emoji-picker-header {
+  background: #0f172a;
+  border-bottom-color: #334155;
+}
+
+html[data-theme="dark"] .emoji-cat-btn {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .emoji-cat-btn:hover {
+  background: #1e293b;
+}
+
+html[data-theme="dark"] .emoji-cat-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+html[data-theme="dark"] .emoji-picker-close {
+  background: #0f172a;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .emoji-picker-close:hover {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border-color: #f87171;
+}
+
+html[data-theme="dark"] .emoji-picker-body {
+  background: #1e293b;
+}
+
+html[data-theme="dark"] .emoji-cat-title {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .emoji-item:hover {
+  background: #0f172a;
+}
+
+html[data-theme="dark"] .emoji-picker-empty {
+  color: #94a3b8;
+}
+
+/* ═══ Camera Modal ═══ */
+html[data-theme="dark"] .camera-modal-content {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .camera-actions {
+  background: #0f172a;
+}
+
+html[data-theme="dark"] .camera-btn {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .camera-btn:hover {
+  background: #475569;
+}
+
+html[data-theme="dark"] .camera-switch-btn {
+  background: #475569;
+}
+
+html[data-theme="dark"] .camera-capture-btn {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+html[data-theme="dark"] .camera-capture-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+html[data-theme="dark"] .camera-send-btn {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+html[data-theme="dark"] .camera-send-btn:hover {
+  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+}
+
+/* ═══ Poll (Messages) ═══ */
+html[data-theme="dark"] .chat-poll-question {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .chat-poll-option {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .chat-poll-option:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme="dark"] .chat-poll-option.voted {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .chat-poll-bar {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+html[data-theme="dark"] .chat-poll-count {
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .chat-poll-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+/* ═══ Poll Options في Modal ═══ */
+html[data-theme="dark"] .poll-option-input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .poll-option-input:focus {
+  border-color: #60a5fa;
+}
+
+html[data-theme="dark"] .poll-option-remove {
+  background: transparent;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+html[data-theme="dark"] .poll-option-remove:hover {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border-color: #f87171;
+}
+
+/* ═══ Wallpaper Modal ═══ */
+html[data-theme="dark"] .wallpaper-section {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .wallpaper-title {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .wallpaper-color {
+  border-color: #334155;
+}
+
+html[data-theme="dark"] .wallpaper-color:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme="dark"] .wallpaper-color.active {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+}
+
+html[data-theme="dark"] .wallpaper-color.active::after {
+  color: #60a5fa;
+  text-shadow: 0 0 4px #000, 0 0 8px #000;
+}
+
+/* ═══ New Buttons (Emoji/Camera/Poll/Wallpaper) ═══ */
+html[data-theme="dark"] #chatEmojiBtn,
+html[data-theme="dark"] #chatCameraBtn,
+html[data-theme="dark"] #chatPollBtn,
+html[data-theme="dark"] #chatWallpaperBtn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] #chatEmojiBtn:hover,
+html[data-theme="dark"] #chatCameraBtn:hover,
+html[data-theme="dark"] #chatPollBtn:hover,
+html[data-theme="dark"] #chatWallpaperBtn:hover {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+/* ═══ Messages Container — Wallpaper ═══ */
+html[data-theme="dark"] .chat-messages[style*="background-image"] {
+  /* الخلفية تُطبّق ديناميكيًا */
+}
