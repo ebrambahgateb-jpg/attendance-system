@@ -242,10 +242,7 @@ function switchWorkspace(newWorkspace) {
   if (!dashboardUser) return;
   if (newWorkspace === currentWorkspace) return;
 
-  const ws = getWorkspaceById(newWorkspace);
-  const confirmMsg = `هل تريد التبديل إلى "${ws ? ws.label : newWorkspace}"؟`;
-  if (!confirm(confirmMsg)) return;
-
+  // ⚡ التبديل مباشر — بدون رسالة تأكيد
   dashboardUser.currentWorkspace = newWorkspace;
   localStorage.setItem('currentUser', JSON.stringify(dashboardUser));
   localStorage.setItem('currentWorkspace', newWorkspace);
