@@ -1558,19 +1558,47 @@ window.saveManualAttendance = async function() {
         continue;
       }
 
-      // ⚡ 2. فحص التكرار
-      const dupQ = query(
-        collection(db, COLLECTIONS.ATTENDANCE),
-        where('PersonID', '==', personId),
-        where('EventID', '==', eventId),
-        where('OccurrenceDate', '==', dateISO)
-      );
-      const dupSnap = await getDocs(dupQ);
+      // ⚡ 2. فحص التكرار (بـ 2 طرق للأمان)
+let isDup = false;
 
-      if (!dupSnap.empty) {
-        duplicateCount++;
-        continue;
+try {
+  // ⚡ طريقة 1: بالـ OccurrenceDate
+  const dupQ = query(
+    collection(db, COLLECTIONS.ATTENDANCE),
+    where('PersonID', '==', personId),
+    where('EventID', '==', eventId),
+    where('OccurrenceDate', '==', dateISO)
+  );
+  const dupSnap = await getDocs(dupQ);
+  isDup = !dupSnap.empty;
+
+  // ⚡ طريقة 2 (Fallback): فحص بـ ScanTime لو الأولى فشلت
+  if (!isDup) {
+    const allQ = query(
+      collection(db, COLLECTIONS.ATTENDANCE),
+      where('PersonID', '==', personId),
+      where('EventID', '==', eventId)
+    );
+    const allSnap = await getDocs(allQ);
+
+    isDup = allSnap.docs.some(d => {
+      const data = d.data();
+      if (data.OccurrenceDate === dateISO) return true;
+      if (data.ScanTime) {
+        const scanDate = parseDate(data.ScanTime);
+        if (scanDate && formatDateISO(scanDate) === dateISO) return true;
       }
+      return false;
+    });
+  }
+} catch (e) {
+  console.warn('⚠️ Duplicate check error:', e);
+}
+
+if (isDup) {
+  duplicateCount++;
+  continue;
+}
 
       const person = attPeople[personId];
       const personName = person
