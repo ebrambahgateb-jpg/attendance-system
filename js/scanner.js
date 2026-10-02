@@ -456,19 +456,27 @@ async function processScan(decodedText) {
       return;
     }
 
-    // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
-    const alreadyRegistered = await checkAlreadyRegistered(
-      personId,
-      selectedEvent.id,
-      occurrenceDate
-    );
+   // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
+const alreadyRegistered = await checkAlreadyRegistered(
+  personId,
+  selectedEvent.id,
+  occurrenceDate
+);
 
-    // ⚡ فحص التكرار — إجباري دائمًا
 if (alreadyRegistered) {
+  // ⚡ احضر تفاصيل التسجيل السابق
+  const prevRecord = await getPreviousRecord(personId, selectedEvent.id, occurrenceDate);
+  const prevTime = prevRecord?.ScanTime
+    ? new Date(prevRecord.ScanTime).toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : '';
+
   await showResult({
     type: 'error',
-    title: 'مسجّل بالفعل',
-    message: `${personName} — سجّل الحضور مسبقاً`,
+    title: '⚠️ مسجّل بالفعل',
+    message: `${personName}\n\nسجّل الحضور مسبقاً${prevTime ? ` الساعة ${prevTime}` : ''}.\n\nلا يمكن تسجيل الحضور مرتين في نفس الحدث.`,
     person: person,
     playSound: 'error'
   });
