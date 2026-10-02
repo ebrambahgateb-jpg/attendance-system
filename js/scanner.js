@@ -463,20 +463,17 @@ async function processScan(decodedText) {
       occurrenceDate
     );
 
-    if (alreadyRegistered) {
-      const preventDup = settings.PreventDuplicateAttendance !== false;
-
-      if (preventDup) {
-        await showResult({
-          type: 'error',
-          title: 'مسجّل بالفعل',
-          message: `${personName} — سجّل الحضور مسبقاً`,
-          person: person,
-          playSound: 'error'
-        });
-        return;
-      }
-    }
+    // ⚡ فحص التكرار — إجباري دائمًا
+if (alreadyRegistered) {
+  await showResult({
+    type: 'error',
+    title: 'مسجّل بالفعل',
+    message: `${personName} — سجّل الحضور مسبقاً`,
+    person: person,
+    playSound: 'error'
+  });
+  return;
+}
 
     // ═══ كل الشروط صحيحة → سجّل الحضور ═══
     const attendanceData = {
