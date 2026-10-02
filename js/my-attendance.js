@@ -817,12 +817,12 @@ async function processScan(scannedText) {
       );
     }
 
-    const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedEvent.id, occurrenceDate);
-    const preventDup = maSettings.PreventDuplicateAttendance !== false;
+   // ⚡ فحص التكرار — إجباري دائمًا
+const isDup = await checkAlreadyRegistered(maPerson.id, maSelectedEvent.id, occurrenceDate);
 
-    if (isDup && preventDup) {
-      return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الحدث.');
-    }
+if (isDup) {
+  return showResult('error', 'مسجّل بالفعل', 'سجّلت حضورك مسبقاً لهذا الحدث.');
+}
 
     await addDoc(collection(db, COLLECTIONS.ATTENDANCE), {
       PersonID: maPerson.id,
