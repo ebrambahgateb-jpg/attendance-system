@@ -550,7 +550,7 @@ window.deleteNotification = async function(notifId) {
 };
 
 window.clearAllNotifications = async function() {
-  if (!confirm('⚠️ هل أنت متأكد من حذف كل الإشعارات؟')) return;
+  // ⚡ شيلنا الـconfirm — الحذف مباشر
 
   // ⚡ احفظ نسخة للحذف
   const notifsToDelete = [...notificationsData];
