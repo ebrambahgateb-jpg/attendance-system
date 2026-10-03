@@ -456,7 +456,7 @@ async function processScan(decodedText) {
       return;
     }
 
-   // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
+  // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
 const alreadyRegistered = await checkAlreadyRegistered(
   personId,
   selectedEvent.id,
@@ -473,10 +473,16 @@ if (alreadyRegistered) {
       })
     : '';
 
+  const methodLabel = prevRecord?.Method === 'self'
+    ? '📱 تسجيل ذاتي'
+    : prevRecord?.Method === 'manual'
+      ? '✍️ يدوي'
+      : '📷 ماسح';
+
   await showResult({
-    type: 'error',
+    type: 'warning',
     title: '⚠️ مسجّل بالفعل',
-    message: `${personName}\n\nسجّل الحضور مسبقاً${prevTime ? ` الساعة ${prevTime}` : ''}.\n\nلا يمكن تسجيل الحضور مرتين في نفس الحدث.`,
+    message: `${personName}\n\nسجّل الحضور مسبقاً${prevTime ? ` الساعة ${prevTime}` : ''}\n(${methodLabel})\n\nلا يمكن تسجيل الحضور مرتين في نفس الحدث.`,
     person: person,
     playSound: 'error'
   });
@@ -635,6 +641,28 @@ function isEventOpen(event) {
 
   return today >= openTime && today <= closeTime;
 }
+// ═══════════════════════════════════════════════════════
+//   ⚡ Get Previous Record
+// ═══════════════════════════════════════════════════════
+
+async function getPreviousRecord(personId, eventId, occurrenceDate) {
+  try {
+    const q = query(
+      collection(db, COLLECTIONS.ATTENDANCE),
+      where('PersonID', '==', personId),
+      where('EventID', '==', eventId),
+      where('OccurrenceDate', '==', occurrenceDate)
+    );
+
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+
+    return { id: snap.docs[0].id, ...snap.docs[0].data() };
+  } catch (err) {
+    console.warn('⚠️ getPreviousRecord error:', err);
+    return null;
+  }
+}
 
 async function checkAlreadyRegistered(personId, eventId, occurrenceDate) {
   try {
@@ -663,8 +691,24 @@ async function showResult({ type, title, message, person, playSound }) {
   const content = document.getElementById('resultContent');
   if (!content) return;
 
+  // ⚡ دعم 3 أنواع: success / warning / error
   const isSuccess = type === 'success';
-  const icon = isSuccess ? '✓' : '✕';
+  const isWarning = type === 'warning';
+
+  let icon = '✕';
+  let iconClass = 'error';
+  let titleClass = 'error';
+
+  if (isSuccess) {
+    icon = '✓';
+    iconClass = 'success';
+    titleClass = 'success';
+  } else if (isWarning) {
+    icon = '⚠';
+    iconClass = 'warning';
+    titleClass = 'warning';
+  }
+
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -683,11 +727,11 @@ async function showResult({ type, title, message, person, playSound }) {
   }
 
   content.innerHTML = `
-    <div class="result-icon ${isSuccess ? 'success' : 'error'}">${icon}</div>
+    <div class="result-icon ${iconClass}">${icon}</div>
     ${photoHtml}
-    <div class="result-title ${isSuccess ? 'success' : 'error'}">${title}</div>
+    <div class="result-title ${titleClass}">${title}</div>
     ${person ? `<div class="result-person-name">${escapeHtml(personName)}</div>` : ''}
-    <div class="result-message">${escapeHtml(message || '')}</div>
+    <div class="result-message" style="white-space:pre-line;">${escapeHtml(message || '')}</div>
     <div class="result-time">${timeStr}</div>
     <div class="result-actions">
       <button class="btn-primary" onclick="resumeScanner()">📷 مسح التالي</button>
