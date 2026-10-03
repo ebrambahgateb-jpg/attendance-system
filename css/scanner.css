@@ -436,3 +436,16 @@ body.scanner-body {
     font-size: 40px;
   }
 }
+
+
+/* ═══════════════════════════════════════════
+   ⚡ Warning Result
+   ═══════════════════════════════════════════ */
+
+.result-icon.warning {
+  color: #f59e0b;
+}
+
+.result-title.warning {
+  color: #d97706;
+}
