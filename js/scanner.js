@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════
 //   Scanner (QR Attendance) — Events
+//   ⚡ محدّث: prevent duplicate + clear message + warning
 // ═══════════════════════════════════════════════════════
 
 import {
@@ -35,7 +36,7 @@ let lastScanTime = 0;
 const SCAN_COOLDOWN = 2000;
 
 // ═══════════════════════════════════════════════════════
-//   Helper: Get Person Full Name
+//   Helpers — Person Name
 // ═══════════════════════════════════════════════════════
 
 function getPersonFullName(person) {
@@ -93,7 +94,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     statusEl.title = 'النظام متوقف';
   }
 
-  // ⚡ اجلب أنواع الأحداث
   try {
     const eventTypesSnap = await getDocs(collection(db, 'eventTypes'));
     availableEventTypes = eventTypesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -106,14 +106,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ═══════════════════════════════════════════════════════
-//   Load Events (⚡ الأحداث النهاردة فقط)
+//   Load Events
 // ═══════════════════════════════════════════════════════
 
 async function loadEvents() {
   try {
     const snap = await getDocs(collection(db, 'events'));
 
-    // ⚡ فلتر: Active + عنده موعد النهاردة
     events = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(e => String(e.Status || '').toLowerCase() === 'active')
@@ -148,7 +147,6 @@ function renderEventOptions() {
     const type = String(event.Type || 'once').toLowerCase();
     const endTime = getEventEndTime(event);
 
-    // ⚡ نوع الحدث
     const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
     const typeIcon = eventType ? (eventType.Icon || '📅') : '📅';
 
@@ -165,7 +163,7 @@ function renderEventOptions() {
 }
 
 // ═══════════════════════════════════════════════════════
-//   Events
+//   Setup Events
 // ═══════════════════════════════════════════════════════
 
 function setupEvents() {
@@ -211,7 +209,6 @@ function renderEventInfo(event) {
   const isOpen = isEventOpen(event);
   const endTime = getEventEndTime(event);
 
-  // ⚡ نوع الحدث
   const eventType = availableEventTypes.find(t => t.id === event.EventTypeID);
   const eventTypeText = eventType ? `${eventType.Icon || '📅'} ${eventType.Name}` : '';
 
@@ -371,7 +368,6 @@ async function processScan(decodedText) {
     }
 
     const personName = getPersonFullName(person);
-    const personInitial = getPersonInitial(person);
 
     // ═══ Check 3: الشخص Active؟ ═══
     const personStatus = String(person.Status || '').toLowerCase();
@@ -436,7 +432,7 @@ async function processScan(decodedText) {
       return;
     }
 
-        // ═══ Check 8: هل فيه تعارض؟ ═══
+    // ═══ Check 8: هل فيه تعارض؟ ═══
     const conflictCheck = await checkEventConflict(
       personId,
       selectedEvent.id,
@@ -456,38 +452,37 @@ async function processScan(decodedText) {
       return;
     }
 
-  // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
-const alreadyRegistered = await checkAlreadyRegistered(
-  personId,
-  selectedEvent.id,
-  occurrenceDate
-);
+    // ═══ Check 9: هل سجّل حضور بالفعل؟ ═══
+    const alreadyRegistered = await checkAlreadyRegistered(
+      personId,
+      selectedEvent.id,
+      occurrenceDate
+    );
 
-if (alreadyRegistered) {
-  // ⚡ احضر تفاصيل التسجيل السابق
-  const prevRecord = await getPreviousRecord(personId, selectedEvent.id, occurrenceDate);
-  const prevTime = prevRecord?.ScanTime
-    ? new Date(prevRecord.ScanTime).toLocaleTimeString('ar-EG', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    : '';
+    if (alreadyRegistered) {
+      const prevRecord = await getPreviousRecord(personId, selectedEvent.id, occurrenceDate);
+      const prevTime = prevRecord?.ScanTime
+        ? new Date(prevRecord.ScanTime).toLocaleTimeString('ar-EG', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        : '';
 
-  const methodLabel = prevRecord?.Method === 'self'
-    ? '📱 تسجيل ذاتي'
-    : prevRecord?.Method === 'manual'
-      ? '✍️ يدوي'
-      : '📷 ماسح';
+      const methodLabel = prevRecord?.Method === 'self'
+        ? '📱 تسجيل ذاتي'
+        : prevRecord?.Method === 'manual'
+          ? '✍️ يدوي'
+          : '📷 ماسح';
 
-  await showResult({
-    type: 'warning',
-    title: '⚠️ مسجّل بالفعل',
-    message: `${personName}\n\nسجّل الحضور مسبقاً${prevTime ? ` الساعة ${prevTime}` : ''}\n(${methodLabel})\n\nلا يمكن تسجيل الحضور مرتين في نفس الحدث.`,
-    person: person,
-    playSound: 'error'
-  });
-  return;
-}
+      await showResult({
+        type: 'warning',
+        title: '⚠️ مسجّل بالفعل',
+        message: `${personName}\n\nسجّل الحضور مسبقاً${prevTime ? ` الساعة ${prevTime}` : ''}\n(${methodLabel})\n\nلا يمكن تسجيل الحضور مرتين في نفس الحدث.`,
+        person: person,
+        playSound: 'error'
+      });
+      return;
+    }
 
     // ═══ كل الشروط صحيحة → سجّل الحضور ═══
     const attendanceData = {
@@ -526,6 +521,7 @@ if (alreadyRegistered) {
     });
   }
 }
+
 
 // ═══════════════════════════════════════════════════════
 //   Helper Functions
@@ -641,6 +637,7 @@ function isEventOpen(event) {
 
   return today >= openTime && today <= closeTime;
 }
+
 // ═══════════════════════════════════════════════════════
 //   ⚡ Get Previous Record
 // ═══════════════════════════════════════════════════════
